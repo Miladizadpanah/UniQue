@@ -2,8 +2,10 @@ package web
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 )
@@ -34,6 +36,8 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
 			}
 			t.Logf("ParseFS %s/*.html error: %v", path, perr)
 			t.Errorf("ParseFS %s/*.html: %v", path, perr)
+			// Print to stderr so it shows in CI logs even if t.Errorf output is truncated
+			fmt.Fprintf(os.Stderr, "TEMPLATE_PARSE_FAIL: %s -> %v\n", path, perr)
 			return nil
 		}
 		tpl = newT

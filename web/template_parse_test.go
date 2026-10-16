@@ -32,6 +32,7 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
 			if strings.Contains(perr.Error(), "matches no files") {
 				return nil
 			}
+			t.Logf("ParseFS %s/*.html error: %v", path, perr)
 			t.Errorf("ParseFS %s/*.html: %v", path, perr)
 			return nil
 		}

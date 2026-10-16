@@ -86,3 +86,5 @@ __pycache__/
 # update` abort with "No url found for submodule path 'milad'", which breaks every
 # fresh clone and every CI checkout. The folder stays on disk, untracked.
 /milad/
+نصب.txt
+git hub.txt

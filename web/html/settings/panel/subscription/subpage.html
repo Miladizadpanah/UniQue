@@ -197,7 +197,7 @@
                                         <a-button type="primary" size="small" icon="copy"
                                             @click="copySubAll()"
                                             v-if="app.subUrl || app.subJsonUrl || app.subClashUrl">
-                                            {{ i18n "subscription.copyAll" }} ({{ [app.subUrl, app.subJsonUrl, app.subClashUrl].filter(Boolean).length }})
+                                            {{ i18n "subscription.copyAll" }} ([[ [app.subUrl, app.subJsonUrl, app.subClashUrl].filter(Boolean).length ]])
                                         </a-button>
                                     </div>
                                     <a-row type="flex" :gutter="[8,8]" style="width:100%">

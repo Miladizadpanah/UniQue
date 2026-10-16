@@ -71,7 +71,6 @@ func TestEditedTemplatesParse(t *testing.T) {
 		"html/component/bulkOpsModal.html",
 		"html/modals/client_membership_modal.html",
 		"html/modals/client_bulk_modal.html", // the group shortcuts live here too
-		"html/tunnel.html",
 		"html/index.html", // dashboard incl. the unsupported-distro warning modal
 		"html/admins.html",
 		"html/modals/admin_modal.html",

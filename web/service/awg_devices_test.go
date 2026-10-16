@@ -166,6 +166,9 @@ func TestAwgSingleDeviceUnchanged(t *testing.T) {
 // wg-c carries the SAME per-device contract as awg (it had the identical collision: one
 // keypair per account meant two devices got one config, one IP, and could not both stay
 // online). These mirror the awg cases against WgcService.
+// wg-c now returns ONE config per client (first device, first endpoint): the subscriber
+// page should not overwhelm users with a config per device slot. The key material and
+// IPs are still minted per-device; we just expose only the primary one.
 func TestWgcUserLimitYieldsOneConfigPerDevice(t *testing.T) {
 	inb := &model.Inbound{
 		Id: 21, Protocol: model.WGC, Port: 51820, Enable: true,
@@ -180,16 +183,12 @@ func TestWgcUserLimitYieldsOneConfigPerDevice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderClientConfigs: %v", err)
 	}
-	if len(cfgs) != 2 {
-		t.Fatalf("configs = %d, want 2 (one per device)", len(cfgs))
+	// We now return exactly one config (first device, first endpoint).
+	if len(cfgs) != 1 {
+		t.Fatalf("configs = %d, want 1 (primary device only)", len(cfgs))
 	}
-	if cfgs[0].IP == cfgs[1].IP {
-		t.Fatalf("both devices got tunnel IP %s", cfgs[0].IP)
-	}
-	for i, c := range cfgs {
-		if !strings.HasSuffix(c.IP, "/32") {
-			t.Errorf("config %d IP = %s, want /32", i, c.IP)
-		}
+	if !strings.HasSuffix(cfgs[0].IP, "/32") {
+		t.Errorf("config 0 IP = %s, want /32", cfgs[0].IP)
 	}
 	keyOf := func(cfg string) string {
 		for _, line := range strings.Split(cfg, "\n") {
@@ -199,8 +198,8 @@ func TestWgcUserLimitYieldsOneConfigPerDevice(t *testing.T) {
 		}
 		return ""
 	}
-	if keyOf(cfgs[0].Config) == keyOf(cfgs[1].Config) {
-		t.Fatal("both wg-c configs carry the same PrivateKey")
+	if keyOf(cfgs[0].Config) == "" {
+		t.Fatal("primary config has no PrivateKey")
 	}
 }
 

@@ -1,0 +1,147 @@
+name: Release
+
+# Builds the self-contained panel binary and attaches it to a GitHub release.
+#
+# deploy.sh — and the panel's own in-app updater — download the asset by NAME from
+#   https://github.com/Miladizadpanah/UniQue/releases/latest/download/vpn-ui-amd64
+# so the file uploaded here must keep exactly that name. Cut a release by tagging:
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# Two ways to run it:
+#   * push a tag      -> builds AND publishes.  git tag v1.0.0 && git push origin v1.0.0
+#   * Run workflow    -> builds. Fill the "tag" box to publish in the same run, or
+#                        leave it empty to only produce a downloadable artifact.
+#
+# Publishing needs a token that may write releases: Settings -> Actions -> General ->
+# Workflow permissions -> "Read and write permissions". With the read-only default
+# the build still succeeds and only the final gh release step fails.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Publish this tag as a release (e.g. v1.0.0). Leave empty to build only."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # Tests first: the panel only builds and runs on Linux (web/service uses
+  # unix.*, syscall.Ucred and netlink), so this runner is the only place the
+  # suite can actually EXECUTE — a Windows host cannot even compile those
+  # packages. A release that fails its own tests must not ship, which is why
+  # build needs this job rather than every tag being assumed good.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout (with the Xray-core + telemt submodules)
+        uses: actions/checkout@v6
+        with:
+          # build.sh builds the core from third_party/Xray-core at its pinned commit,
+          # so the submodules have to be there, not just their gitlinks.
+          submodules: recursive
+
+      # The daemon bundle (openvpn, libreswan, strongswan, accel-ppp, ...) is built
+      # inside Docker and is large, so the runner needs headroom. The stock image
+      # carries several GB of SDKs this job never touches.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Stamp the release tag into config/version BEFORE the build, so the version
+      # embedded in the binary always equals the tag. The in-app updater compares
+      # the binary's embedded version against the GitHub release tag; when the
+      # committed file and the tag drift (e.g. the file says 2.2.0 while the tag is
+      # v2.2.2), the panel keeps advertising an update it has already installed.
+      # Stamping here makes that divergence impossible.
+      - name: Stamp the release tag into config/version
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then tag="$INPUT_TAG"; else tag="$GITHUB_REF_NAME"; fi
+          tag="${tag//[[:space:]]/}"
+          if [[ -z "$tag" ]]; then
+            echo "no tag on this run (build only): keeping committed config/version = $(cat config/version)"
+            exit 0
+          fi
+          [[ "$tag" =~ ^v[0-9] ]] || { echo "::error::tag '$tag' must look like v1.0.0"; exit 1; }
+          printf '%s\n' "${tag#v}" > config/version
+          echo "stamped config/version = $(cat config/version) (from $tag)"
+
+      - name: Build the panel (core + geo files + daemon bundle + binary)
+        run: bash build.sh
+
+      # A build that "succeeded" but produced no binary, or an HTML error page, must
+      # not reach the release. deploy.sh applies the same ELF check before installing.
+      - name: Verify the binary
+        run: |
+          set -euo pipefail
+          test -x build/out/vpn-ui-amd64
+          file build/out/vpn-ui-amd64 | grep -q ELF
+          ls -lh build/out/
+
+      # Runs on a v* tag, or on a manual run whose "tag" box was filled in. Both get
+      # here through env vars rather than inline `${{ }}`, so a tag typed into the
+      # dispatch box can never be spliced into the shell as code.
+      - name: Publish the release asset
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then tag="$INPUT_TAG"; else tag="$GITHUB_REF_NAME"; fi
+          tag="${tag//[[:space:]]/}"
+          # The in-app updater strips a leading "v" before comparing versions, so the
+          # tag has to keep the v the rest of the project uses. Refuse anything else
+          # rather than publish a release the panel cannot parse.
+          [[ "$tag" =~ ^v[0-9] ]] || { echo "::error::tag '$tag' must look like v1.0.0"; exit 1; }
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" --generate-notes
+          gh release upload "$tag" build/out/vpn-ui-amd64 --clobber
+          echo "published: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag"
+
+      - name: Keep the binary as a workflow artifact (manual builds)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-ui-amd64
+          path: build/out/vpn-ui-amd64

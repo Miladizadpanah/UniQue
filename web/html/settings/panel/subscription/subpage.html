@@ -197,31 +197,31 @@
                                         <a-button type="primary" size="small" icon="copy"
                                             @click="copySubAll()"
                                             v-if="app.subUrl || app.subJsonUrl || app.subClashUrl">
-                                            {{ i18n "subscription.copyAll" }} ([[ [app.subUrl, app.subJsonUrl, app.subClashUrl].filter(Boolean).length ]])
+                                            {{ i18n "subscription.copyAll" }}
                                         </a-button>
                                     </div>
                                     <a-row type="flex" :gutter="[8,8]" style="width:100%">
                                         <a-col :xs="24" :sm="8" style="text-align:center;">
                                             <div @click="copy(app.subUrl)" class="sublink-card"
-                                                v-if="app.subUrl" title="[[ app.subUrl ]]">
+                                                v-if="app.subUrl" :title="app.subUrl">
                                                 <a-tag color="purple">{{ i18n "pages.settings.subSettings" }}</a-tag>
-                                                <div class="sublink-card-url">[[ app.subUrl ]]</div>
+                                                <div class="sublink-card-url" v-text="app.subUrl"></div>
                                                 <a-icon type="copy" class="sublink-card-icon" />
                                             </div>
                                         </a-col>
                                         <a-col :xs="24" :sm="8" style="text-align:center;">
                                             <div @click="copy(app.subJsonUrl)" class="sublink-card"
-                                                v-if="app.subJsonUrl" title="[[ app.subJsonUrl ]]">
+                                                v-if="app.subJsonUrl" :title="app.subJsonUrl">
                                                 <a-tag color="blue">JSON</a-tag>
-                                                <div class="sublink-card-url">[[ app.subJsonUrl ]]</div>
+                                                <div class="sublink-card-url" v-text="app.subJsonUrl"></div>
                                                 <a-icon type="copy" class="sublink-card-icon" />
                                             </div>
                                         </a-col>
                                         <a-col :xs="24" :sm="8" style="text-align:center;">
                                             <div @click="copy(app.subClashUrl)" class="sublink-card"
-                                                v-if="app.subClashUrl" title="[[ app.subClashUrl ]]">
+                                                v-if="app.subClashUrl" :title="app.subClashUrl">
                                                 <a-tag color="cyan">Clash / Mihomo</a-tag>
-                                                <div class="sublink-card-url">[[ app.subClashUrl ]]</div>
+                                                <div class="sublink-card-url" v-text="app.subClashUrl"></div>
                                                 <a-icon type="copy" class="sublink-card-icon" />
                                             </div>
                                         </a-col>
@@ -278,38 +278,39 @@
 
                         <a-form-item>
                             <a-descriptions bordered :column="1" size="small">
-                                <a-descriptions-item label='{{ i18n "subscription.subId" }}'>[[
-                                    app.sId
-                                    ]]</a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "subscription.subId" }}'>
+                                    <span v-text="app.sId"></span>
+                                </a-descriptions-item>
                                 <a-descriptions-item label='{{ i18n "subscription.status" }}'>
                                     <template v-if="isUnlimited">
                                         <a-tag color="purple">{{ i18n
                                             "subscription.unlimited" }}</a-tag>
                                     </template>
                                     <template v-else>
-                                        <a-tag :color="isActive ? 'green' : 'red'">[[
-                                            isActive ? '{{ i18n
-                                            "subscription.active" }}' : '{{ i18n
-                                            "subscription.inactive" }}'
-                                            ]]</a-tag>
+                                        <a-tag :color="isActive ? 'green' : 'red'">
+                                            <span v-if="isActive">{{ i18n "subscription.active" }}</span>
+                                            <span v-else>{{ i18n "subscription.inactive" }}</span>
+                                        </a-tag>
                                     </template>
                                 </a-descriptions-item>
-                                <a-descriptions-item label='{{ i18n "subscription.downloaded" }}'>[[
-                                    app.download
-                                    ]]</a-descriptions-item>
-                                <a-descriptions-item label='{{ i18n "subscription.uploaded" }}'>[[
-                                    app.upload
-                                    ]]</a-descriptions-item>
-                                <a-descriptions-item label='{{ i18n "usage" }}'>[[ app.used
-                                    ]]</a-descriptions-item>
-                                <a-descriptions-item label='{{ i18n "subscription.totalQuota" }}'>[[
-                                    app.total
-                                    ]]</a-descriptions-item>
-                                <a-descriptions-item v-if="app.totalByte > 0" label='{{ i18n "remained" }}'>[[
-                                    app.remained ]]</a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "subscription.downloaded" }}'>
+                                    <span v-text="app.download"></span>
+                                </a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "subscription.uploaded" }}'>
+                                    <span v-text="app.upload"></span>
+                                </a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "usage" }}'>
+                                    <span v-text="app.used"></span>
+                                </a-descriptions-item>
+                                <a-descriptions-item label='{{ i18n "subscription.totalQuota" }}'>
+                                    <span v-text="app.total"></span>
+                                </a-descriptions-item>
+                                <a-descriptions-item v-if="app.totalByte > 0" label='{{ i18n "remained" }}'>
+                                    <span v-text="app.remained"></span>
+                                </a-descriptions-item>
                                 <a-descriptions-item label='{{ i18n "lastOnline" }}'>
                                     <template v-if="app.lastOnlineMs > 0">
-                                        [[ formatDate(app.lastOnlineMs) ]]
+                                        <span v-text="formatDate(app.lastOnlineMs)"></span>
                                     </template>
                                     <template v-else>
                                         <span>-</span>
@@ -320,13 +321,13 @@
                                          "N days after first use", the same thing the panel's
                                          client list says, instead of "No expiry". -->
                                     <template v-if="app.expireMs === 0 && app.expireDelayDays > 0">
-                                        [[ app.expireDelayDays ]] {{ i18n "pages.clients.daysAfterFirstUse" }}
+                                        <span v-text="app.expireDelayDays"></span> {{ i18n "pages.clients.daysAfterFirstUse" }}
                                     </template>
                                     <template v-else-if="app.expireMs === 0">
                                         {{ i18n "subscription.noExpiry" }}
                                     </template>
                                     <template v-else>
-                                        [[ formatDate(app.expireMs) ]]
+                                        <span v-text="formatDate(app.expireMs)"></span>
                                     </template>
                                 </a-descriptions-item>
                             </a-descriptions>
@@ -339,7 +340,7 @@
                          client) should not be a click per config. -->
                     <div v-if="links.length > 1" style="text-align: center; margin-bottom: 16px;">
                         <a-button type="primary" icon="copy" @click="copyAll()">
-                            {{ i18n "subscription.copyAll" }} ([[ links.length ]])
+                            {{ i18n "subscription.copyAll" }}
                         </a-button>
                     </div>
                     <div v-for="(link, idx) in links" :key="link"
@@ -347,11 +348,9 @@
                         <div class="qr-box" style="display: inline-block; width: 100%; max-width: 100%;">
                             <a-tag color="purple"
                                 style="margin-bottom: -10px; position: relative; z-index: 2; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                                <span>[[ linkName(link, idx) ]]</span>
+                                <span v-text="linkName(link, idx)"></span>
                             </a-tag>
-                            <div @click="copy(link)" class="subscription-link-box">
-                                [[ link ]]
-                            </div>
+                            <div @click="copy(link)" class="subscription-link-box" v-text="link"></div>
                         </div>
                     </div>
                     <br />

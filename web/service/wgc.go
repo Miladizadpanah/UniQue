@@ -741,58 +741,47 @@ func (s *WgcService) RenderClientConfigs(inbound *model.Inbound, email, endpoint
 		if len(ips) == 0 || len(devices) == 0 {
 			break
 		}
-		// ONE CONFIG PER DEVICE, each with its own key and /32. Two devices cannot share one
-		// config: they would share a keypair (only one could stay connected) and self-assign
-		// the same Address, since WireGuard has no server-side address assignment.
-		for d, dev := range devices {
-			if d >= len(ips) || strings.TrimSpace(dev.PrivKey) == "" {
-				continue
-			}
-			cidr := ips[d] + "/32"
-			// Resolved once per device, not per endpoint: the key belongs to the device, and
-			// every endpoint config of that device carries the same one. Same shape (and same
-			// gate) as RenderClientParams below, which is what keeps the two in lock-step.
-			psk := ""
-			if settings.PskEnable && strings.TrimSpace(dev.Psk) != "" {
-				psk = dev.Psk
-			}
-			for ti, t := range targets {
-				var b strings.Builder
-				b.WriteString("[Interface]\n")
-				b.WriteString("PrivateKey = " + dev.PrivKey + "\n")
-				b.WriteString("Address = " + cidr + "\n")
-				b.WriteString("DNS = " + settings.dnsList() + "\n")
-				b.WriteString(fmt.Sprintf("MTU = %d\n", settings.mtu()))
-				b.WriteString("\n[Peer]\n")
-				b.WriteString("PublicKey = " + settings.ServerPubKey + "\n")
-				if psk != "" {
-					b.WriteString("PresharedKey = " + psk + "\n")
-				}
-				b.WriteString(fmt.Sprintf("Endpoint = %s:%d\n", t.host, t.port))
-				b.WriteString("AllowedIPs = 0.0.0.0/0\n")
-				b.WriteString("PersistentKeepalive = 25\n")
-				remark := ""
-				if len(devices) > 1 {
-					remark = fmt.Sprintf("Device %d", d+1)
-				}
-				if t.remark != "" {
-					if remark != "" {
-						remark += " - "
-					}
-					remark += t.remark
-				}
-				out = append(out, WgcClientConfig{
-					DeviceIndex:  d*len(targets) + ti,
-					IP:           cidr,
-					Remark:       remark,
-					PublicKey:    dev.PubKey,
-					Config:       b.String(),
-					PreSharedKey: psk,
-					Host:         t.host,
-					Port:         t.port,
-				})
-			}
+		// Limit to ONE config per client: first device, first endpoint.
+		// Multiple configs per client overwhelm the subscriber page; a single
+		// complete .conf with the primary endpoint is what users expect.
+		if len(devices) == 0 || len(ips) == 0 {
+			break
 		}
+		dev := devices[0]
+		if strings.TrimSpace(dev.PrivKey) == "" {
+			break
+		}
+		cidr := ips[0] + "/32"
+		psk := ""
+		if settings.PskEnable && strings.TrimSpace(dev.Psk) != "" {
+			psk = dev.Psk
+		}
+		// Use only the first endpoint.
+		t := targets[0]
+		var b strings.Builder
+		b.WriteString("[Interface]\n")
+		b.WriteString("PrivateKey = " + dev.PrivKey + "\n")
+		b.WriteString("Address = " + cidr + "\n")
+		b.WriteString("DNS = " + settings.dnsList() + "\n")
+		b.WriteString(fmt.Sprintf("MTU = %d\n", settings.mtu()))
+		b.WriteString("\n[Peer]\n")
+		b.WriteString("PublicKey = " + settings.ServerPubKey + "\n")
+		if psk != "" {
+			b.WriteString("PresharedKey = " + psk + "\n")
+		}
+		b.WriteString(fmt.Sprintf("Endpoint = %s:%d\n", t.host, t.port))
+		b.WriteString("AllowedIPs = 0.0.0.0/0\n")
+		b.WriteString("PersistentKeepalive = 25\n")
+		out = append(out, WgcClientConfig{
+			DeviceIndex:  0,
+			IP:           cidr,
+			Remark:       t.remark,
+			PublicKey:    dev.PubKey,
+			Config:       b.String(),
+			PreSharedKey: psk,
+			Host:         t.host,
+			Port:         t.port,
+		})
 		break
 	}
 	return out, nil

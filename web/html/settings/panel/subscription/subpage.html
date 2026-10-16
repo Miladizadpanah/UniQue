@@ -167,45 +167,6 @@
                     <a-form layout="vertical">
                         <a-form-item>
                             <a-space direction="vertical" align="center">
-                                <!-- Three subscription URLs side-by-side: sub (base64), JSON, Clash.
-                                     One row, not stacked. Click any box to copy that URL;
-                                     "Copy All" copies all three at once. -->
-                                <div style="width:100%">
-                                    <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; justify-content:center;">
-                                        <a-button type="primary" size="small" icon="copy"
-                                            @click="copySubAll()"
-                                            v-if="app.subUrl || app.subJsonUrl || app.subClashUrl">
-                                            {{ i18n "subscription.copyAll" }}
-                                        </a-button>
-                                    </div>
-                                    <a-row type="flex" :gutter="[8,8]" style="width:100%">
-                                        <a-col :xs="24" :sm="8" style="text-align:center;">
-                                            <div @click="copy(app.subUrl)" class="sublink-card"
-                                                v-if="app.subUrl" :title="app.subUrl">
-                                                <a-tag color="purple">{{ i18n "pages.settings.subSettings" }}</a-tag>
-                                                <div class="sublink-card-url" v-text="app.subUrl"></div>
-                                                <a-icon type="copy" class="sublink-card-icon" />
-                                            </div>
-                                        </a-col>
-                                        <a-col :xs="24" :sm="8" style="text-align:center;">
-                                            <div @click="copy(app.subJsonUrl)" class="sublink-card"
-                                                v-if="app.subJsonUrl" :title="app.subJsonUrl">
-                                                <a-tag color="blue">JSON</a-tag>
-                                                <div class="sublink-card-url" v-text="app.subJsonUrl"></div>
-                                                <a-icon type="copy" class="sublink-card-icon" />
-                                            </div>
-                                        </a-col>
-                                        <a-col :xs="24" :sm="8" style="text-align:center;">
-                                            <div @click="copy(app.subClashUrl)" class="sublink-card"
-                                                v-if="app.subClashUrl" :title="app.subClashUrl">
-                                                <a-tag color="cyan">Clash / Mihomo</a-tag>
-                                                <div class="sublink-card-url" v-text="app.subClashUrl"></div>
-                                                <a-icon type="copy" class="sublink-card-icon" />
-                                            </div>
-                                        </a-col>
-                                    </a-row>
-                                </div>
-
                                 <!-- QR codes -->
                                 <a-row type="flex" :gutter="[8,8]" justify="center" style="width:100%" v-if="showQr">
                                     <a-col :xs="24" :sm="app.subJsonUrl || app.subClashUrl ? 12 : 24" style="text-align:center;">

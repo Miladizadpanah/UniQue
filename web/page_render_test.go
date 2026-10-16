@@ -37,7 +37,6 @@ func pageRenderData() map[string]any {
 // modals, every button — was dead. Parsing the template cannot see that; only
 // executing it can.
 func TestPanelPagesRenderCleanly(t *testing.T) {
-	t.Skip("isolation: page render")
 	tpl, err := (&Server{}).getHtmlTemplate(template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return key, nil },
 	})

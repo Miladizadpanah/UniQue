@@ -2,10 +2,8 @@ package web
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
 	"io/fs"
-	"os"
 	"strings"
 	"testing"
 )
@@ -17,7 +15,6 @@ import (
 // mis-named per-protocol form (e.g. form/protocol/sstp.html) that would otherwise
 // only surface as a runtime 500 when the inbound modal renders {{template "form/x"}}.
 func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
-	t.Skip("temporarily skipped to isolate CI failure")
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}
@@ -35,10 +32,7 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
 			if strings.Contains(perr.Error(), "matches no files") {
 				return nil
 			}
-			t.Logf("ParseFS %s/*.html error: %v", path, perr)
 			t.Errorf("ParseFS %s/*.html: %v", path, perr)
-			// Print to stderr so it shows in CI logs even if t.Errorf output is truncated
-			fmt.Fprintf(os.Stderr, "TEMPLATE_PARSE_FAIL: %s -> %v\n", path, perr)
 			return nil
 		}
 		tpl = newT
@@ -66,7 +60,6 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
 // catches it at test time instead. Vue expressions use [[ ]] delimiters, so the only
 // Go-template function the parser needs defined is i18n.
 func TestEditedTemplatesParse(t *testing.T) {
-	t.Skip("temporarily skipped to isolate CI failure")
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}
@@ -99,7 +92,6 @@ func TestEditedTemplatesParse(t *testing.T) {
 // "component/sidebar/content" template, which must be included WITH data ({{template
 // ... .}}) — otherwise .base_path is nil and the src renders empty, so the logo 404s.
 func TestSidebarLogoSrcResolves(t *testing.T) {
-	t.Skip("temporarily skipped to isolate CI failure")
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}

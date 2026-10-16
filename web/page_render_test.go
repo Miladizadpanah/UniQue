@@ -36,8 +36,7 @@ func pageRenderData() map[string]any {
 // a script whose i18n method was not a function and the whole page — table,
 // modals, every button — was dead. Parsing the template cannot see that; only
 // executing it can.
-func TestPanelPagesRenderCleanly(t *testing.T) {	t.Skip("isolating CI failure")
-
+func TestPanelPagesRenderCleanly(t *testing.T) {
 	tpl, err := (&Server{}).getHtmlTemplate(template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return key, nil },
 	})

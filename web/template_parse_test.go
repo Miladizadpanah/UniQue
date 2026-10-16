@@ -14,8 +14,7 @@ import (
 // asserts every protocol form's {{define}} resolved. This catches a broken or
 // mis-named per-protocol form (e.g. form/protocol/sstp.html) that would otherwise
 // only surface as a runtime 500 when the inbound modal renders {{template "form/x"}}.
-func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {	t.Skip("isolating CI failure")
-
+func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}
@@ -33,7 +32,7 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {	t.Skip("isolat
 			if strings.Contains(perr.Error(), "matches no files") {
 				return nil
 			}
-			t.Logf("ParseFS %s/*.html: %v", path, perr)
+			t.Errorf("ParseFS %s/*.html: %v", path, perr)
 			return nil
 		}
 		tpl = newT
@@ -60,8 +59,7 @@ func TestAllTemplatesParseAndProtocolFormsDefined(t *testing.T) {	t.Skip("isolat
 // ParseFS errors, so a broken template would only surface as a runtime 500 — this
 // catches it at test time instead. Vue expressions use [[ ]] delimiters, so the only
 // Go-template function the parser needs defined is i18n.
-func TestEditedTemplatesParse(t *testing.T) {	t.Skip("isolating CI failure")
-
+func TestEditedTemplatesParse(t *testing.T) {
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}
@@ -81,11 +79,10 @@ func TestEditedTemplatesParse(t *testing.T) {	t.Skip("isolating CI failure")
 	for _, f := range files {
 		b, err := htmlFS.ReadFile(f)
 		if err != nil {
-			t.Logf("read %s: %v", f, err)
-			continue
+			t.Fatalf("read %s: %v", f, err)
 		}
 		if _, err := template.New(f).Funcs(funcMap).Parse(string(b)); err != nil {
-			t.Logf("%s failed to parse: %v", f, err)
+			t.Errorf("%s failed to parse: %v", f, err)
 		}
 	}
 }
@@ -94,8 +91,7 @@ func TestEditedTemplatesParse(t *testing.T) {	t.Skip("isolating CI failure")
 // brand logo <img> src is prefixed with base_path. The mark lives in the nested
 // "component/sidebar/content" template, which must be included WITH data ({{template
 // ... .}}) — otherwise .base_path is nil and the src renders empty, so the logo 404s.
-func TestSidebarLogoSrcResolves(t *testing.T) {	t.Skip("isolating CI failure")
-
+func TestSidebarLogoSrcResolves(t *testing.T) {
 	funcMap := template.FuncMap{
 		"i18n": func(key string, args ...string) (string, error) { return "", nil },
 	}

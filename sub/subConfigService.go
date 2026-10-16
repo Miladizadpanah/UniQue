@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/web/service"
 )
 
 // Config-file downloads for the subscriber page.
@@ -60,7 +61,7 @@ func (s *SubService) ConfigFiles(subId string, host string) []SubConfigFile {
 	seen := map[string]bool{}
 	for _, inbound := range inbounds {
 		switch inbound.Protocol {
-		case model.OPENVPN, model.WGC, model.AWG, model.GRE:
+		case model.OPENVPN, model.WGC, model.AWG, model.WireGuard, model.GRE:
 		default:
 			continue
 		}
@@ -173,6 +174,27 @@ func (s *SubService) inboundConfigFiles(inbound *model.Inbound, email, host stri
 				Protocol:    string(model.AWG),
 				Label:       wgLabel("AmneziaWG", cfg.Remark, inbound.Remark),
 				Filename:    configFilename(inbound.Remark, "awg", wgVariant(cfg.Remark, i), "conf"),
+				ContentType: "application/x-wireguard-profile",
+				Content:     cfg.Config,
+			})
+		}
+		return out
+
+	case model.WireGuard:
+		// Xray-native wireguard: the .conf is rendered by the protocol service the
+		// panel's own download buttons use, so a profile taken from the subscription
+		// is byte-for-byte the profile the admin sees.
+		cfgs, err := service.RenderWireguardXrayConfigs(inbound, email, host)
+		if err != nil {
+			return nil
+		}
+		out := make([]SubConfigFile, 0, len(cfgs))
+		for i, cfg := range cfgs {
+			out = append(out, SubConfigFile{
+				Key:         fmt.Sprintf("wg-%d-%d", inbound.Id, i),
+				Protocol:    string(model.WireGuard),
+				Label:       wgLabel("WireGuard", cfg.Remark, inbound.Remark),
+				Filename:    configFilename(inbound.Remark, "wireguard", wgVariant(cfg.Remark, i), "conf"),
 				ContentType: "application/x-wireguard-profile",
 				Content:     cfg.Config,
 			})

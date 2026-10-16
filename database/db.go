@@ -41,9 +41,7 @@ func initModels() error {
 		// what it does not know) and keeps reading settings.clients exactly as before.
 		&model.Account{},
 		&model.AccountInbound{},
-		// Saved inbound "configs" (Add/Edit dialog templates) and the operator's
-		// groups. Both purely additive: an old binary ignores both tables.
-		&model.InboundPreset{},
+		// The operator's groups. Purely additive: an old binary ignores the tables.
 		&model.InboundGroup{},
 		&model.InboundGroupMember{},
 		// The operator's per-user groups over their own clients. Purely additive,

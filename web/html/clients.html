@@ -144,6 +144,24 @@
               </a-card>
 
               <a-card hoverable class="bo-lg" :class="{ 'bo-lg--compact': density === 'compact' }">
+                <!-- The operator's per-user client groups, rendered as the same chip
+                     row the Inbounds page uses for its folders. A group is a saved
+                     VIEW: opening one narrows the table to the clients inside it,
+                     and "All Clients" (or the open folder itself) puts the whole
+                     list back. Nothing is written, moved or re-served - this is a
+                     filter, not a container. -->
+                <div v-if="clientGroups.length" class="bo-group-folders">
+                  <a-button size="small" :type="groupFilter ? 'default' : 'primary'"
+                    @click="selectGroup(null)">
+                    <a-icon type="appstore"></a-icon> {{ i18n "pages.clients.allClients" }}
+                  </a-button>
+                  <a-button v-for="g in clientGroups" :key="g.id" size="small"
+                    :type="groupFilter === g.id ? 'primary' : 'default'"
+                    @click="selectGroup(g.id)">
+                    <a-icon :type="groupFilter === g.id ? 'folder-open' : 'folder'"></a-icon>
+                    [[ g.name ]] ([[ g.count ]])
+                  </a-button>
+                </div>
                 <a-table
                   :columns="columns"
                   :data-source="clients"
@@ -577,6 +595,10 @@
       clientGroups: [],
       groupsModal: false,
       newGroupName: '',
+      // The group folder the client list is narrowed to, as on the Inbounds page:
+      // null (or a stale id) shows every client, a group id shows only its members.
+      // It is a saved VIEW - this never writes a client, moves a row or touches Xray.
+      groupFilter: null,
       search: '',
       searchTimer: null,
       selectedEmails: [],
@@ -913,9 +935,14 @@
       },
 
       async loadClients() {
-        const q = `?page=${this.pagination.current}&size=${this.pagination.pageSize}`
+        let q = `?page=${this.pagination.current}&size=${this.pagination.pageSize}`
           + `&search=${encodeURIComponent(this.search || '')}`
           + `&sort=${encodeURIComponent(this.sortKey)}`;
+        // A group chip is a saved VIEW, the same kind the Inbounds page keeps for
+        // its folders: narrowing the list to it is server-side so the page, the
+        // total and the ordering all agree with the whole (filtered) list, not
+        // just the slice this request happens to hold.
+        if (this.groupFilter) q += `&group=${this.groupFilter}`;
         const msg = await HttpUtil.get('/panel/api/clients/list' + q);
         if (!msg || !msg.success) return;
         this.clients = (msg.obj && msg.obj.rows) || [];
@@ -958,6 +985,18 @@
       openGroups() {
         this.groupsModal = true;
         this.loadClientGroups();
+      },
+      // Opening a folder narrows the client list to it; opening the SAME folder
+      // (or All Clients) puts the whole list back. A group is a saved view: this
+      // never writes an account, moves a row or touches Xray. The filter is
+      // server-side, so back to page 1 when it changes - the slice the operator
+      // was looking at no longer addresses the same rows.
+      selectGroup(id) {
+        const next = (id && id !== this.groupFilter) ? id : null;
+        if (next === this.groupFilter) return;
+        this.groupFilter = next;
+        this.pagination.current = 1;
+        this.loadClients();
       },
       async createGroup() {
         const name = this.newGroupName.trim();

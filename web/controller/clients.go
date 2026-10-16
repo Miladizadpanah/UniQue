@@ -71,8 +71,12 @@ func (a *ClientsController) initRouter(g *gin.RouterGroup) {
 func (a *ClientsController) list(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	size, _ := strconv.Atoi(c.Query("size"))
+	// A group is a saved view the caller built over their own list; the filter
+	// rides the same ownership check the service applies, so a foreign id is a
+	// no-op rather than a leak.
+	groupId, _ := strconv.Atoi(c.Query("group"))
 	result, err := accountService.ListAccounts(session.GetLoginUser(c), page, size,
-		c.Query("search"), c.Query("sort"))
+		c.Query("search"), c.Query("sort"), groupId)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

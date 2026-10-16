@@ -155,7 +155,7 @@ const (
 //     other sellers' customers too;
 //   - an ordinary admin sees accounts with at least one membership on an inbound
 //     they hold, which is exactly what the Inbounds page already shows them.
-func (s *AccountService) ListAccounts(user *model.User, page, size int, search, sortKey string) (*AccountListResult, error) {
+func (s *AccountService) ListAccounts(user *model.User, page, size int, search, sortKey string, groupId int) (*AccountListResult, error) {
 	if user == nil {
 		// No identity, no rows. Never an unscoped list.
 		return &AccountListResult{Rows: []AccountRow{}, Sort: AccountSortNewest}, nil
@@ -204,6 +204,25 @@ func (s *AccountService) ListAccounts(user *model.User, page, size int, search, 
 	}
 
 	needle := strings.ToLower(strings.TrimSpace(search))
+
+	// A group is a saved VIEW the caller built over their own client list:
+	// narrowing to it keeps the same ownership check (a caller may only open a
+	// group they own) and hides every account that is not one of its members.
+	// A deleted or foreign id silently shows the unfiltered list rather than
+	// erroring - a filter is a view, and a dead view is just "no filter".
+	groupMembers := map[int]bool{}
+	if groupId > 0 {
+		var group model.ClientGroup
+		if err := db.Where("id = ? AND owner_id = ?", groupId, user.Id).First(&group).Error; err == nil {
+			var members []model.ClientGroupMember
+			if err := db.Where("group_id = ?", groupId).Find(&members).Error; err == nil {
+				for _, m := range members {
+					groupMembers[m.AccountId] = true
+				}
+			}
+		}
+	}
+
 	rows := make([]AccountRow, 0, len(accounts))
 	// When each account was created, for the newest/oldest orderings. Kept beside
 	// the rows rather than added to AccountRow because nothing on the page renders
@@ -218,6 +237,9 @@ func (s *AccountService) ListAccounts(user *model.User, page, size int, search, 
 			continue
 		}
 		if needle != "" && !accountMatches(account, mine, needle) {
+			continue
+		}
+		if len(groupMembers) > 0 && !groupMembers[account.Id] {
 			continue
 		}
 		row := AccountRow{

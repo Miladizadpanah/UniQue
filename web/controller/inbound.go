@@ -34,7 +34,6 @@ type InboundController struct {
 	greService     service.GreService
 	mtprotoService service.MtprotoService
 	sshService     service.SshService
-	presetService  service.InboundPresetService
 	groupService   service.InboundGroupService
 }
 
@@ -79,12 +78,6 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	// every other admin's list too, which is not something a read-only account (or a
 	// reseller, who holds no *Inbound bit at all) should be able to do.
 	g.POST("/reorder", requirePerm(model.PermEditInbound), a.reorderInbounds)
-	// Saved inbound "configs". Reading one is part of building an inbound at all,
-	// so it rides the same read bit as /list; writing one is a create-inbound
-	// action. Neither route touches a live inbound or a client.
-	g.GET("/presets", read, a.getInboundPresets)
-	g.POST("/presets", requirePerm(model.PermCreateInbound), a.saveInboundPreset)
-	g.POST("/presets/del/:id", requirePerm(model.PermCreateInbound), a.deleteInboundPreset)
 	// Groups over the inbound list. A group is a saved VIEW: it never reaches Xray,
 	// never restarts the core and never touches a client, which is why unlike every
 	// other write on this controller it triggers no reload. Gated on editInbound,
@@ -469,54 +462,6 @@ func (a *InboundController) getInbounds(c *gin.Context) {
 		return
 	}
 	jsonObj(c, inbounds, nil)
-}
-
-// getInboundPresets lists the saved inbound "configs" (templates) the Add/Edit
-// dialog's Config section offers. Panel-wide, like the inbound list itself: a preset
-// is an operator convenience and holds no customer data, so there is nothing here to
-// scope per admin.
-func (a *InboundController) getInboundPresets(c *gin.Context) {
-	presets, err := a.presetService.List()
-	if err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	jsonObj(c, presets, nil)
-}
-
-// saveInboundPreset stores one template under a name. The content is the Add/Edit
-// dialog's own JSON (Inbound.toJson), stored VERBATIM: this route never parses it
-// into an inbound and never writes one, so an invalid or partial blob can only ever
-// produce a form the operator still has to validate and save.
-func (a *InboundController) saveInboundPreset(c *gin.Context) {
-	var body struct {
-		Name    string `form:"name" json:"name"`
-		Content string `form:"content" json:"content"`
-	}
-	if err := c.ShouldBind(&body); err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	preset, err := a.presetService.Save(body.Name, body.Content)
-	if err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	jsonObj(c, preset, nil)
-}
-
-// deleteInboundPreset removes one template by id.
-func (a *InboundController) deleteInboundPreset(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	if err := a.presetService.Delete(id); err != nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
-		return
-	}
-	jsonMsg(c, "", nil)
 }
 
 // getInboundGroups lists the operator's inbound groups with their members.

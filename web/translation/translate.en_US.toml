@@ -649,6 +649,7 @@
 [pages.clients]
 "summaryTarget" = "Inbound"
 "groups" = "Groups"
+"allClients" = "All Clients"
 "groupsManage" = "Manage groups"
 "groupsHint" = "Organize your clients into named groups. Deleting a group only removes the group - the clients inside it are kept."
 "newGroup" = "New group"

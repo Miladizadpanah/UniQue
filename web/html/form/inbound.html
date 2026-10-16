@@ -761,47 +761,6 @@
       {{template "form/sniffing"}}
     </div>
 
-    <!-- ============================= Config ============================= -->
-    <!-- Saved "configs" (presets). Applying one fills every section above from a
-         template; it never writes an inbound, so the ordinary Create/Update path is
-         still the only thing that reaches Xray. -->
-    <div class="bo-if-sec" data-sec="preset" v-show="inModal.section === 'preset'">
-      <h4 class="bo-if-h">Config</h4>
-      <p class="bo-if-d">Fill this inbound from a saved config, or save the current settings
-        as one. A config carries the protocol, transport, security, policy and sniffing
-        settings; it never carries accounts.</p>
-      <a-form
-          :colon="false"
-          :label-col="{ md: {span:8} }"
-          :wrapper-col="{ md: {span:14} }"
-      >
-          <a-form-item label="Saved configs">
-              <a-select v-model="presetSelection"
-                  :placeholder="presets.length ? 'Choose a config' : 'No saved configs yet'"
-                  :dropdown-class-name="themeSwitcher.currentTheme"
-                  allow-clear>
-                  <a-select-option v-for="p in presets" :key="p.id" :value="p.id">
-                      [[ p.name ]]
-                  </a-select-option>
-              </a-select>
-          </a-form-item>
-          <a-form-item :wrapper-col="{ md: { span: 14, offset: 8 } }">
-              <a-space>
-                  <a-button type="primary" icon="import"
-                      :disabled="!presetSelection || isEdit" @click="applyPreset()">Apply</a-button>
-                  <a-button icon="delete" :disabled="!presetSelection"
-                      @click="deletePreset()">Delete</a-button>
-              </a-space>
-          </a-form-item>
-          <a-form-item label="Save this as">
-              <a-input v-model="presetName" placeholder="Config name"></a-input>
-          </a-form-item>
-          <a-form-item :wrapper-col="{ md: { span: 14, offset: 8 } }">
-              <a-button icon="save" @click="savePreset()">Save this config</a-button>
-          </a-form-item>
-      </a-form>
-    </div>
-
   </div>
 </div>
 {{end}}

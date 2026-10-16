@@ -92,13 +92,6 @@
                         title: '{{ i18n "menu.core"}}'
                     },
                     {{ end }}
-                    {{ if .perms.accessXraySettings }}
-                    {
-                        key: '{{ .base_path }}panel/tunnel',
-                        icon: 'deployment',
-                        title: '{{ i18n "menu.tunnel"}}'
-                    },
-                    {{ end }}
                     {{ if .perms.superAdmin }}
                     {
                         key: '{{ .base_path }}panel/admins',

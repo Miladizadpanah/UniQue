@@ -94,10 +94,6 @@
         { id: "quota",     group: "policy",   icon: "pay-circle",         rail: "Quota" },
         { id: "reach",     group: "policy",   icon: "share-alt",          rail: "External Proxy" },
         { id: "sniff",     group: "policy",   icon: "filter",             rail: "Sniffing" },
-        // Saved "configs": templates that fill this whole dialog, including every
-        // other section, from one click. Last in the Policy group because it is the
-        // one section that acts on all the others.
-        { id: "preset",    group: "policy",   icon: "import",             rail: "Config" },
     ];
     const INBOUND_GROUPS = [
         { key: "listener", title: "Listener" },
@@ -256,12 +252,6 @@
             inModal: inModal,
             delayedStart: false,
             ikev2CertWarning: "",
-            // Saved "configs" for the Config section. Fetched when that section is
-            // opened (see the inModal.section watcher) rather than on mount, so an
-            // operator who never touches it pays no request.
-            presets: [],
-            presetName: "",
-            presetSelection: null,
             get inbound() {
                 return inModal.inbound;
             },
@@ -628,12 +618,6 @@
             "inModal.visible"(v) {
                 if (v) this.$nextTick(() => this.measureSections());
             },
-            // The Config list is refreshed every time that section is opened, not just
-            // once: another admin on the same panel may have saved one since, and the
-            // picker is the only place it would show up.
-            "inModal.section"(v) {
-                if (v === "preset") this.loadPresets();
-            },
             // A protocol change replaces the whole settings object, so last protocol's
             // measurements are meaningless. Clearing them shows every section for one
             // frame, which is the safe direction: a section that exists and is hidden
@@ -682,82 +666,6 @@
             },
         },
         methods: {
-            // ---- saved "configs" (Config section) --------------------------------
-            async loadPresets() {
-                const msg = await HttpUtil.get("/panel/api/inbounds/presets");
-                if (!msg || !msg.success || !Array.isArray(msg.obj)) return;
-                this.presets = msg.obj;
-                // Drop a selection that no longer exists (deleted here or elsewhere).
-                if (this.presetSelection && !this.presets.some(p => p.id === this.presetSelection)) {
-                    this.presetSelection = null;
-                }
-            },
-            // Fill every section from a saved config. This NEVER writes an inbound:
-            // it replaces the dialog's draft, and the ordinary Create/Update path is
-            // still the only thing that reaches the panel.
-            applyPreset() {
-                const preset = this.presets.find(p => p.id === this.presetSelection);
-                if (!preset) return;
-                // A config BUILDS an inbound; it does not reconfigure a live one. On an
-                // edit the form is anchored to a stored row (its remark, its enable
-                // flag and its disabled protocol picker all come from it), so half a
-                // config could be applied and the operator would have no way to tell
-                // which half.
-                if (inModal.isEdit) {
-                    this.$message.info("Configs build a new inbound. Open Add Inbound first.");
-                    return;
-                }
-                let parsed;
-                try {
-                    parsed = JSON.parse(preset.content);
-                } catch (e) {
-                    this.$message.error("This config is not valid JSON");
-                    return;
-                }
-                let applied;
-                try {
-                    applied = Inbound.fromJson(parsed);
-                } catch (e) {
-                    this.$message.error("This config could not be read");
-                    return;
-                }
-                // Accounts are not part of a config: a config describes how the
-                // inbound is BUILT, and copying customers onto a second inbound is
-                // never what "apply a config" means.
-                applied.clearClients();
-                applied.startEmpty = true;
-                // A saved port usually collides with a live inbound. Walk to the next
-                // free one so the draft is savable without the operator discovering
-                // the clash only when Create refuses.
-                applied.port = freeInboundPortFrom(Number(applied.port) || 1);
-                inModal.inbound = applied;
-                inModal.counts = {};
-                // Open on Identity so the operator sees what the config filled in.
-                inModal.section = "identity";
-                this.$message.success("Config applied");
-            },
-            async savePreset() {
-                const name = (this.presetName || "").trim();
-                if (!name) {
-                    this.$message.error("Give the config a name");
-                    return;
-                }
-                if (!inModal.inbound) return;
-                const content = JSON.stringify(inModal.inbound.toJson());
-                const msg = await HttpUtil.post("/panel/api/inbounds/presets", { name, content });
-                if (!msg || !msg.success) return;
-                this.presetName = "";
-                await this.loadPresets();
-                if (msg.obj && msg.obj.id) this.presetSelection = msg.obj.id;
-                this.$message.success("Config saved");
-            },
-            async deletePreset() {
-                if (!this.presetSelection) return;
-                const msg = await HttpUtil.post("/panel/api/inbounds/presets/del/" + this.presetSelection);
-                if (!msg || !msg.success) return;
-                this.presetSelection = null;
-                await this.loadPresets();
-            },
             // Count the form items inside each section and, if that changed, publish it.
             //
             // The equality check is load-bearing, not an optimisation: this runs from

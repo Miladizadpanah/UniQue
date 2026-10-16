@@ -310,9 +310,6 @@ func runWebServer() {
 	// best-effort; see ensureMenuInstalled.
 	ensureMenuInstalled()
 
-	// Seed builtin inbound presets (VLESS+REALITY, Trojan TLS, etc.) on first run.
-	service.SeedBuiltinPresets()
-
 	// The root-only control socket the `vpn-ui-amd64 ctl` CLI (and the vpn-ui menu)
 	// drives Xray and the daemons through. Started before the servers, so it is
 	// already answering by the time the panel is up, and NON-FATAL on failure: it is

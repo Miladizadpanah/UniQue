@@ -261,7 +261,7 @@ func (s *SubService) getInboundsBySubId(subId string) ([]*model.Inbound, error) 
 			JSON_EACH(CASE WHEN JSON_VALID(inbounds.settings)
 				THEN JSON_EXTRACT(inbounds.settings, '$.clients') ELSE '[]' END) AS client
 		WHERE
-			protocol in ('vmess','vless','trojan','shadowsocks','hysteria','hysteria2','anytls','tuic','naive','mtproto','ssh','wg-c','awg','gre','openvpn','l2tp','pptp','openconnect','sstp','ikev2')
+			protocol in ('vmess','vless','trojan','shadowsocks','hysteria','hysteria2','anytls','tuic','naive','mtproto','ssh','wg-c','awg','wireguard','gre','openvpn','l2tp','pptp','openconnect','sstp','ikev2')
 			AND JSON_EXTRACT(client.value, '$.subId') = ? AND enable = ?
 	)`, subId, true).Order("id ASC").Find(&inbounds).Error
 	if err != nil {
@@ -332,7 +332,7 @@ func (s *SubService) getLink(inbound *model.Inbound, email string) string {
 		// Same split: ssh:// here is the Shadowrocket/base64 form (service.sshShareLink),
 		// which subscription importers do not read either.
 		return joinLinks(s.genSshLink(inbound, email), s.genConnectionCard(inbound, email))
-	case "wg-c", "awg":
+	case "wg-c", "awg", "wireguard":
 		// A real, importable link rather than a card: Xray/sing-box clients speak
 		// WireGuard, so these accounts get a working entry. The full-fidelity .conf
 		// still comes from the Clash sub and the per-client modal.
@@ -606,6 +606,36 @@ func (s *SubService) genWireguardLink(inbound *model.Inbound, email string) stri
 		awgParams, err = s.awgService.RenderClientParams(inbound, email, s.address)
 		for _, p := range awgParams {
 			params = append(params, p.WgcClientParams)
+		}
+	case model.WireGuard:
+		// Xray-native wireguard stores its device keys in the inbound settings, so
+		// there is no per-client param renderer: reuse the .conf renderer and pull
+		// the private key back out of its text (the only place it is kept).
+		var cfgs []service.WgxrayClientConfig
+		cfgs, err = service.RenderWireguardXrayConfigs(inbound, email, s.address)
+		if err == nil {
+			for _, c := range cfgs {
+				// parse the "PrivateKey = " line out of the config text
+				pi := strings.Index(c.Config, "PrivateKey = ")
+				if pi < 0 {
+					continue
+				}
+				rest := c.Config[pi+len("PrivateKey = "):]
+				if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
+					rest = rest[:nl]
+				}
+				params = append(params, service.WgcClientParams{
+					Name:         c.Remark,
+					PrivateKey:   strings.TrimSpace(rest),
+					Address:      c.IP,
+					PublicKey:    c.PublicKey,
+					PreSharedKey: "",
+					Host:         c.Host,
+					Port:         c.Port,
+					MTU:          1420,
+					AllowedIPs:   []string{"0.0.0.0/0"},
+				})
+			}
 		}
 	default:
 		return ""

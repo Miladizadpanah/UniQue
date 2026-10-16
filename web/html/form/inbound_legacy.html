@@ -700,48 +700,4 @@
     </a-collapse-panel>
 </a-collapse>
 
-<!-- config (saved presets) -->
-<!-- The same three bindings the rail form's Config section carries, in this
-     dialog's own shape: one collapse instead of a rail entry. The section is not
-     cosmetic parity — TestLegacyInboundFormsCarryEveryField holds the two forms to
-     one field set, and a preset control reachable only in the rail form would be
-     the kind of gap that test exists to catch.
-
-     presets load on EXPAND, mirroring the rail form's lazy fetch (inbound_modal.html
-     loads them from the inModal.section watcher, which only fires for the rail). -->
-<a-collapse @change="loadPresets()">
-    <a-collapse-panel header="Config">
-        <a-form
-            :colon="false"
-            :label-col="{ md: {span:8} }"
-            :wrapper-col="{ md: {span:14} }"
-        >
-            <a-form-item label="Saved configs">
-                <a-select v-model="presetSelection"
-                    :placeholder="presets.length ? 'Choose a config' : 'No saved configs yet'"
-                    :dropdown-class-name="themeSwitcher.currentTheme"
-                    allow-clear>
-                    <a-select-option v-for="p in presets" :key="p.id" :value="p.id"
-                        >[[ p.name ]]</a-select-option
-                    >
-                </a-select>
-            </a-form-item>
-            <a-form-item :wrapper-col="{ md: { span: 14, offset: 8 } }">
-                <a-space>
-                    <a-button type="primary" icon="import"
-                        :disabled="!presetSelection || isEdit" @click="applyPreset()">Apply</a-button>
-                    <a-button icon="delete" :disabled="!presetSelection"
-                        @click="deletePreset()">Delete</a-button>
-                </a-space>
-            </a-form-item>
-            <a-form-item label="Save this as">
-                <a-input v-model="presetName" placeholder="Config name"></a-input>
-            </a-form-item>
-            <a-form-item :wrapper-col="{ md: { span: 14, offset: 8 } }">
-                <a-button icon="save" @click="savePreset()">Save this config</a-button>
-            </a-form-item>
-        </a-form>
-    </a-collapse-panel>
-</a-collapse>
-
 {{end}}

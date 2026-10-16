@@ -101,14 +101,7 @@
                       @click="openGroupsModal">
                       <template v-if="!isMobile">{{ i18n "pages.inbounds.addGroups" }}</template>
                     </a-button>
-                    <!-- Presets: saved inbound templates. Applying one opens the Add
-                         dialog pre-filled; nothing reaches Xray until the operator
-                         edits the fields and saves a real inbound. Same reseller gate
-                         as the other list writes. -->
-                    <a-button v-if="!RESELLER.isReseller" icon="appstore"
-                      @click="openPresetsModal">
-                      <template v-if="!isMobile">{{ i18n "pages.inbounds.presets" }}</template>
-                    </a-button>
+                    <!-- Presets: removed - saved inbound templates are no longer offered. -->
                     <a-dropdown :trigger="['click']">
                       <a-button type="primary" icon="menu">
                         <template v-if="!isMobile">{{ i18n
@@ -719,49 +712,6 @@
       </a-row>
     </a-modal>
 
-    <!-- Inbound presets. A saved template of an inbound's form fields. "Apply" opens
-         the Add Inbound dialog pre-filled from the template; the operator then edits
-         and saves a real inbound. "Save" captures the current Add dialog's values as
-         a new named preset. A preset that pre-created inbounds would collide with
-         the operator's own ports, so this is a template picker, not an auto-inbound. -->
-    <a-modal v-model="presetModalVisible" :title="presetLbl.title" :width="720"
-      :class="themeSwitcher.currentTheme" :footer="null">
-      <a-spin :spinning="presetLoading">
-        <a-list size="small" bordered
-          :locale="{ emptyText: presetLbl.empty }">
-          <a-list-item v-for="p in inboundPresets" :key="p.id">
-            <div
-              :style="{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }">
-              <a-space>
-                <span>[[ p.name ]]</span>
-                <a-tag>[[ presetProtocol(p) ]]</a-tag>
-              </a-space>
-              <a-space>
-                <a @click="applyPreset(p)">[[ presetLbl.apply ]]</a>
-                <a-popconfirm :title="presetLbl.del + ' ' + p.name + '?'">
-                  <a @click="deletePreset(p)">[[ presetLbl.del ]]</a>
-                </a-popconfirm>
-              </a-space>
-            </div>
-          </a-list-item>
-        </a-list>
-        <a-divider/>
-        <a-row type="flex" :gutter="[12,12]" :justify="'space-between'">
-          <a-col :span="10">
-            <a-input v-model="presetForm.name" :placeholder="presetLbl.name"
-              :prefix-icon="'tag'"></a-input>
-          </a-col>
-          <a-col :span="14">
-            <a-space style="width: 100%; justify-content: flex-end;">
-              <a-button size="small" @click="savePreset" :disabled="!presetForm.name">
-                [[ presetLbl.save ]]
-              </a-button>
-            </a-space>
-          </a-col>
-        </a-row>
-      </a-spin>
-    </a-modal>
-
 {{template "page/shell_end" . }}
 {{template "page/body_scripts" .}}
 <script
@@ -963,31 +913,6 @@
       groupSaving: false,
       // The modal's editor. id 0 means "creating".
       groupForm: { id: 0, name: "", parentId: 0, inboundIds: [] },
-      // Inbound presets: saved templates of the Add/Edit dialog. A preset never
-      // writes an inbound; Apply just pre-fills the dialog and the operator saves.
-      inboundPresets: [],
-      presetModalVisible: false,
-      presetLoading: false,
-      presetForm: { name: "" },
-      // The preset dialog's own strings, resolved by the SERVER at render time.
-      // This page used to call a runtime i18n() helper that does not exist in
-      // this panel (only the server-side i18n function does), so every one of
-      // these calls was a ReferenceError inside a render or a handler. Kept in
-      // data so html/template escapes them for their Javascript context.
-      presetLbl: {
-        title: '{{ i18n "pages.inbounds.inboundPresets" }}',
-        empty: '{{ i18n "pages.inbounds.presetEmpty" }}',
-        apply: '{{ i18n "pages.inbounds.presetApply" }}',
-        del: '{{ i18n "pages.inbounds.presetDelete" }}',
-        name: '{{ i18n "pages.inbounds.presetName" }}',
-        save: '{{ i18n "pages.inbounds.presetSave" }}',
-        malformed: '{{ i18n "pages.inbounds.presetMalformed" }}',
-        addInbound: '{{ i18n "pages.inbounds.addInbound" }}',
-        create: '{{ i18n "create" }}',
-        close: '{{ i18n "close" }}',
-      },
-      // The Add dialog's current values, captured for "save as preset".
-      lastAddInbound: null,
     },
     methods: {
       loading(spinning = true) {
@@ -1109,85 +1034,6 @@
         if (!name) return;
         const msg = await HttpUtil.post('/panel/api/inbounds/groups/copy/' + group.id, { name: name });
         if (msg && msg.success && Array.isArray(msg.obj)) this.groups = msg.obj;
-      },
-      // ---- inbound presets --------------------------------------------------
-      // A preset is a saved template of the Add/Edit form. Apply pre-fills the
-      // dialog; the operator edits the fields (port, SNI, keys, credentials) and
-      // saves a real inbound. Nothing about a preset touches Xray or restarts the
-      // core, so the feature is safe on a live panel.
-      async loadPresets() {
-        if (RESELLER.isReseller) return;
-        const msg = await HttpUtil.get('/panel/api/inbounds/presets');
-        if (!msg || !msg.success || !Array.isArray(msg.obj)) return;
-        this.inboundPresets = msg.obj;
-      },
-      presetProtocol(preset) {
-        try {
-          const parsed = JSON.parse(preset.content);
-          return parsed.protocol || '';
-        } catch (e) {
-          return '';
-        }
-      },
-      openPresetsModal() {
-        this.presetForm.name = '';
-        this.presetModalVisible = true;
-        this.loadPresets();
-      },
-      // Apply a preset: open the Add Inbound dialog with the form pre-filled from
-      // the preset's saved JSON. The operator reviews and edits, then saves.
-      applyPreset(preset) {
-        let inbound;
-        try {
-          inbound = Inbound.fromJson(JSON.parse(preset.content));
-        } catch (e) {
-          this.$message.error(this.presetLbl.malformed);
-          return;
-        }
-        this.presetModalVisible = false;
-        inModal.show({
-          title: this.presetLbl.addInbound + ' — ' + preset.name,
-          okText: this.presetLbl.create,
-          cancelText: this.presetLbl.close,
-          inbound: inbound,
-          dbInbound: null,
-          confirm: async (inbound2, dbInbound2) => {
-            await this.addInbound(inbound2, dbInbound2, inModal);
-          },
-          isEdit: false
-        });
-      },
-      // Save the currently-open Add/Edit dialog's values as a named preset. The
-      // form object is live on inModal.inbound while the dialog is open.
-      async savePreset() {
-        const name = (this.presetForm.name || '').trim();
-        if (!name) return;
-        if (!inModal.inbound) {
-          this.$message.error(this.presetLbl.empty);
-          return;
-        }
-        this.presetLoading = true;
-        try {
-          const content = JSON.stringify(inModal.inbound.toJson ? inModal.inbound.toJson() : inModal.inbound);
-          const msg = await HttpUtil.post('/panel/api/inbounds/presets', { name: name, content: content });
-          if (msg && msg.success) {
-            this.$message.success(this.presetLbl.save + ': ' + name);
-            this.presetForm.name = '';
-            await this.loadPresets();
-          } else {
-            this.$message.error((msg && msg.msg) || 'Could not save preset');
-          }
-        } finally {
-          this.presetLoading = false;
-        }
-      },
-      async deletePreset(preset) {
-        const msg = await HttpUtil.post('/panel/api/inbounds/presets/del/' + preset.id);
-        if (msg && msg.success) {
-          await this.loadPresets();
-        } else {
-          this.$message.error((msg && msg.msg) || 'Could not delete preset');
-        }
       },
       async getDBInbounds() {
         this.refreshing = true;
@@ -2277,9 +2123,7 @@
       // Groups render as a filter beside the search box, so they are fetched with
       // the list rather than only when the manage dialog opens.
       this.loadGroups();
-      // Presets are fetched with the list the same way: a reseller skips both.
-      this.loadPresets();
-      
+
       // Initial data fetch
       this.getDBInbounds().then(() => {
         this.loading(false);

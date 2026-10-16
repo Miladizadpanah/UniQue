@@ -790,26 +790,6 @@ type AccountInbound struct {
 // TableName pins the table name. See Account.TableName.
 func (AccountInbound) TableName() string { return "account_inbounds" }
 
-// InboundPreset is a saved "config": everything needed to recreate an inbound, kept
-// as the same JSON the inbound form produces (Inbound.toJson).
-//
-// It is a TEMPLATE, not a live inbound: applying one fills the Add/Edit dialog and
-// nothing reaches Xray until the operator saves. That is what keeps a preset from
-// being a second write path around the permission and ownership checks every real
-// inbound write goes through, and it is why Content is stored verbatim rather than
-// projected into columns: a protocol whose settings grow a field after this code was
-// written still round-trips through a preset untouched.
-type InboundPreset struct {
-	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name      string `json:"name"`
-	Content   string `json:"content"`
-	CreatedAt int64  `json:"createdAt" gorm:"autoCreateTime:milli"`
-}
-
-// TableName pins the table name so a future rename of the Go type cannot orphan live
-// data. See Account.TableName.
-func (InboundPreset) TableName() string { return "inbound_presets" }
-
 // InboundGroup is a named set of inbounds the operator arranges their list by. Like
 // Inbound.SortOrder it is a panel-side view: no group reaches Xray, no protocol reads
 // one, and an inbound in no group behaves exactly as before.

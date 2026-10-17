@@ -1,0 +1,92 @@
+# Ignore editor and IDE settings
+.idea/
+.vscode/
+.cache/
+.sync*
+
+# Ignore log files
+*.log
+
+# Ignore temporary files
+tmp/
+*.tar.gz
+
+# Ignore build and distribution directories
+backup/
+bin/
+dist/
+release/
+node_modules/
+# ...but backend/bin must EXIST in a fresh checkout: it holds the daemon bundle
+# that //go:embed all:bin pulls in, and Go fails the build outright when an
+# embed pattern matches zero files ("pattern all:bin: no matching files found")
+# — which is exactly how a clean CI checkout used to die. The .gitkeep is the
+# minimum file that keeps the embed satisfiable; the real bundle is still built
+# by build.sh and stays ignored.
+!backend/bin/
+backend/bin/*
+!backend/bin/.gitkeep
+
+# Ignore compiled binaries
+main
+
+# Ignore script and executable files
+/release.sh
+/x-ui
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db
+
+# Ignore Go build files
+*.exe
+x-ui.db
+
+# Ignore Docker specific files
+docker-compose.override.yml
+
+# Ignore .env (Environment Variables) file
+.env
+# Local build artifact + agent config (never commit)
+/vpn-ui
+/vpn-ui.bak.*
+/build/out/
+.claude/
+
+# caveman plugin tooling (not project code)
+.agents/
+skills-lock.json
+
+# Bundled Xray core + base geo files (built by build/core/build.sh, embedded via
+# go:embed at build time) — large artifacts, never commit them.
+corebundle/core/*
+!corebundle/core/.gitkeep
+
+# Runtime state + local working dirs (regenerate on run/test — never commit).
+# vpn-ui.db holds panel credentials; the old x-ui.db rule missed it post-rebrand.
+/vpn-ui.db
+/bino/
+/host_logs/
+/test_unit/test_subject/
+/test_unit/results/
+__pycache__/
+*.pyc
+
+# Local-only project notes — keep on disk, never commit.
+/MEMORY.md
+
+# Local dev artifact: a two-file harness for checking how ant-design-vue renders
+# in-DOM templates (camelCase attrs get lowercased by the HTML parser). Useful
+# while debugging a table that renders its header and nothing else; not project
+# code, so it never ships.
+/ui-slot-test.html
+
+# Dead submodule: `milad/` was tracked as a gitlink with no .gitmodules entry and
+# its remote repo no longer exists. A gitlink like that makes `git submodule
+# update` abort with "No url found for submodule path 'milad'", which breaks every
+# fresh clone and every CI checkout. The folder stays on disk, untracked.
+/milad/
+نصب.txt
+git hub.txt
+
+vpn-ui-amd64

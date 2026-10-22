@@ -1203,7 +1203,14 @@ func (a *InboundController) addInboundClient(c *gin.Context) {
 
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientAddSuccess"), nil)
 
-	a.reconcileForInbounds(unionInboundIds(membershipIds, projected), needRestart)
+	all := unionInboundIds(membershipIds, projected)
+	// The projection above is database-only: every membership besides the hot-added
+	// anchor inbound is still missing from the running core, so a debounced restart
+	// applies it - exactly what saveAccountClient does for the same write.
+	if projectedBeyondAnchor(data.Id, all) {
+		needRestart = true
+	}
+	a.reconcileForInbounds(all, needRestart)
 }
 
 // saveAccountClient writes a client that NO inbound addresses, and sets which
@@ -1592,6 +1599,12 @@ func (a *InboundController) updateInboundClient(c *gin.Context) {
 	// a new per-account routing rule on every inbound the old email was written into,
 	// and those inbounds are not otherwise in any of the three lists.
 	reconcile := unionInboundIds(unionInboundIds(membershipIds, previous), projected)
+	// The edit was hot-applied to the inbound it was posted against only; every other
+	// inbound in this set (a re-projected membership, a dropped one, a rename target)
+	// is database-only, so a debounced restart applies the change there as well.
+	if projectedBeyondAnchor(inbound.Id, unionInboundIds(reconcile, renamed)) {
+		needRestart = true
+	}
 	a.reconcileForInbounds(unionInboundIds(reconcile, renamed), needRestart)
 }
 
@@ -3149,6 +3162,23 @@ func (a *InboundController) applyClientMemberships(c *gin.Context, email string,
 		}
 	}
 	return accountService.ApplyMembershipsFrom(email, anchorInboundId, inboundIds, removable, explicit)
+}
+
+// projectedBeyondAnchor reports whether the reconcile set carries an inbound the
+// write did not hot-add into the running core. applyClientMemberships only writes
+// the database (ProjectAccount rewrites the settings JSON), so every membership
+// besides the hot-added anchor stays absent from live Xray until a restart applies
+// it - the "a fresh multi-inbound account pings on one inbound, the rest only after
+// the next scheduled restart" report. Daemon inbounds regenerate their daemons and
+// request the restart themselves, so counting them is harmless: the flag is
+// idempotent and the restart is debounced.
+func projectedBeyondAnchor(anchorId int, set []int) bool {
+	for _, id := range set {
+		if id != anchorId {
+			return true
+		}
+	}
+	return false
 }
 
 // reconcileForInbounds fires each protocol's reconcile hook once for the set of

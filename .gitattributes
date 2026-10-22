@@ -1,0 +1,8 @@
+# Shell scripts are embedded into the panel binary via go:embed (vpn-ui.sh,
+# acme hooks) and shipped to Linux hosts: a CRLF checkout would break the
+# generated management menu, so they must always be LF.
+*.sh text eol=lf
+deploy.sh text eol=lf
+install.sh text eol=lf
+
+# Everything else: let git do its normal platform conversion.

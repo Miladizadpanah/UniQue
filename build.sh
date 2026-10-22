@@ -277,18 +277,24 @@ else
 fi
 
 # 3. Panel binary (cgo required for sqlite). Output goes to build/out/.
+#
+# go:embed copies the .sh files byte-for-byte into the binary. A CRLF
+# checkout (core.autocrlf=true) would bake a CR into the embedded
+# management menu and break `set -euo pipefail` on Linux. .gitattributes
+# pins *.sh to LF; this guard strips any stray CR before compiling.
 OUT_DIR="$REPO_ROOT/build/out"
 OUT_BIN="$OUT_DIR/vpn-ui-$ARCH"
 step "compiling vpn-ui"
 if (( DRY_RUN )); then
-    info "would run: CGO_ENABLED=1 GOARCH=$ARCH go build -o build/out/vpn-ui-$ARCH main.go"
+    info "would run: normalize *.sh (strip CR), then CGO_ENABLED=1 GOARCH=$ARCH go build -o build/out/vpn-ui-$ARCH main.go"
     hr
     ok "dry run: nothing was built"
     hr
     exit 0
 fi
+find "$REPO_ROOT" -name '*.sh' -not -path '*/build/*' -print0 2>/dev/null \
+    | xargs -0 sed -i 's/\r$//' 2>/dev/null || true
 mkdir -p "$OUT_DIR"
-CGO_ENABLED=1 GOARCH="$ARCH" go build -o "$OUT_BIN" main.go
 
 hr
 ok "done: ${_CB:-}$(ls -lh "$OUT_BIN" | awk '{print $5}')${_CR:-} -> ${_CB:-}build/out/vpn-ui-${ARCH}${_CR:-}"

@@ -397,11 +397,18 @@ msg "Installing the ${MENU} management menu"
 export VPNUI_BIN="$DEST"
 if "$DEST" install-menu >/dev/null 2>&1 && [[ -r "$MENU" ]]; then
     ok "management menu -> ${MENU}  (run: ${TEAL}vpn-ui${R})"
+    # A CRLF checkout bakes \r into the embedded script, which makes `set -euo
+    # pipefail` a "pipefail\r" and kills the `source` below - and this script's
+    # set -e with it, before the restart step ever runs. Normalize first; the menu
+    # is a flat text file, so stripping CR can never break an LF build.
+    sed -i 's/\r$//' "$MENU" 2>/dev/null || true
     # Bring in obtain_letsencrypt_cert: the single implementation, shared rather
     # than copied. vpn-ui.sh does nothing at top level when sourced (its menu is
     # behind a sourced/executed guard), so this only defines functions.
     # shellcheck source=vpn-ui.sh
-    source "$MENU"
+    if ! source "$MENU"; then
+        warn "could not source ${MENU} cleanly; the panel still deploys, the 'vpn-ui' menu may be stale."
+    fi
 else
     warn "could not install ${MENU}, so the 'vpn-ui' menu is unavailable on this host."
     # Keep the TLS branch below honest instead of letting an undefined function

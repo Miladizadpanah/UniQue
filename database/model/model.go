@@ -960,15 +960,15 @@ type TunnelSpokeStatus struct {
 // own. This is a monitoring surface only: the hub reads a remote node, it does
 // not write to it, so a misbehaving remote panel can never reach this one.
 type Node struct {
-	Id    int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name  string `json:"name" gorm:"not null"`
+	Id    int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
+	Name  string `json:"name" form:"name" gorm:"not null"`
 	// BaseUrl is the remote panel's https base, e.g. https://node2.example.com:2096
-	BaseUrl string `json:"baseUrl" gorm:"not null"`
+	BaseUrl string `json:"baseUrl" form:"baseUrl" gorm:"not null"`
 	// Token is the remote node's node API token; the hub sends it on the X-Node-Token
 	// header when polling. Stored in plaintext, like other panel credentials.
-	Token string `json:"token" gorm:"not null"`
-	Enable bool  `json:"enable" gorm:"default:1"`
-	Remark string `json:"remark"`
+	Token string `json:"token" form:"token" gorm:"not null"`
+	Enable bool  `json:"enable" form:"enable" gorm:"default:1"`
+	Remark string `json:"remark" form:"remark"`
 	// LastSeen is UnixNano of the last successful poll. 0 = never polled.
 	LastSeen int64 `json:"lastSeen" gorm:"default:0"`
 	// LatencyMs is the last measured poll round-trip. 0 = unmeasured.

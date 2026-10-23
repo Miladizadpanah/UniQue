@@ -296,6 +296,10 @@ find "$REPO_ROOT" -name '*.sh' -not -path '*/build/*' -print0 2>/dev/null \
     | xargs -0 sed -i 's/\r$//' 2>/dev/null || true
 mkdir -p "$OUT_DIR"
 
+# Compile the panel itself. cgo is required: the native VPN daemons and the
+# xray core are linked in, so the binary only builds with CGO_ENABLED=1.
+CGO_ENABLED=1 GOARCH="$ARCH" go build -o "$OUT_BIN" main.go
+
 hr
 ok "done: ${_CB:-}$(ls -lh "$OUT_BIN" | awk '{print $5}')${_CR:-} -> ${_CB:-}build/out/vpn-ui-${ARCH}${_CR:-}"
 info "run it:  ./build/out/vpn-ui-${ARCH}"

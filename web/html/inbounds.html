@@ -719,7 +719,7 @@
     <!-- Client-group scope for one inbound: which groups may use it. An empty
          list means the inbound is open to everyone. -->
     <a-modal v-model="scopeInbound.visible"
-      title="{{ i18n \"pages.inbounds.clientGroups\" }}" :width="560"
+      title="{{ i18n "pages.inbounds.clientGroups" }}" :width="560"
       :class="themeSwitcher.currentTheme" :footer="null">
       <div :style="{ padding: '8px 0 16px' }">
         <p :style="{ color: 'var(--text-3)', marginBottom: '12px' }">
@@ -727,7 +727,7 @@
         </p>
         <a-select v-model="scopeInbound.groups" mode="multiple"
           :style="{ width: '100%' }"
-          placeholder="{{ i18n \"pages.inbounds.clientGroupsPlaceholder\" }}"
+          placeholder="{{ i18n "pages.inbounds.clientGroupsPlaceholder" }}"
           :dropdownClassName="themeSwitcher.currentTheme">
           <a-select-option v-for="g in clientGroupOptions" :key="g.id" :value="g.id">
             [[ g.name ]]

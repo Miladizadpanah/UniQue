@@ -59,8 +59,8 @@
               <template v-if="!row.this">
                 <a @click="openEdit(row)">{{ i18n "edit" }}</a>
                 <a-divider type="vertical"></a-divider>
-                <a-popconfirm title="{{ i18n \"pages.nodes.delConfirm\" }}"
-                  ok-text="{{ i18n \"confirm\" }}" cancel-text="{{ i18n \"cancel\" }}"
+                <a-popconfirm title="{{ i18n "pages.nodes.delConfirm" }}"
+                  ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
                   @confirm="del(row)">
                   <a style="color: var(--error)">{{ i18n "delete" }}</a>
                 </a-popconfirm>

@@ -92,6 +92,13 @@
                         title: '{{ i18n "menu.core"}}'
                     },
                     {{ end }}
+                    {{ if .perms.accessXraySettings }}
+                    {
+                        key: '{{ .base_path }}panel/nodes',
+                        icon: 'apartment',
+                        title: '{{ i18n "menu.nodes"}}'
+                    },
+                    {{ end }}
                     {{ if .perms.superAdmin }}
                     {
                         key: '{{ .base_path }}panel/admins',

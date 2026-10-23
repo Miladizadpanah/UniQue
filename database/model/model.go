@@ -953,3 +953,44 @@ type TunnelSpokeStatus struct {
 	// Only valid in "direct" mode; empty in "reverse".
 	ExitIP string `json:"exitIP"`
 }
+
+// Node is one remote panel the dashboard manages. Each entry points at another
+// box running the same vpn-ui binary; the dashboard polls its public status
+// endpoint with the shared token and shows its health and counts alongside its
+// own. This is a monitoring surface only: the hub reads a remote node, it does
+// not write to it, so a misbehaving remote panel can never reach this one.
+type Node struct {
+	Id    int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name  string `json:"name" gorm:"not null"`
+	// BaseUrl is the remote panel's https base, e.g. https://node2.example.com:2096
+	BaseUrl string `json:"baseUrl" gorm:"not null"`
+	// Token is the remote node's node API token; the hub sends it on the X-Node-Token
+	// header when polling. Stored in plaintext, like other panel credentials.
+	Token string `json:"token" gorm:"not null"`
+	Enable bool  `json:"enable" gorm:"default:1"`
+	Remark string `json:"remark"`
+	// LastSeen is UnixNano of the last successful poll. 0 = never polled.
+	LastSeen int64 `json:"lastSeen" gorm:"default:0"`
+	// LatencyMs is the last measured poll round-trip. 0 = unmeasured.
+	LatencyMs int `json:"latencyMs" gorm:"default:0"`
+	// The last snapshot the remote node reported.
+	Version      string `json:"version" gorm:"default:''"`
+	InboundCount int    `json:"inboundCount" gorm:"default:0"`
+	AccountCount int    `json:"accountCount" gorm:"default:0"`
+	OnlineCount  int    `json:"onlineCount" gorm:"default:0"`
+	// Online is true when the last poll succeeded.
+	Online bool `json:"online" gorm:"default:0"`
+}
+
+// TableName pins the table name.
+func (Node) TableName() string { return "nodes" }
+
+// NodeStatus is what the remote node's /panel/node/status endpoint reports. The
+// hub's Poll decodes it, but nothing here is persisted beyond Node's snapshot
+// fields; it exists so the wire format is one concrete type on both ends.
+type NodeStatus struct {
+	Version      string `json:"version"`
+	InboundCount int    `json:"inboundCount"`
+	AccountCount int    `json:"accountCount"`
+	OnlineCount  int    `json:"onlineCount"`
+}

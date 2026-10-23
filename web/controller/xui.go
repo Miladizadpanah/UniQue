@@ -41,6 +41,9 @@ func (a *XUIController) initRouter(g *gin.RouterGroup) {
 	g.GET("/clients", requirePerm(model.PermAccessInbounds), a.clients)
 	g.GET("/settings", requirePerm(model.PermPanelSettings), a.settings)
 	g.GET("/xray", requirePerm(model.PermXraySettings), a.xraySettings)
+	// Multi-node dashboard: the fleet view. Xray-settings class, like the other
+	// fleet-wide configuration pages.
+	g.GET("/nodes", requirePerm(model.PermXraySettings), a.nodes)
 	g.GET("/core", requirePerm(model.PermCoreSettings), a.coreSettings)
 	g.GET("/admins", requireSuperAdmin(), a.admins)
 	// Resellers is a permission and not requireSuperAdmin(), so a delegated admin can
@@ -101,6 +104,11 @@ func (a *XUIController) inbounds(c *gin.Context) {
 // clients renders the account-centric Clients page.
 func (a *XUIController) clients(c *gin.Context) {
 	html(c, "clients.html", "pages.clients.title", nil)
+}
+
+// nodes renders the multi-node dashboard: this panel plus every registered remote.
+func (a *XUIController) nodes(c *gin.Context) {
+	html(c, "nodes.html", "pages.nodes.title", nil)
 }
 
 // settings renders the settings management page.

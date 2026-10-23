@@ -101,6 +101,7 @@ type Server struct {
 	index *controller.IndexController
 	panel *controller.XUIController
 	api   *controller.APIController
+	node  *controller.NodeController
 	ws    *controller.WebSocketController
 
 	xrayService        service.XrayService
@@ -304,6 +305,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.index = controller.NewIndexController(g)
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, s.customGeoService)
+	s.node = controller.NewNodeController(g)
 
 	// Initialize WebSocket hub
 	s.wsHub = websocket.NewHub()
@@ -439,6 +441,11 @@ func (s *Server) startTask() {
 	s.cron.AddFunc("@every 60s", func() {
 		s.radiusService.CleanStaleSessions()
 	})
+
+	// Multi-node: poll the registered remote panels and refresh their health
+	// snapshots. A no-op when no node is registered, so single-node installs
+	// pay nothing for it.
+	s.cron.AddJob("@every 60s", job.NewCheckNodesJob())
 
 	// check client ips from log file every 10 sec
 	s.cron.AddJob("@every 10s", job.NewCheckClientIpJob())

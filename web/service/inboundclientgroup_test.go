@@ -1,30 +1,48 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 )
 
+// seedVlessInbound creates a live VLESS inbound carrying the given clients. The tag
+// is caller-supplied and must be unique per test run, because inbounds.tag is a
+// unique column; the shared seedInboundWithClients helper hardcodes one tag and
+// therefore collides when a test needs more than one VLESS inbound.
+func seedVlessInbound(t *testing.T, tag string, port int, clients []map[string]any) *model.Inbound {
+	t.Helper()
+	settings, err := json.Marshal(map[string]any{"clients": clients})
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+	inbound := &model.Inbound{
+		UserId: 1, Tag: tag, Port: port,
+		Protocol: model.VLESS, Enable: true, Settings: string(settings),
+	}
+	if err := database.GetDB().Create(inbound).Error; err != nil {
+		t.Fatalf("create inbound %q: %v", tag, err)
+	}
+	return inbound
+}
+
 // newClientGroupFixture builds the whole surface the group-inbound feature touches:
-// two live vless inbounds carrying two accounts, a client group holding both
-// accounts, and the service under test. The accounts are mirrored through the
-// ordinary migration so the accounts layer (and its memberships) is real, which is
-// what makes the projection assertions meaningful.
+// a live vless inbound carrying two accounts, a client group holding both accounts,
+// and the service under test. The accounts are mirrored through the ordinary
+// migration so the accounts layer (and its memberships) is real.
 func newClientGroupFixture(t *testing.T) (*InboundClientGroupService, *model.User, model.ClientGroup) {
 	t.Helper()
-	_ = newAccountsDB(t) // init the DB and pin the xray process
+	_ = newAccountsDB(t) // init a fresh DB and pin the xray process
 	svc := &InboundClientGroupService{}
 
-	vlessA := seedInboundWithClients(t, model.VLESS, 47001, []map[string]any{
+	seedVlessInbound(t, "gtest-base", 47001, []map[string]any{
 		{"id": "a1111111-1111-4111-8111-111111111111", "email": "alice@example.com", "enable": true, "totalGB": float64(100)},
 		{"id": "b2222222-2222-4222-8222-222222222222", "email": "bob@example.com", "enable": true, "totalGB": float64(100)},
 	})
-	_ = vlessA
 	// Mirror the accounts layer so alice and bob are real accounts with memberships.
-	acc := &AccountService{}
-	acc.MigrationAccounts()
+	(&AccountService{}).MigrationAccounts()
 
 	// A client group that both accounts sit in.
 	var group model.ClientGroup
@@ -38,7 +56,6 @@ func newClientGroupFixture(t *testing.T) (*InboundClientGroupService, *model.Use
 
 	// A super admin caller for the scope writes.
 	user := &model.User{Id: 1, Username: "root", IsSuperAdmin: true}
-	_ = user
 
 	return svc, user, group
 }
@@ -67,7 +84,7 @@ func TestScopedInboundProjectsOntoGroupMembers(t *testing.T) {
 	svc, user, group := newClientGroupFixture(t)
 
 	// A fresh vless inbound, no clients yet, that the operator scopes to the group.
-	scoped := seedInboundWithClients(t, model.VLESS, 47002, []map[string]any{})
+	scoped := seedVlessInbound(t, "gtest-scoped", 47002, []map[string]any{})
 	touched, err := svc.SetForInbound(user, scoped.Id, []int{group.Id})
 	if err != nil {
 		t.Fatalf("SetForInbound: %v", err)
@@ -91,13 +108,13 @@ func TestScopedInboundProjectsOntoGroupMembers(t *testing.T) {
 // account that joins a group takes up every inbound that group is scoped to.
 func TestNewGroupMemberPicksUpScopedInbounds(t *testing.T) {
 	svc, user, group := newClientGroupFixture(t)
-	scoped := seedInboundWithClients(t, model.VLESS, 47003, []map[string]any{})
+	scoped := seedVlessInbound(t, "gtest-scoped2", 47003, []map[string]any{})
 	if _, err := svc.SetForInbound(user, scoped.Id, []int{group.Id}); err != nil {
 		t.Fatalf("SetForInbound: %v", err)
 	}
 
 	// A third account, not in the group yet, on its own inbound.
-	seedInboundWithClients(t, model.VLESS, 47004, []map[string]any{
+	seedVlessInbound(t, "gtest-carol", 47004, []map[string]any{
 		{"id": "c3333333-3333-4333-8333-333333333333", "email": "carol@example.com", "enable": true, "totalGB": float64(50)},
 	})
 	(&AccountService{}).MigrationAccounts()
@@ -126,7 +143,7 @@ func TestNewGroupMemberPicksUpScopedInbounds(t *testing.T) {
 // group scopes it) is never touched.
 func TestUnscopeKeepsHandMemberships(t *testing.T) {
 	svc, user, group := newClientGroupFixture(t)
-	scoped := seedInboundWithClients(t, model.VLESS, 47005, []map[string]any{})
+	scoped := seedVlessInbound(t, "gtest-scoped3", 47005, []map[string]any{})
 	if _, err := svc.SetForInbound(user, scoped.Id, []int{group.Id}); err != nil {
 		t.Fatalf("SetForInbound: %v", err)
 	}

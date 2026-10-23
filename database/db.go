@@ -51,6 +51,9 @@ func initModels() error {
 		// The inbound -> client-group scope link (feature: an inbound "available to"
 		// specific client groups). Purely additive: an old binary ignores the table.
 		&model.InboundClientGroup{},
+		// The multi-node registry: remote panels this dashboard polls and displays.
+		// Purely additive, read-only monitoring; an old binary ignores the table.
+		&model.Node{},
 		&model.OutboundTraffics{},
 		&model.Setting{},
 		&model.InboundClientIps{},

@@ -1,0 +1,300 @@
+{{ template "page/head_start" .}}
+{{ template "page/head_end" .}}
+
+{{ template "page/body_start" .}}
+{{ template "page/shell_start" . }}
+<a-spin :spinning="spinning" :delay="300" tip='{{ i18n "loading"}}' size="large">
+  <transition name="list" appear>
+    <a-row :gutter="[16, 16]">
+      <a-col :span="24">
+        <!-- Fleet totals across this panel and every enabled remote. -->
+        <a-row :gutter="[16, 16]" :style="{ marginBottom: '16px' }">
+          <a-col :xs="12" :md="5" v-for="s in summaryCards" :key="s.key">
+            <a-card hoverable>
+              <div :style="{ display: 'flex', flexDirection: 'column', gap: '4px' }">
+                <span :style="{ color: 'var(--text-3)' }">[[ s.label ]]</span>
+                <span class="num" :style="{ fontSize: '22px' }">[[ s.value ]]</span>
+              </div>
+            </a-card>
+          </a-col>
+        </a-row>
+
+        <a-card hoverable :style="{ marginBottom: '16px' }">
+          <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
+            <a-button type="primary" icon="plus" @click="openAdd()">
+              [[ labels.add ]]
+            </a-button>
+            <a-button icon="sync" :loading="refreshing" @click="refreshAll">
+              [[ labels.refresh ]]
+            </a-button>
+          </div>
+        </a-card>
+
+        <a-card hoverable :body-style="{ padding: 0 }">
+          <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
+            :scroll="isMobile ? {} : { x: 760 }" :pagination="false" bordered
+            :locale='{ emptyText: `{{ i18n "noData" }}` }'>
+
+            <template slot="status" slot-scope="text, row">
+              <a-badge :status="row.this ? 'processing' : (row.online ? 'success' : 'error')"
+                :text="row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline)">
+                <span slot="text">[[ row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline) ]]</span>
+              </a-badge>
+            </template>
+
+            <template slot="counts" slot-scope="text, row">
+              <span>[[ row.inboundCount ]]</span>
+              <span :style="{ color: 'var(--text-3)' }"> / </span>
+              <span>[[ row.accountCount ]]</span>
+              <span :style="{ color: 'var(--text-3)' }"> / </span>
+              <span>[[ row.onlineCount ]]</span>
+            </template>
+
+            <template slot="lastSeen" slot-scope="text, row">
+              <span v-if="row.lastSeen">[[ IntlUtil.formatDate(row.lastSeen / 1000000000) ]]</span>
+              <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.neverPolled ]]</span>
+            </template>
+
+            <template slot="action" slot-scope="text, row">
+              <template v-if="!row.this">
+                <a @click="openEdit(row)">{{ i18n "edit" }}</a>
+                <a-divider type="vertical"></a-divider>
+                <a-popconfirm title="{{ i18n \"pages.nodes.delConfirm\" }}"
+                  ok-text="{{ i18n \"confirm\" }}" cancel-text="{{ i18n \"cancel\" }}"
+                  @confirm="del(row)">
+                  <a style="color: var(--error)">{{ i18n "delete" }}</a>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
+        </a-card>
+
+        <!-- This panel's side: set the token a hub uses to poll this node, and
+             copy the base url to paste into the hub's node row. -->
+        <a-card hoverable :title="labels.thisPanelToken" :style="{ marginTop: '16px' }">
+          <a-row :gutter="[16, 12]" type="flex">
+            <a-col :flex="1">
+              <a-input v-model="nodeToken" :placeholder="labels.tokenPlaceholder"
+                @pressEnter="saveNodeToken">
+                <a-icon slot="prefix" type="lock"></a-icon>
+              </a-input>
+            </a-col>
+            <a-col :style="{ whiteSpace: 'nowrap' }">
+              <a-button type="primary" :loading="savingToken" @click="saveNodeToken">
+                {{ i18n "save" }}
+              </a-button>
+            </a-col>
+          </a-row>
+          <a-row :gutter="[16, 8]" :style="{ marginTop: '12px' }" type="flex">
+            <a-col :flex="1">
+              <a-input :value="myBaseUrl" readonly>
+                <a-icon slot="prefix" type="link"></a-icon>
+              </a-input>
+            </a-col>
+            <a-col :style="{ whiteSpace: 'nowrap' }">
+              <a-button icon="copy" @click="copyText(myBaseUrl)">{{ i18n "copy" }}</a-button>
+            </a-col>
+          </a-row>
+          <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">
+            [[ labels.tokenHint ]]
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
+  </transition>
+</a-spin>
+
+<!-- Add / edit node. -->
+<a-modal v-model="nodeModal.visible" :title="nodeModal.id ? labels.edit : labels.add"
+  :width="560" :class="themeSwitcher.currentTheme" :footer="null">
+  <a-row :gutter="[16, 12]">
+    <a-col :span="24">
+      <a-input v-model="nodeModal.name" :placeholder="labels.namePlaceholder"></a-input>
+    </a-col>
+    <a-col :span="24">
+      <a-input v-model="nodeModal.baseUrl" :placeholder="labels.baseUrlPlaceholder"></a-input>
+    </a-col>
+    <a-col :span="24">
+      <a-input v-model="nodeModal.token" :placeholder="labels.tokenPlaceholder"
+        @pressEnter="saveNode"></a-input>
+    </a-col>
+    <a-col :span="24">
+      <a-input v-model="nodeModal.remark" :placeholder="labels.remark"></a-input>
+    </a-col>
+    <a-col :span="24">
+      <a-space>
+        <a-button @click="nodeModal.visible = false">{{ i18n "cancel" }}</a-button>
+        <a-button type="primary" :loading="nodeModal.saving" @click="saveNode">
+          {{ i18n "save" }}
+        </a-button>
+      </a-space>
+    </a-col>
+  </a-row>
+</a-modal>
+
+{{ template "page/shell_end" . }}
+{{ template "page/body_scripts" . }}
+<script>
+  const app = new Vue({
+    delimiters: ['[[', ']]'],
+    mixins: [MediaQueryMixin],
+    el: '#app',
+    data: {
+      themeSwitcher,
+      pageTitle: '{{ i18n "menu.nodes"}}',
+      pageClass: '',
+      spinning: false,
+      refreshing: false,
+      nodes: [],
+      my: null,
+      nodeToken: '',
+      myBaseUrl: '',
+      savingToken: false,
+      nodeModal: { visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false },
+      labels: {
+        add: '{{ i18n "pages.nodes.add" }}',
+        edit: '{{ i18n "pages.nodes.edit" }}',
+        refresh: '{{ i18n "pages.nodes.refresh" }}',
+        counts: '{{ i18n "pages.nodes.counts" }}',
+        lastSeen: '{{ i18n "pages.nodes.lastSeen" }}',
+        online: '{{ i18n "pages.nodes.online" }}',
+        offline: '{{ i18n "pages.nodes.offline" }}',
+        thisPanel: '{{ i18n "pages.nodes.thisPanel" }}',
+        thisPanelToken: '{{ i18n "pages.nodes.thisPanelToken" }}',
+        tokenHint: '{{ i18n "pages.nodes.tokenHint" }}',
+        tokenPlaceholder: '{{ i18n "pages.nodes.tokenPlaceholder" }}',
+        namePlaceholder: '{{ i18n "pages.nodes.namePlaceholder" }}',
+        baseUrlPlaceholder: '{{ i18n "pages.nodes.baseUrlPlaceholder" }}',
+        remark: '{{ i18n "pages.nodes.remark" }}',
+        nodes: '{{ i18n "pages.nodes.nodes" }}',
+        inbounds: '{{ i18n "pages.nodes.inbounds" }}',
+        accounts: '{{ i18n "pages.nodes.accounts" }}',
+        onlineClients: '{{ i18n "pages.nodes.onlineClients" }}',
+        neverPolled: '{{ i18n "pages.nodes.neverPolled" }}',
+        requiredFields: '{{ i18n "pages.nodes.requiredFields" }}',
+      },
+      columns: [
+        { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 140 },
+        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 180, ellipsis: true },
+        { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 100 },
+        { title: '{{ i18n "status" }}', align: 'center', width: 100, scopedSlots: { customRender: 'status' } },
+        { title: '{{ i18n "latency" }}', dataIndex: 'latencyMs', align: 'center', width: 80, customRender: (t, r) => (r.this || r.latencyMs ? r.latencyMs + ' ms' : '—') },
+        { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 120, scopedSlots: { customRender: 'counts' } },
+        { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 150, scopedSlots: { customRender: 'lastSeen' } },
+        { title: '', align: 'center', width: 120, scopedSlots: { customRender: 'action' } },
+      ],
+    },
+    computed: {
+      // This panel first, then the registered remotes, so the dashboard always
+      // shows the whole fleet in one view.
+      rows() {
+        const thisRow = this.my ? {
+          this: true,
+          id: 0,
+          name: '● ' + this.labels.thisPanel,
+          baseUrl: this.myBaseUrl,
+          version: this.my.version,
+          online: true,
+          latencyMs: 0,
+          inboundCount: this.my.inboundCount,
+          accountCount: this.my.accountCount,
+          onlineCount: this.my.onlineCount,
+          lastSeen: 0,
+        } : null;
+        return thisRow ? [thisRow, ...this.nodes] : this.nodes;
+      },
+      summaryCards() {
+        const inb = this.nodes.reduce((a, n) => a + (n.enable ? n.inboundCount : 0), 0) + (this.my ? this.my.inboundCount : 0);
+        const acc = this.nodes.reduce((a, n) => a + (n.enable ? n.accountCount : 0), 0) + (this.my ? this.my.accountCount : 0);
+        const on = this.nodes.reduce((a, n) => a + (n.enable ? n.onlineCount : 0), 0) + (this.my ? this.my.onlineCount : 0);
+        const enabled = this.nodes.filter(n => n.enable).length + 1;
+        const onlineNodes = this.nodes.filter(n => n.enable && n.online).length + 1;
+        const L = this.labels;
+        return [
+          { key: 'nodes', label: L.nodes, value: enabled },
+          { key: 'online', label: L.online, value: onlineNodes },
+          { key: 'inbounds', label: L.inbounds, value: inb },
+          { key: 'accounts', label: L.accounts, value: acc },
+          { key: 'onlineClients', label: L.onlineClients, value: on },
+        ];
+      },
+    },
+    methods: {
+      async load() {
+        this.spinning = true;
+        const [list, token, summary] = await Promise.all([
+          HttpUtil.get('/panel/api/nodes/list'),
+          HttpUtil.get('/panel/api/nodes/token'),
+          HttpUtil.get('/panel/api/nodes/summary'),
+        ]);
+        if (list && list.success) this.nodes = list.obj || [];
+        if (token && token.success && token.obj) {
+          this.nodeToken = token.obj.token || '';
+          this.myBaseUrl = token.obj.baseUrl || (window.location.origin + basePath);
+        }
+        if (summary && summary.success && summary.obj) {
+          this.my = {
+            version: '',
+            inboundCount: summary.obj.thisInbounds,
+            accountCount: summary.obj.thisAccounts,
+            onlineCount: summary.obj.thisOnline,
+          };
+        }
+        this.spinning = false;
+      },
+      async refreshAll() {
+        this.refreshing = true;
+        const msg = await HttpUtil.post('/panel/api/nodes/refresh');
+        if (msg && msg.success) this.nodes = msg.obj || [];
+        this.refreshing = false;
+        await this.load();
+      },
+      openAdd() {
+        this.nodeModal = { visible: true, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false };
+      },
+      openEdit(node) {
+        this.nodeModal = {
+          visible: true, id: node.id, name: node.name, baseUrl: node.baseUrl,
+          token: node.token, remark: node.remark, saving: false,
+        };
+      },
+      async saveNode() {
+        const m = this.nodeModal;
+        if (!m.name.trim() || !m.baseUrl.trim()) {
+          this.$message.error(this.labels.requiredFields);
+          return;
+        }
+        m.saving = true;
+        const url = m.id ? `/panel/api/nodes/update/${m.id}` : '/panel/api/nodes/add';
+        const msg = await HttpUtil.post(url, {
+          name: m.name, baseUrl: m.baseUrl, token: m.token,
+          remark: m.remark, enable: true,
+        });
+        m.saving = false;
+        if (msg && msg.success) {
+          m.visible = false;
+          await this.load();
+        }
+      },
+      async del(node) {
+        const msg = await HttpUtil.post(`/panel/api/nodes/del/${node.id}`);
+        if (msg && msg.success) await this.load();
+      },
+      async saveNodeToken() {
+        this.savingToken = true;
+        const msg = await HttpUtil.post('/panel/api/nodes/token', { token: this.nodeToken });
+        this.savingToken = false;
+        if (msg && msg.success) this.$message.success('{{ i18n "saved" }}');
+      },
+      copyText(text) {
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => this.$message.success('{{ i18n "copied" }}'))
+          .catch(() => this.$message.error('{{ i18n "copyFailed" }}'));
+      },
+    },
+    async mounted() {
+      await this.load();
+    },
+  });
+</script>
+{{ template "page/body_end" .}}

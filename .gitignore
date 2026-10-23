@@ -90,3 +90,6 @@ __pycache__/
 git hub.txt
 
 vpn-ui-amd64
+
+# Build scratch
+.tmphash/

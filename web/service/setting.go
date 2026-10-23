@@ -52,6 +52,10 @@ var defaultValueMap = map[string]string{
 	"tgLang":                      "en-US",
 	"twoFactorEnable":             "false",
 	"twoFactorToken":              "",
+	// The token the node status endpoint checks: set it on a remote panel, copy it
+	// into that panel's Node row here, and the hub can poll its health. Empty =
+	// the endpoint refuses everyone, so the default is safe-closed.
+	"nodeApiToken":                "",
 	"systemdServiceName":          "vpn-ui",
 	"subEnable":                   "false",
 	"subJsonEnable":               "false",
@@ -403,6 +407,19 @@ func (s *SettingService) GetTwoFactorEnable() (bool, error) {
 
 func (s *SettingService) SetTwoFactorEnable(value bool) error {
 	return s.setBool("twoFactorEnable", value)
+}
+
+// GetNodeApiToken returns the shared token that gates the node status endpoint.
+// Empty means the endpoint is disabled (safe-closed): the hub cannot poll a panel
+// that has not opted in by setting a token.
+func (s *SettingService) GetNodeApiToken() string {
+	v, _ := s.getString("nodeApiToken")
+	return v
+}
+
+// SetNodeApiToken sets (or clears, when empty) the node status token.
+func (s *SettingService) SetNodeApiToken(value string) error {
+	return s.setString("nodeApiToken", value)
 }
 
 // GetVpnProvisioned reports whether the VPN backend has been provisioned via the

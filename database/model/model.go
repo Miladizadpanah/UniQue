@@ -336,6 +336,13 @@ type Inbound struct {
 	StreamSettings string   `json:"streamSettings" form:"streamSettings"`
 	Tag            string   `json:"tag" form:"tag" gorm:"unique"`
 	Sniffing       string   `json:"sniffing" form:"sniffing"`
+
+	// ClientGroups is the inbound's "available to" scope: the client groups it is
+	// auto-projected onto (see InboundClientGroup). It is TRANSIENT - carried on the
+	// create/edit payload and answered by the group-scope routes, never a column:
+	// gorm "-" keeps AutoMigrate and every read/write away from it, and the JSON/form
+	// tags let the panel bind it both ways. An empty/absent value means "all users".
+	ClientGroups []int `json:"clientGroups" form:"clientGroups" gorm:"-"`
 }
 
 // OutboundTraffics tracks traffic statistics for Xray outbound connections.
@@ -854,6 +861,29 @@ type ClientGroupMember struct {
 
 // TableName pins the table name. See Account.TableName.
 func (ClientGroupMember) TableName() string { return "client_group_members" }
+
+// InboundClientGroup is ONE link: this inbound is auto-projected onto every
+// account in this client group. It is the "available to" scope of an inbound.
+//
+// An inbound with NO rows here is "all users": it projects nothing by itself and
+// its membership comes only from explicit per-client writes (addClient, bulk, ...),
+// exactly as before. An inbound assigned to one or more client groups is "this
+// group(s)": every account in those groups gets a membership on it automatically,
+// and an account that later joins one of the groups picks the inbound up the moment
+// its group membership changes.
+//
+// Composite primary key, so the same pair cannot be inserted twice. A group may
+// carry many inbounds and an inbound may be shared by many groups; the link is
+// purely additive and never removes an account from an inbound it reached by some
+// other road (removal only happens when the last group claim to an inbound is
+// dropped, and only for the members that had no other claim).
+type InboundClientGroup struct {
+	InboundId int `json:"inboundId" gorm:"primaryKey;column:inbound_id"`
+	GroupId   int `json:"groupId" gorm:"primaryKey;column:group_id"`
+}
+
+// TableName pins the table name. See Account.TableName.
+func (InboundClientGroup) TableName() string { return "inbound_client_groups" }
 
 // Tunnel models one hub/spoke mesh. A Hub is the central node (an Iran server
 // that terminates client-facing inbounds and egresses through its Spokes). A Spoke

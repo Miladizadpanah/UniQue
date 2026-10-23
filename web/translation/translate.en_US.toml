@@ -443,6 +443,9 @@
 [pages.inbounds]
 "addGroups" = "Add Groups"
 "allInbounds" = "All inbounds"
+"clientGroups" = "Client Groups"
+"clientGroupsHint" = "Pick the client groups that may use this inbound. An account is served on it automatically once it belongs to one of these groups; clear the list to open the inbound to everyone."
+"clientGroupsPlaceholder" = "Open to everyone (no groups)"
 "legacyUi" = "Old inbound modify UI"
 "legacyUiTip" = "Serves the Add and Edit inbound dialog as it was before the redesign, to every admin on this panel. The page reloads when this changes."
 "groupsTitle" = "Inbound Groups"

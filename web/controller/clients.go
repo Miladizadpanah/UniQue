@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/session"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 
@@ -14,6 +15,12 @@ import (
 
 // clientGroupService owns the per-user client groups (see web/service/clientgroup.go).
 var clientGroupService service.ClientGroupService
+
+// inboundClientGroupService owns the inbound -> client-group scope and the auto-
+// projection of a scoped inbound onto its groups' accounts (see web/service/
+// inboundclientgroup.go). The group-members writes below call into it so a client
+// that joins a group picks up every inbound that group is scoped to.
+var inboundClientGroupService service.InboundClientGroupService
 
 // The Clients page: the account-centric view of who exists, as opposed to the
 // Inbounds page's view of what serves them.
@@ -143,16 +150,30 @@ func (a *ClientsController) saveClientGroup(c *gin.Context) {
 }
 
 // deleteClientGroup removes one group. Its clients are untouched - the service
-// drops only the group row and its memberships.
+// drops only the group row and its memberships. Before that, the inbounds scoped
+// to the group are released from the accounts that had no other group claim to
+// them (the "never disconnect on the last claim" rule), so deleting a group does
+// not silently pull a scoped inbound away from a client still reached by another.
 func (a *ClientsController) deleteClientGroup(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
+	// Release the group's inbound scope first, while its membership rows still
+	// exist for the drop logic to see. Capture the scoped inbounds to reconcile.
+	scoped := inboundClientGroupService.InboundsForGroup(id)
+	if len(scoped) > 0 {
+		if gerr := inboundClientGroupService.DeleteGroupInboundLinks(id); gerr != nil {
+			logger.Warning("releasing the deleted group's client-group inbound scope: ", gerr)
+		}
+	}
 	if err := clientGroupService.Delete(session.GetLoginUser(c), id); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
+	}
+	if len(scoped) > 0 {
+		(&InboundController{}).reconcileForInbounds(scoped, true)
 	}
 	updated, err := clientGroupService.List(session.GetLoginUser(c))
 	if err != nil {
@@ -186,9 +207,29 @@ func (a *ClientsController) setClientGroupMembers(c *gin.Context) {
 		}
 	}
 	user := session.GetLoginUser(c)
+	// The accounts this change touches, so the inbound projection can be scoped to
+	// exactly them: the old members (who may lose the group's inbounds) plus the new
+	// ones (who gain them).
+	oldMembers := inboundClientGroupService.MemberAccountIDs(id)
 	if err := clientGroupService.SetMembers(user, id, ids); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
+	}
+	// A group now carries the inbounds scoped to it, so every account it gained or
+	// lost has to re-project: gained accounts pick up those inbounds, lost accounts
+	// drop an inbound only when no remaining group still claims it. Reconcile the
+	// inbounds whose settings blobs changed so the running core and daemons match.
+	affected := unionInboundIds(oldMembers, ids)
+	var touched []int
+	lost := []int{id} // the group this write edited: the members it no longer has lost it
+	for _, accId := range affected {
+		added, _ := inboundClientGroupService.ProjectAccountToGroupInbounds(accId)
+		removed, _ := inboundClientGroupService.DropAccountFromGroupInbounds(accId, lost)
+		touched = unionInboundIds(touched, added)
+		touched = unionInboundIds(touched, removed)
+	}
+	if len(touched) > 0 {
+		(&InboundController{}).reconcileForInbounds(touched, true)
 	}
 	updated, err := clientGroupService.List(user)
 	if err != nil {

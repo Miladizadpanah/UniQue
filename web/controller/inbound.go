@@ -35,6 +35,9 @@ type InboundController struct {
 	mtprotoService service.MtprotoService
 	sshService     service.SshService
 	groupService   service.InboundGroupService
+	// The inbound -> client-group scope (an inbound "available to" specific client
+	// groups). Owns the auto-projection of a scoped inbound onto its groups' accounts.
+	inboundClientGroupService service.InboundClientGroupService
 }
 
 // NewInboundController creates a new InboundController and sets up its routes.
@@ -90,6 +93,11 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.POST("/groups/reorder", requirePerm(model.PermEditInbound), a.reorderInboundGroups)
 	g.POST("/del/:id", requirePerm(model.PermDeleteInbound), owns, a.delInbound)
 	g.POST("/update/:id", requirePerm(model.PermEditInbound), owns, a.updateInbound)
+	// The inbound's "available to" client-group scope. Reading rides the inbound's own
+	// access claim; writing takes the edit bit AND ownership, because re-scoping an
+	// inbound projects it onto (or away from) whole groups of somebody's clients.
+	g.GET("/:id/clientGroups", read, owns, a.getInboundClientGroups)
+	g.POST("/:id/clientGroups", requirePerm(model.PermEditInbound), owns, a.setInboundClientGroups)
 	g.POST("/clientIps/:email", read, ownsClient, a.getClientIps)
 	g.POST("/clearClientIps/:email", requirePerm(model.PermEditClient), ownsClient, a.clearClientIps)
 	g.POST("/addClient", requirePerm(model.PermCreateClient), a.addInboundClient)
@@ -792,6 +800,9 @@ func (a *InboundController) addInbound(c *gin.Context) {
 
 	user := session.GetLoginUser(c)
 	inbound.UserId = user.Id
+	// The "available to" groups the create form chose. Captured now because
+	// AddInbound returns a fresh row whose transient ClientGroups is empty.
+	postedGroups := inbound.ClientGroups
 	// A GRE inbound carries a port for bookkeeping only and the form has no box for it,
 	// so the server picks one (no-op for every other protocol). Ahead of the tag, which
 	// is built from the port.
@@ -826,6 +837,16 @@ func (a *InboundController) addInbound(c *gin.Context) {
 		return
 	}
 	a.syncInboundAccounts(inbound.Id)
+	// Project the new inbound onto the groups the create form scoped it to: every
+	// account in those groups gets the membership now. Nothing to do when the form
+	// left it "all users" (the default, no groups).
+	if len(postedGroups) > 0 {
+		if touched, gerr := a.inboundClientGroupService.SetForInbound(user, inbound.Id, postedGroups); gerr != nil {
+			logger.Warning("applying the new inbound's client-group scope: ", gerr)
+		} else if len(touched) > 0 {
+			a.reconcileForInbounds(touched, true)
+		}
+	}
 	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
 	if inbound.Protocol == model.L2TP {
 		a.onL2tpChanged()
@@ -1046,6 +1067,59 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	user := session.GetLoginUser(c)
 	inbounds, _ := a.inboundService.GetInboundsFor(user)
 	websocket.BroadcastInboundsToUser(user.Id, inbounds)
+}
+
+// getInboundClientGroups answers the inbound's "available to" picker: the client
+// groups it is scoped to. An empty list is the "all users" default and is the
+// honest answer for an inbound the operator never scoped.
+func (a *InboundController) getInboundClientGroups(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonObj(c, []int{}, nil)
+		return
+	}
+	groups := a.inboundClientGroupService.GroupsForInbound(id)
+	if groups == nil {
+		groups = []int{}
+	}
+	jsonObj(c, groups, nil)
+}
+
+// setInboundClientGroups replaces the inbound's client-group scope with the posted
+// set and keeps the membership layer in step: every account in a newly-attached
+// group gets the inbound, and an account in a detached group loses it only when no
+// other group still claims it for them. The projection is database-only, so the
+// touched inbounds are reconciled (VPN daemons regenerated, the native core asked
+// to restart) so the running panel matches the new scope.
+func (a *InboundController) setInboundClientGroups(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	var body struct {
+		Data string `form:"data" json:"data"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	var groups []int
+	if strings.TrimSpace(body.Data) != "" {
+		if err := json.Unmarshal([]byte(body.Data), &groups); err != nil {
+			jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+			return
+		}
+	}
+	touched, err := a.inboundClientGroupService.SetForInbound(session.GetLoginUser(c), id, groups)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if len(touched) > 0 {
+		a.reconcileForInbounds(touched, true)
+	}
+	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), nil)
 }
 
 // getClientIps retrieves the IP addresses associated with a client by email.

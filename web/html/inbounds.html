@@ -325,6 +325,10 @@
                               <a-icon type="edit"></a-icon>
                               {{ i18n "edit" }}
                             </a-menu-item>
+                            <a-menu-item key="groups" v-if="dbInbound.isMultiUser()">
+                              <a-icon type="team"></a-icon>
+                              {{ i18n "pages.inbounds.clientGroups" }}
+                            </a-menu-item>
                             <a-menu-item key="qrcode"
                               v-if="(dbInbound.isSS && !dbInbound.toInbound().isSSMultiUser) || dbInbound.isWireguard">
                               <a-icon type="qrcode"></a-icon>
@@ -712,6 +716,32 @@
       </a-row>
     </a-modal>
 
+    <!-- Client-group scope for one inbound: which groups may use it. An empty
+         list means the inbound is open to everyone. -->
+    <a-modal v-model="scopeInbound.visible"
+      title="{{ i18n \"pages.inbounds.clientGroups\" }}" :width="560"
+      :class="themeSwitcher.currentTheme" :footer="null">
+      <div :style="{ padding: '8px 0 16px' }">
+        <p :style="{ color: 'var(--text-3)', marginBottom: '12px' }">
+          {{ i18n "pages.inbounds.clientGroupsHint" }}
+        </p>
+        <a-select v-model="scopeInbound.groups" mode="multiple"
+          :style="{ width: '100%' }"
+          placeholder="{{ i18n \"pages.inbounds.clientGroupsPlaceholder\" }}"
+          :dropdownClassName="themeSwitcher.currentTheme">
+          <a-select-option v-for="g in clientGroupOptions" :key="g.id" :value="g.id">
+            [[ g.name ]]
+          </a-select-option>
+        </a-select>
+        <a-space :style="{ marginTop: '16px', justifyContent: 'flex-end', width: '100%' }">
+          <a-button @click="scopeInbound.visible = false">{{ i18n "cancel" }}</a-button>
+          <a-button type="primary" :loading="scopeSaving" @click="saveScopeGroups">
+            {{ i18n "confirm" }}
+          </a-button>
+        </a-space>
+      </div>
+    </a-modal>
+
 {{template "page/shell_end" . }}
 {{template "page/body_scripts" .}}
 <script
@@ -913,10 +943,49 @@
       groupSaving: false,
       // The modal's editor. id 0 means "creating".
       groupForm: { id: 0, name: "", parentId: 0, inboundIds: [] },
+      // Client-group scoping ("who may use this inbound"): the picker's options and
+      // the per-inbound editor state.
+      clientGroupOptions: [],
+      scopeInbound: { visible: false, id: 0, groups: [] },
+      scopeSaving: false,
     },
     methods: {
       loading(spinning = true) {
         this.loadingStates.spinning = spinning;
+      },
+      // ---- client-group scoping ("who may use this inbound") ----------------
+      // Open the picker for one inbound: load the group options once, then the
+      // groups this inbound is scoped to, and show the modal.
+      async openScopeGroups(id) {
+        if (this.clientGroupOptions.length === 0) {
+          const list = await HttpUtil.get('/panel/api/clients/groups');
+          if (list && list.success && Array.isArray(list.obj)) {
+            this.clientGroupOptions = list.obj;
+          }
+        }
+        const cur = await HttpUtil.get(`/panel/api/inbounds/${id}/clientGroups`);
+        const groups = cur && cur.success && Array.isArray(cur.obj) ? cur.obj : [];
+        this.scopeInbound = { visible: true, id, groups };
+      },
+      // Write the picked scope back. Empty list means "everyone" (no restriction).
+      // The array travels as a JSON string in a form field, the panel-wide convention
+      // for posting arrays (form-urlencoded has no faithful array encoding).
+      async saveScopeGroups() {
+        this.scopeSaving = true;
+        try {
+          const msg = await HttpUtil.post(
+            `/panel/api/inbounds/${this.scopeInbound.id}/clientGroups`,
+            { data: JSON.stringify(this.scopeInbound.groups) },
+          );
+          if (msg && msg.success) {
+            this.scopeInbound.visible = false;
+            await this.getDBInbounds();
+          } else {
+            this.$message.error((msg && msg.msg) || 'Failed to save groups');
+          }
+        } finally {
+          this.scopeSaving = false;
+        }
       },
       // ---- inbound groups --------------------------------------------------
       // A group is a saved VIEW over the list. Nothing here writes an inbound or
@@ -1329,6 +1398,9 @@
             break;
           case "edit":
             this.openEditInbound(dbInbound.id);
+            break;
+          case "groups":
+            this.openScopeGroups(dbInbound.id);
             break;
           case "export":
             this.inboundLinks(dbInbound.id);

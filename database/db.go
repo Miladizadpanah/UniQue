@@ -48,6 +48,9 @@ func initModels() error {
 		// like the inbound groups above: an old binary ignores both tables.
 		&model.ClientGroup{},
 		&model.ClientGroupMember{},
+		// The inbound -> client-group scope link (feature: an inbound "available to"
+		// specific client groups). Purely additive: an old binary ignores the table.
+		&model.InboundClientGroup{},
 		&model.OutboundTraffics{},
 		&model.Setting{},
 		&model.InboundClientIps{},

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -51,6 +52,13 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	nodes.POST("/update/:id", a.save)
 	nodes.POST("/del/:id", a.del)
 	nodes.POST("/refresh", a.refresh)
+	// Write path: act on a remote node's own xray core through its API socket.
+	// These are the operations the dashboard's "manage this node" panel offers:
+	// hot-add / hot-remove an account and pull live traffic. All are bounded and
+	// best-effort; a node without an API configured returns the read-only error.
+	nodes.POST("/:id/hotAdd", a.hotAdd)
+	nodes.POST("/:id/hotRemove", a.hotRemove)
+	nodes.POST("/:id/pullTraffic", a.pullTraffic)
 }
 
 // nodeStatus is the remote node's side: report this panel's own snapshot, gated
@@ -136,6 +144,87 @@ func (a *NodeController) refresh(c *gin.Context) {
 	}
 	nodes, _ := a.nodeService.List()
 	jsonObj(c, nodes, nil)
+}
+
+// nodeByID loads one registered node for the write-path handlers.
+func (a *NodeController) nodeByID(c *gin.Context) (*model.Node, bool) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), perr)
+		return nil, false
+	}
+	nodes, err := a.nodeService.List()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return nil, false
+	}
+	for i := range nodes {
+		if nodes[i].Id == id {
+			return &nodes[i], true
+		}
+	}
+	jsonMsg(c, I18nWeb(c, "somethingWentWrong"), fmt.Errorf("node %d not found", id))
+	return nil, false
+}
+
+// hotAdd adds one account to a remote node's inbound, live, via the node's xray
+// core API. Body: {inboundTag, protocol, user:{email, id, ...}}.
+func (a *NodeController) hotAdd(c *gin.Context) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		InboundTag string     `json:"inboundTag" form:"inboundTag"`
+		Protocol   string     `json:"protocol" form:"protocol"`
+		User       map[string]any `json:"user" form:"user"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.nodeService.HotAddClient(node, body.InboundTag, body.Protocol, body.User); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.nodes.hotAddOk"), nil)
+}
+
+// hotRemove removes one account (by email) from a remote node's inbound, live.
+// Body: {inboundTag, email}.
+func (a *NodeController) hotRemove(c *gin.Context) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		InboundTag string `json:"inboundTag" form:"inboundTag"`
+		Email      string `json:"email" form:"email"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.nodeService.HotRemoveClient(node, body.InboundTag, body.Email); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.nodes.hotRemoveOk"), nil)
+}
+
+// pullTraffic returns the remote node's live core statistics so the dashboard can
+// show real-time traffic without waiting for the poll cadence.
+func (a *NodeController) pullTraffic(c *gin.Context) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return
+	}
+	traffic, clientTraffic, err := a.nodeService.PullTraffic(node)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, gin.H{"traffic": traffic, "clients": clientTraffic}, nil)
 }
 
 // getToken returns this panel's own node status token and the panel's public base

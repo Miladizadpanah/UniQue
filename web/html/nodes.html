@@ -3,7 +3,7 @@
 
 {{ template "page/body_start" .}}
 {{ template "page/shell_start" . }}
-<a-spin :spinning="spinning" :delay="300" tip='{{ i18n "loading"}}' size="large">
+<a-spin :spinning="spinning" :delay="300" tip='{{ i18n "loading" }}' size="large">
   <transition name="list" appear>
     <a-row :gutter="[16, 16]">
       <a-col :span="24">
@@ -21,18 +21,14 @@
 
         <a-card hoverable :style="{ marginBottom: '16px' }">
           <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
-            <a-button type="primary" icon="plus" @click="openAdd()">
-              [[ labels.add ]]
-            </a-button>
-            <a-button icon="sync" :loading="refreshing" @click="refreshAll">
-              [[ labels.refresh ]]
-            </a-button>
+            <a-button type="primary" icon="plus" @click="openAdd()">[[ labels.add ]]</a-button>
+            <a-button icon="sync" :loading="refreshing" @click="refreshAll">[[ labels.refresh ]]</a-button>
           </div>
         </a-card>
 
         <a-card hoverable :body-style="{ padding: 0 }">
           <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
-            :scroll="isMobile ? {} : { x: 760 }" :pagination="false" bordered
+            :scroll="isMobile ? {} : { x: 860 }" :pagination="false" bordered
             :locale='{ emptyText: `{{ i18n "noData" }}` }'>
 
             <template slot="status" slot-scope="text, row">
@@ -40,6 +36,18 @@
                 :text="row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline)">
                 <span slot="text">[[ row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline) ]]</span>
               </a-badge>
+            </template>
+
+            <!-- Write path availability: a node with an API port is manageable;
+                 without one it stays read-only monitoring. -->
+            <template slot="api" slot-scope="text, row">
+              <template v-if="row.this">—</template>
+              <template v-else-if="row.xrayApiPort > 0">
+                <a-badge status="success"><span slot="text">: [[ row.xrayApiPort ]]</span></a-badge>
+              </template>
+              <template v-else>
+                <a-badge status="default"><span slot="text">[[ labels.readOnlyShort ]]</span></a-badge>
+              </template>
             </template>
 
             <template slot="counts" slot-scope="text, row">
@@ -57,6 +65,8 @@
 
             <template slot="action" slot-scope="text, row">
               <template v-if="!row.this">
+                <a @click="openManage(row)">[[ labels.manage ]]</a>
+                <a-divider type="vertical"></a-divider>
                 <a @click="openEdit(row)">{{ i18n "edit" }}</a>
                 <a-divider type="vertical"></a-divider>
                 <a-popconfirm title="{{ i18n "pages.nodes.delConfirm" }}"
@@ -74,15 +84,12 @@
         <a-card hoverable :title="labels.thisPanelToken" :style="{ marginTop: '16px' }">
           <a-row :gutter="[16, 12]" type="flex">
             <a-col :flex="1">
-              <a-input v-model="nodeToken" :placeholder="labels.tokenPlaceholder"
-                @pressEnter="saveNodeToken">
+              <a-input v-model="nodeToken" :placeholder="labels.tokenPlaceholder" @pressEnter="saveNodeToken">
                 <a-icon slot="prefix" type="lock"></a-icon>
               </a-input>
             </a-col>
             <a-col :style="{ whiteSpace: 'nowrap' }">
-              <a-button type="primary" :loading="savingToken" @click="saveNodeToken">
-                {{ i18n "save" }}
-              </a-button>
+              <a-button type="primary" :loading="savingToken" @click="saveNodeToken">{{ i18n "save" }}</a-button>
             </a-col>
           </a-row>
           <a-row :gutter="[16, 8]" :style="{ marginTop: '12px' }" type="flex">
@@ -95,41 +102,163 @@
               <a-button icon="copy" @click="copyText(myBaseUrl)">{{ i18n "copy" }}</a-button>
             </a-col>
           </a-row>
-          <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">
-            [[ labels.tokenHint ]]
-          </div>
+          <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">[[ labels.tokenHint ]]</div>
         </a-card>
       </a-col>
     </a-row>
   </transition>
 </a-spin>
 
-<!-- Add / edit node. -->
+<!-- Add / edit node. The API section is the write path: filling the API port is
+     what turns a node from read-only monitoring into a manageable server. -->
 <a-modal v-model="nodeModal.visible" :title="nodeModal.id ? labels.edit : labels.add"
-  :width="560" :class="themeSwitcher.currentTheme" :footer="null">
-  <a-row :gutter="[16, 12]">
-    <a-col :span="24">
-      <a-input v-model="nodeModal.name" :placeholder="labels.namePlaceholder"></a-input>
-    </a-col>
-    <a-col :span="24">
-      <a-input v-model="nodeModal.baseUrl" :placeholder="labels.baseUrlPlaceholder"></a-input>
-    </a-col>
-    <a-col :span="24">
-      <a-input v-model="nodeModal.token" :placeholder="labels.tokenPlaceholder"
-        @pressEnter="saveNode"></a-input>
-    </a-col>
-    <a-col :span="24">
-      <a-input v-model="nodeModal.remark" :placeholder="labels.remark"></a-input>
-    </a-col>
-    <a-col :span="24">
-      <a-space>
-        <a-button @click="nodeModal.visible = false">{{ i18n "cancel" }}</a-button>
-        <a-button type="primary" :loading="nodeModal.saving" @click="saveNode">
-          {{ i18n "save" }}
-        </a-button>
-      </a-space>
-    </a-col>
-  </a-row>
+  :width="600" :class="themeSwitcher.currentTheme" :footer="null">
+  <a-form layout="vertical">
+    <a-row :gutter="[16, 12]">
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.name">
+          <a-input v-model="nodeModal.name" :placeholder="labels.namePlaceholder"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.token">
+          <a-input v-model="nodeModal.token" :placeholder="labels.tokenPlaceholder"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-form-item :label="labels.baseUrl">
+          <a-input v-model="nodeModal.baseUrl" :placeholder="labels.baseUrlPlaceholder"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-form-item :label="labels.remark">
+          <a-input v-model="nodeModal.remark" :placeholder="labels.remark"></a-input>
+        </a-form-item>
+      </a-col>
+    </a-row>
+
+    <a-divider>{{ i18n "pages.nodes.apiConfig" }}</a-divider>
+    <a-alert :message="labels.apiHint" type="info" show-icon :style="{ marginBottom: '12px' }"></a-alert>
+    <a-row :gutter="[16, 12]">
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.xrayApiHost">
+          <a-input v-model="nodeModal.xrayApiHost" :placeholder="labels.xrayApiHostPh"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.xrayApiPort">
+          <a-input-number v-model="nodeModal.xrayApiPort" :min="0" :max="65535"
+            :placeholder="labels.apiPortPh" style="width: 100%"></a-input-number>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.apiTlsMode">
+          <a-select v-model="nodeModal.apiTlsMode">
+            <a-select-option value="insecure">{{ i18n "pages.nodes.tlsInsecure" }}</a-select-option>
+            <a-select-option value="skip">{{ i18n "pages.nodes.tlsSkip" }}</a-select-option>
+            <a-select-option value="verify">{{ i18n "pages.nodes.tlsVerify" }}</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12" v-if="nodeModal.apiTlsMode === 'verify'">
+        <a-form-item :label="labels.apiCaPem">
+          <a-textarea v-model="nodeModal.apiCaPem" :rows="2" :placeholder="labels.apiCaPemPh"></a-textarea>
+        </a-form-item>
+      </a-col>
+    </a-row>
+
+    <a-space style="width: 100%; justifyContent: 'flex-end'">
+      <a-button @click="nodeModal.visible = false">{{ i18n "cancel" }}</a-button>
+      <a-button type="primary" :loading="nodeModal.saving" @click="saveNode">{{ i18n "save" }}</a-button>
+    </a-space>
+  </a-form>
+</a-modal>
+
+<!-- Manage a remote node: live traffic plus hot add / remove an account. The
+     hub reaches the node's own xray core, never its database. -->
+<a-modal v-model="manageModal.visible" :title="manageModal.node ? (labels.manage + ': ' + manageModal.node.name) : labels.manage"
+  :width="640" :class="themeSwitcher.currentTheme" :footer="null">
+  <div v-if="manageModal.node">
+    <a-alert v-if="manageModal.node.xrayApiPort === 0" :message="labels.readOnly" type="warning" show-icon></a-alert>
+
+    <template v-if="manageModal.node.xrayApiPort > 0">
+      <a-card size="small" :title="labels.pullTraffic" :style="{ marginBottom: '12px' }">
+        <div :style="{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }">
+          <a-button icon="sync" :loading="manageModal.loadingTraffic" @click="refreshTraffic">
+            [[ labels.pullTraffic ]]
+          </a-button>
+          <template v-if="manageModal.traffic">
+            <a-statistic :title="labels.down" :value="fmtBytes(manageModal.traffic.down)"></a-statistic>
+            <a-statistic :title="labels.up" :value="fmtBytes(manageModal.traffic.up)"></a-statistic>
+            <a-statistic :title="labels.clients" :value="manageModal.traffic.clients"></a-statistic>
+          </template>
+          <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.pullHint ]]</span>
+        </div>
+      </a-card>
+
+      <a-card size="small" :title="labels.hotAdd" :style="{ marginBottom: '12px' }">
+        <a-row :gutter="[12, 12]">
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="labels.inboundTag" style="margin-bottom: 0">
+              <a-input v-model="manageModal.add.inboundTag" :placeholder="labels.inboundTagPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="labels.protocol" style="margin-bottom: 0">
+              <a-select v-model="manageModal.add.protocol">
+                <a-select-option value="vless">vless</a-select-option>
+                <a-select-option value="vmess">vmess</a-select-option>
+                <a-select-option value="trojan">trojan</a-select-option>
+                <a-select-option value="shadowsocks">shadowsocks</a-select-option>
+                <a-select-option value="hysteria2">hysteria2</a-select-option>
+                <a-select-option value="tuic">tuic</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="addValueLabel" style="margin-bottom: 0">
+              <a-input v-model="manageModal.add.value" :placeholder="labels.userIdPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="labels.email" style="margin-bottom: 0">
+              <a-input v-model="manageModal.add.email" :placeholder="labels.emailPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12" v-if="manageModal.add.protocol === 'vless'">
+            <a-form-item :label="labels.flow" style="margin-bottom: 0">
+              <a-input v-model="manageModal.add.flow" :placeholder="labels.flowPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :span="24" :style="{ textAlign: 'right' }">
+            <a-button type="primary" icon="plus" :loading="manageModal.adding" @click="doHotAdd">
+              [[ labels.hotAdd ]]
+            </a-button>
+          </a-col>
+        </a-row>
+      </a-card>
+
+      <a-card size="small" :title="labels.hotRemove">
+        <a-row :gutter="[12, 12]">
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="labels.inboundTag" style="margin-bottom: 0">
+              <a-input v-model="manageModal.remove.inboundTag" :placeholder="labels.inboundTagPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="labels.email" style="margin-bottom: 0">
+              <a-input v-model="manageModal.remove.email" :placeholder="labels.emailPh"></a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :span="24" :style="{ textAlign: 'right' }">
+            <a-button danger icon="delete" :loading="manageModal.removing" @click="doHotRemove">
+              [[ labels.hotRemove ]]
+            </a-button>
+          </a-col>
+        </a-row>
+      </a-card>
+    </template>
+  </div>
 </a-modal>
 
 {{ template "page/shell_end" . }}
@@ -143,7 +272,7 @@
     el: '#app',
     data: {
       themeSwitcher,
-      pageTitle: '{{ i18n "menu.nodes"}}',
+      pageTitle: '{{ i18n "menu.nodes" }}',
       pageClass: '',
       spinning: false,
       refreshing: false,
@@ -152,7 +281,16 @@
       nodeToken: '',
       myBaseUrl: '',
       savingToken: false,
-      nodeModal: { visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false },
+      nodeModal: {
+        visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false,
+        xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
+      },
+      manageModal: {
+        visible: false, node: null, loadingTraffic: false, adding: false, removing: false,
+        traffic: null,
+        add: { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' },
+        remove: { inboundTag: '', email: '' },
+      },
       labels: {
         add: '{{ i18n "pages.nodes.add" }}',
         edit: '{{ i18n "pages.nodes.edit" }}',
@@ -165,8 +303,11 @@
         thisPanelToken: '{{ i18n "pages.nodes.thisPanelToken" }}',
         tokenHint: '{{ i18n "pages.nodes.tokenHint" }}',
         tokenPlaceholder: '{{ i18n "pages.nodes.tokenPlaceholder" }}',
+        name: '{{ i18n "pages.nodes.name" }}',
         namePlaceholder: '{{ i18n "pages.nodes.namePlaceholder" }}',
+        baseUrl: '{{ i18n "pages.nodes.baseUrl" }}',
         baseUrlPlaceholder: '{{ i18n "pages.nodes.baseUrlPlaceholder" }}',
+        token: '{{ i18n "pages.nodes.token" }}',
         remark: '{{ i18n "pages.nodes.remark" }}',
         nodes: '{{ i18n "pages.nodes.nodes" }}',
         inbounds: '{{ i18n "pages.nodes.inbounds" }}',
@@ -174,16 +315,47 @@
         onlineClients: '{{ i18n "pages.nodes.onlineClients" }}',
         neverPolled: '{{ i18n "pages.nodes.neverPolled" }}',
         requiredFields: '{{ i18n "pages.nodes.requiredFields" }}',
+        // write path
+        apiConfig: '{{ i18n "pages.nodes.apiConfig" }}',
+        apiHint: '{{ i18n "pages.nodes.apiHint" }}',
+        xrayApiHost: '{{ i18n "pages.nodes.xrayApiHost" }}',
+        xrayApiHostPh: '{{ i18n "pages.nodes.xrayApiHostPh" }}',
+        apiPortPh: '{{ i18n "pages.nodes.apiPortPh" }}',
+        xrayApiPort: '{{ i18n "pages.nodes.xrayApiPort" }}',
+        apiTlsMode: '{{ i18n "pages.nodes.apiTlsMode" }}',
+        apiCaPem: '{{ i18n "pages.nodes.apiCaPem" }}',
+        apiCaPemPh: '{{ i18n "pages.nodes.apiCaPemPh" }}',
+        manage: '{{ i18n "pages.nodes.manage" }}',
+        hotAdd: '{{ i18n "pages.nodes.hotAdd" }}',
+        hotRemove: '{{ i18n "pages.nodes.hotRemove" }}',
+        pullTraffic: '{{ i18n "pages.nodes.pullTraffic" }}',
+        inboundTag: '{{ i18n "pages.nodes.inboundTag" }}',
+        inboundTagPh: '{{ i18n "pages.nodes.inboundTagPh" }}',
+        protocol: '{{ i18n "pages.nodes.protocol" }}',
+        userIdPh: '{{ i18n "pages.nodes.userIdPh" }}',
+        email: '{{ i18n "pages.nodes.email" }}',
+        emailPh: '{{ i18n "pages.nodes.emailPh" }}',
+        valueId: '{{ i18n "pages.nodes.valueId" }}',
+        valuePassword: '{{ i18n "pages.nodes.valuePassword" }}',
+        valueAuth: '{{ i18n "pages.nodes.valueAuth" }}',
+        flow: '{{ i18n "pages.nodes.flow" }}',
+        flowPh: '{{ i18n "pages.nodes.flowPh" }}',
+        readOnly: '{{ i18n "pages.nodes.readOnly" }}',
+        readOnlyShort: '{{ i18n "pages.nodes.readOnlyShort" }}',
+        down: '{{ i18n "pages.nodes.down" }}',
+        up: '{{ i18n "pages.nodes.up" }}',
+        clients: '{{ i18n "pages.nodes.clients" }}',
+        pullHint: '{{ i18n "pages.nodes.pullHint" }}',
       },
       columns: [
-        { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 140 },
-        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 180, ellipsis: true },
-        { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 100 },
-        { title: '{{ i18n "status" }}', align: 'center', width: 100, scopedSlots: { customRender: 'status' } },
-        { title: '{{ i18n "latency" }}', dataIndex: 'latencyMs', align: 'center', width: 80, customRender: (t, r) => (r.this || r.latencyMs ? r.latencyMs + ' ms' : '—') },
-        { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 120, scopedSlots: { customRender: 'counts' } },
-        { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 150, scopedSlots: { customRender: 'lastSeen' } },
-        { title: '', align: 'center', width: 120, scopedSlots: { customRender: 'action' } },
+        { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
+        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 160, ellipsis: true },
+        { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 80 },
+        { title: '{{ i18n "status" }}', align: 'center', width: 90, scopedSlots: { customRender: 'status' } },
+        { title: '{{ i18n "pages.nodes.apiCol" }}', align: 'center', width: 100, scopedSlots: { customRender: 'api' } },
+        { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 130, scopedSlots: { customRender: 'counts' } },
+        { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 140, scopedSlots: { customRender: 'lastSeen' } },
+        { title: '', align: 'center', width: 180, scopedSlots: { customRender: 'action' } },
       ],
     },
     computed: {
@@ -197,11 +369,11 @@
           baseUrl: this.myBaseUrl,
           version: this.my.version,
           online: true,
-          latencyMs: 0,
           inboundCount: this.my.inboundCount,
           accountCount: this.my.accountCount,
           onlineCount: this.my.onlineCount,
           lastSeen: 0,
+          xrayApiPort: 0,
         } : null;
         return thisRow ? [thisRow, ...this.nodes] : this.nodes;
       },
@@ -219,6 +391,14 @@
           { key: 'accounts', label: L.accounts, value: acc },
           { key: 'onlineClients', label: L.onlineClients, value: on },
         ];
+      },
+      // The add-form credential label follows the protocol: ID for vless/vmess/tuic,
+      // password for trojan/ss/anytls/naive, auth for hysteria.
+      addValueLabel() {
+        const p = this.manageModal.add.protocol;
+        if (p === 'vless' || p === 'vmess' || p === 'tuic') return this.labels.valueId;
+        if (p === 'hysteria2' || p === 'hysteria') return this.labels.valueAuth;
+        return this.labels.valuePassword;
       },
     },
     methods: {
@@ -251,13 +431,22 @@
         this.refreshing = false;
         await this.load();
       },
+      blankNode() {
+        return {
+          visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false,
+          xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
+        };
+      },
       openAdd() {
-        this.nodeModal = { visible: true, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false };
+        this.nodeModal = this.blankNode();
+        this.nodeModal.visible = true;
       },
       openEdit(node) {
         this.nodeModal = {
           visible: true, id: node.id, name: node.name, baseUrl: node.baseUrl,
-          token: node.token, remark: node.remark, saving: false,
+          token: node.token, remark: node.remark || '', saving: false,
+          xrayApiHost: node.xrayApiHost || '', xrayApiPort: node.xrayApiPort || null,
+          apiTlsMode: node.apiTlsMode || 'insecure', apiCaPem: node.apiCaPem || '',
         };
       },
       async saveNode() {
@@ -269,8 +458,9 @@
         m.saving = true;
         const url = m.id ? `/panel/api/nodes/update/${m.id}` : '/panel/api/nodes/add';
         const msg = await HttpUtil.post(url, {
-          name: m.name, baseUrl: m.baseUrl, token: m.token,
-          remark: m.remark, enable: true,
+          name: m.name, baseUrl: m.baseUrl, token: m.token, remark: m.remark, enable: true,
+          xrayApiHost: m.xrayApiHost, xrayApiPort: m.xrayApiPort || 0,
+          apiTlsMode: m.apiTlsMode, apiCaPem: m.apiCaPem,
         });
         m.saving = false;
         if (msg && msg.success) {
@@ -292,6 +482,91 @@
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => this.$message.success('{{ i18n "copied" }}'))
           .catch(() => this.$message.error('{{ i18n "copyFailed" }}'));
+      },
+      // --- write path --------------------------------------------------------
+      openManage(node) {
+        this.manageModal.node = node;
+        this.manageModal.traffic = null;
+        this.manageModal.add = { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' };
+        this.manageModal.remove = { inboundTag: '', email: '' };
+        this.manageModal.visible = true;
+      },
+      async refreshTraffic() {
+        const n = this.manageModal.node;
+        this.manageModal.loadingTraffic = true;
+        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/pullTraffic`);
+        this.manageModal.loadingTraffic = false;
+        if (msg && msg.success && msg.obj) {
+          const t = msg.obj.traffic || [];
+          const down = t.reduce((a, x) => a + (x.Down || 0), 0);
+          const up = t.reduce((a, x) => a + (x.Up || 0), 0);
+          this.manageModal.traffic = { down, up, clients: (msg.obj.clients || []).length };
+          this.$message.success('{{ i18n "pages.nodes.pullOk" }}');
+        }
+      },
+      // Build the protocol-appropriate user map from the single credential field.
+      addUserMap() {
+        const a = this.manageModal.add;
+        const user = { email: a.email };
+        switch (a.protocol) {
+          case 'vless':
+          case 'vmess':
+            user.id = a.value;
+            if (a.flow) user.flow = a.flow;
+            break;
+          case 'trojan':
+          case 'shadowsocks':
+          case 'anytls':
+          case 'naive':
+            user.password = a.value;
+            break;
+          case 'hysteria2':
+          case 'hysteria':
+            user.auth = a.value;
+            break;
+          case 'tuic':
+            user.id = a.value;
+            user.password = a.value;
+            break;
+        }
+        return user;
+      },
+      async doHotAdd() {
+        const n = this.manageModal.node;
+        const a = this.manageModal.add;
+        if (!a.inboundTag.trim() || !a.email.trim() || !a.value.trim()) {
+          this.$message.error(this.labels.requiredFields);
+          return;
+        }
+        this.manageModal.adding = true;
+        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/hotAdd`, {
+          inboundTag: a.inboundTag, protocol: a.protocol, user: this.addUserMap(),
+        });
+        this.manageModal.adding = false;
+        if (msg && msg.success) {
+          this.$message.success('{{ i18n "pages.nodes.hotAddOk" }}');
+          this.manageModal.add = { inboundTag: a.inboundTag, protocol: a.protocol, value: '', flow: '', email: '' };
+        }
+      },
+      async doHotRemove() {
+        const n = this.manageModal.node;
+        const r = this.manageModal.remove;
+        if (!r.inboundTag.trim() || !r.email.trim()) {
+          this.$message.error(this.labels.requiredFields);
+          return;
+        }
+        this.manageModal.removing = true;
+        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/hotRemove`, {
+          inboundTag: r.inboundTag, email: r.email,
+        });
+        this.manageModal.removing = false;
+        if (msg && msg.success) this.$message.success('{{ i18n "pages.nodes.hotRemoveOk" }}');
+      },
+      fmtBytes(b) {
+        if (!b) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
       },
     },
     async mounted() {

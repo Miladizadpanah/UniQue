@@ -980,6 +980,19 @@ type Node struct {
 	OnlineCount  int    `json:"onlineCount" gorm:"default:0"`
 	// Online is true when the last poll succeeded.
 	Online bool `json:"online" gorm:"default:0"`
+
+	// Write path: the node's own xray core API (gRPC) that the hub can reach to
+	// hot-add/remove accounts and inbounds and pull live traffic. Empty host means
+	// "same host as BaseUrl". The operator exposes the xray api port on the node;
+	// without it the node stays read-only (monitoring only).
+	XrayApiHost string `json:"xrayApiHost" form:"xrayApiHost" gorm:"default:''"`
+	XrayApiPort int    `json:"xrayApiPort" form:"xrayApiPort" gorm:"default:0"`
+	// ApiTlsMode: insecure (plain, trusted LAN/loopback), skip (TLS, no cert check),
+	// verify (TLS pinned to ApiCaPem). Default insecure matches a LAN node.
+	ApiTlsMode string `json:"apiTlsMode" form:"apiTlsMode" gorm:"default:'insecure'"`
+	// ApiCaPem is the PEM CA bundle used to pin the node's API certificate in
+	// verify mode. Optional; blank in insecure/skip.
+	ApiCaPem string `json:"apiCaPem" form:"apiCaPem" gorm:"default:''"`
 }
 
 // TableName pins the table name.

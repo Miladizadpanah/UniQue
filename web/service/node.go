@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/database"
@@ -68,6 +68,11 @@ func (s *NodeService) Save(n *model.Node) (*model.Node, error) {
 	}
 	n.BaseUrl = strings.TrimRight(strings.TrimSpace(n.BaseUrl), "/")
 	n.Name = strings.TrimSpace(n.Name)
+	// Normalize the API TLS mode: an empty value defaults to insecure (a LAN node),
+	// and a typo is rejected up front rather than surfacing on the first RPC.
+	n.XrayApiHost = strings.TrimSpace(n.XrayApiHost)
+	n.ApiCaPem = strings.TrimSpace(n.ApiCaPem)
+	n.ApiTlsMode = normalizeApiTlsMode(n.ApiTlsMode)
 	db := database.GetDB()
 	if n.Id == 0 {
 		if err := db.Create(n).Error; err != nil {
@@ -79,6 +84,8 @@ func (s *NodeService) Save(n *model.Node) (*model.Node, error) {
 		err := db.Model(&model.Node{}).Where("id = ?", n.Id).Updates(map[string]any{
 			"name": n.Name, "base_url": n.BaseUrl, "token": n.Token,
 			"enable": n.Enable, "remark": n.Remark,
+			"xray_api_host": n.XrayApiHost, "xray_api_port": n.XrayApiPort,
+			"api_tls_mode": n.ApiTlsMode, "api_ca_pem": n.ApiCaPem,
 		}).Error
 		if err != nil {
 			return nil, err
@@ -246,6 +253,100 @@ func (s *NodeService) ComputeSummary() NodeSummary {
 	return sum
 }
 
-// ensure NodeService is usable by pointer in the DI graph; keeps the compiler
-// honest about the receiver type even if a method is inlined away.
-var _ = gorm.ErrRecordNotFound
+// normalizeApiTlsMode maps the operator's field to one of the accepted API TLS
+// modes, defaulting a blank to insecure. An unknown value falls back to
+// insecure (the safe choice for a LAN node) so a stray string never blocks a
+// save; the strict check happens at connect time in the xray package.
+func normalizeApiTlsMode(m string) string {
+	switch strings.ToLower(strings.TrimSpace(m)) {
+	case xray.ApiTlsSkip, xray.ApiTlsVerify, xray.ApiTlsInsecure, "":
+		if m == "" {
+			return xray.ApiTlsInsecure
+		}
+		return strings.ToLower(strings.TrimSpace(m))
+	default:
+		return xray.ApiTlsInsecure
+	}
+}
+
+// nodeHasRemoteApi reports whether a node is configured for the write path: it
+// must expose an xray API port. Without that the node stays read-only and the
+// hub only monitors it.
+func nodeHasRemoteApi(n *model.Node) bool {
+	return n != nil && n.XrayApiPort > 0
+}
+
+// remoteApiTarget resolves the gRPC target host:port for a node's xray API. An
+// empty XrayApiHost means "the same host the panel base url points at".
+func remoteApiTarget(n *model.Node) string {
+	host := strings.TrimSpace(n.XrayApiHost)
+	if host == "" {
+		host = baseHostOf(n.BaseUrl)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(n.XrayApiPort))
+}
+
+// baseHostOf pulls the host (no port, no scheme) out of a panel base url so the
+// default remote API host tracks the panel's own host.
+func baseHostOf(base string) string {
+	u, err := url.Parse(strings.TrimSpace(base))
+	if err != nil {
+		return ""
+	}
+	h := u.Hostname()
+	return h
+}
+
+// ErrNodeNoRemoteApi is returned by the write-path methods when a node has no
+// xray API configured; the caller should surface it as "node is read-only".
+var ErrNodeNoRemoteApi = errors.New("node has no xray api configured (read-only)")
+
+// OpenRemote dials a node's xray core API and returns a ready-to-use client. The
+// connection is closed by the caller (defer c.Close()). This is the hub acting
+// as a gRPC client to the node's own core — the safe write path.
+func (s *NodeService) OpenRemote(n *model.Node) (*xray.XrayAPI, error) {
+	if !nodeHasRemoteApi(n) {
+		return nil, ErrNodeNoRemoteApi
+	}
+	c := &xray.XrayAPI{}
+	if err := c.NewRemote(remoteApiTarget(n), n.ApiTlsMode, []byte(n.ApiCaPem)); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// HotAddClient adds one account to a remote node's existing inbound and applies
+// it live through the core API. The user map is shaped like the panel's own
+// inbound users (protocol + id + email + optional flow/...), so any protocol the
+// node runs works.
+func (s *NodeService) HotAddClient(n *model.Node, inboundTag, protocol string, user map[string]any) error {
+	c, err := s.OpenRemote(n)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.AddUser(protocol, inboundTag, user)
+}
+
+// HotRemoveClient drops one account (by email) from a remote node's inbound and
+// applies the change live.
+func (s *NodeService) HotRemoveClient(n *model.Node, inboundTag, email string) error {
+	c, err := s.OpenRemote(n)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.RemoveUser(inboundTag, email)
+}
+
+// PullTraffic fetches the remote node's live core statistics (never resetting
+// counters) so the dashboard can show real-time in/out per node without waiting
+// for the poll cadence.
+func (s *NodeService) PullTraffic(n *model.Node) ([]*xray.Traffic, []*xray.ClientTraffic, error) {
+	c, err := s.OpenRemote(n)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer c.Close()
+	return c.GetTraffic(false)
+}

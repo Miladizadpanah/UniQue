@@ -5,10 +5,14 @@ package xray
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/logger"
@@ -26,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -97,6 +102,99 @@ func (x *XrayAPI) Close() {
 	x.HandlerServiceClient = nil
 	x.StatsServiceClient = nil
 	x.isConnected = false
+}
+
+// Remote API TLS verification modes. The xray API port is a plain gRPC socket the
+// node operator exposes; "insecure" is for a loopback or trusted-LAN node, "skip"
+// is TLS without certificate verification (a self-signed dokodemo-door), and
+// "verify" pins a CA so a hostile node cannot impersonate itself.
+const (
+	ApiTlsInsecure = "insecure"
+	ApiTlsSkip     = "skip"
+	ApiTlsVerify   = "verify"
+)
+
+// remoteDialTimeout bounds how long a remote API connection may take to establish
+// before the poller/pusher gives up; a node that cannot be reached must not stall
+// the caller, it just reports offline.
+const remoteDialTimeout = 6 * time.Second
+
+// apiTlsCredentials builds the transport credentials for a remote API connection
+// in the given mode. caPEM is only consulted in verify mode. The builder returns
+// an error for an unknown mode so a typo fails the connection, not the config.
+func apiTlsCredentials(mode string, caPEM []byte) (creds *apiCreds, err error) {
+	switch mode {
+	case ApiTlsInsecure, "":
+		return &apiCreds{insecure: true}, nil
+	case ApiTlsSkip:
+		return &apiCreds{
+			tls: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // operator chose skip for a self-signed API port
+		}, nil
+	case ApiTlsVerify:
+		pool := x509.NewCertPool()
+		if len(caPEM) == 0 {
+			return nil, fmt.Errorf("api tls mode verify requires a CA certificate")
+		}
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("api tls mode verify: no CA certificate could be parsed")
+		}
+		return &apiCreds{tls: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}, nil
+	default:
+		return nil, fmt.Errorf("unknown api tls mode %q (want insecure|skip|verify)", mode)
+	}
+}
+
+// apiCreds is the resolved credential choice for one remote API connection: either
+// plain-text (insecure) or a TLS config. Kept separate from the dial so it is unit
+// testable without opening a socket.
+type apiCreds struct {
+	insecure bool
+	tls      *tls.Config
+}
+
+// NewRemote dials a remote xray API at host:port with the given TLS mode and
+// optional pinned CA, and wires the Handler/Stats clients off that connection.
+// It is the federation half of this struct: the local Init() pins 127.0.0.1, this
+// one lets the hub reach a node's API socket. The connection is best-effort at
+// dial time (grpc.NewClient does not connect eagerly); the first RPC pays the
+// timeout, so callers treat a non-nil error only as a credential/config error.
+func (x *XrayAPI) NewRemote(addr, mode string, caPEM []byte) error {
+	if addr == "" {
+		return fmt.Errorf("remote xray api address is required")
+	}
+	choice, err := apiTlsCredentials(mode, caPEM)
+	if err != nil {
+		return err
+	}
+	var opts []grpc.DialOption
+	if choice.insecure {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(choice.tls)))
+	}
+	conn, err := grpc.NewClient(addr, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to remote Xray API %s: %w", addr, err)
+	}
+	hsClient := command.NewHandlerServiceClient(conn)
+	ssClient := statsService.NewStatsServiceClient(conn)
+	x.grpcClient = conn
+	x.isConnected = true
+	x.HandlerServiceClient = &hsClient
+	x.StatsServiceClient = &ssClient
+	return nil
+}
+
+// remoteAddr formats a node's API host/port into the gRPC target. An empty host
+// falls back to localhost so a node that only runs its core locally still works.
+func remoteAddr(host string, port int) string {
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if port <= 0 {
+		return ""
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // AddInbound adds a new inbound configuration to the Xray core via gRPC.

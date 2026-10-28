@@ -60,7 +60,7 @@ func main() {
 		"cur_ver": "0.0.0", "asset_ver": "0.0.0-local", "donate": []any{},
 	}
 
-	pages := []string{"inbounds.html", "clients.html", "index.html", "admins.html", "resellers.html", "core.html", "xray.html", "settings.html"}
+	pages := []string{"inbounds.html", "clients.html", "index.html", "admins.html", "resellers.html", "core.html", "xray.html", "settings.html", "nodes.html"}
 	for _, page := range pages {
 		var buf bytes.Buffer
 		if err := tpl.ExecuteTemplate(&buf, page, data); err != nil {

@@ -7,19 +7,19 @@
         <transition name="list" appear>
           <a-row :gutter="[16, 16]" :style="{ margin: 0 }">
             <a-col :span="24">
-              <a-card hoverable :style="{ marginBottom: '16px' }">
+              <div class="bo-tile" :style="{ marginBottom: 'var(--gap-md)', padding: 'var(--sp-4)' }">
                 <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
                   <a-button type="primary" icon="plus" @click="openAdd()">
                     {{ i18n "pages.admins.add" }}
                   </a-button>
                   <a-button icon="reload" @click="loadAdmins(true)"></a-button>
                 </div>
-              </a-card>
+              </div>
 
               <!-- kebab-case, not camelCase: this is an in-DOM template, so the HTML
                    parser lowercases the attribute and a camelCase prop name never
                    matches it (the padding was silently dropped). -->
-              <a-card hoverable :body-style="{ padding: 0 }">
+              <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden' }">
                 <a-table :columns="columns" :row-key="r => r.id" :data-source="admins"
                   :scroll="isMobile ? {} : { x: 700 }" :pagination="false" bordered
                   :locale='{ emptyText: `{{ i18n "noData" }}` }'>
@@ -84,7 +84,7 @@
                     </a-dropdown>
                   </template>
                 </a-table>
-              </a-card>
+              </div>
             </a-col>
           </a-row>
         </transition>

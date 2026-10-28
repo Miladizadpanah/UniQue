@@ -1678,6 +1678,18 @@
 "bulkPartial" = "Accounts that will be processed"
 
 [pages.nodes]
+"test" = "Test connection"
+"testOk" = "Connection verified"
+"remoteInbounds" = "Remote inbounds"
+"provision" = "Provision account"
+"nodeAccounts" = "Node-hosted accounts"
+"limitBytes" = "Data limit (bytes)"
+"expiryMs" = "Expiry (timestamp ms)"
+"generateToken" = "Generate node API token"
+"tokenGenerated" = "New token generated - share it with the hub and re-paste it into the node row"
+"nodeClientDelOk" = "Remote account removed"
+"nodeAccountDelOk" = "Node account record removed"
+"nodeAccountDelConfirm" = "Remove this account record from this panel? The remote account on the node stays."
 "title" = "Nodes"
 "add" = "Add Node"
 "edit" = "Edit Node"

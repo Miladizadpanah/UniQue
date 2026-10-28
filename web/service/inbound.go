@@ -3,6 +3,8 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -5807,4 +5809,245 @@ func (s *InboundService) DelInboundClientByEmail(inboundId int, email string) (b
 	}
 	dropMembershipAfterDelete(db, inboundId, storedEmail)
 	return needRestart, nil
+}
+
+// ---------------------------------------------------------------------------
+// Node federation: the token-gated remote-provisioning surface.
+//
+// These methods are the NODE side of panel-to-panel federation: a remote hub
+// panel authenticates with this panel's node API token and provisions accounts
+// on this panel's inbounds through them. They deliberately reuse the panel's
+// own AddInboundClient path, so a node-created account is indistinguishable
+// from one an operator typed into the local UI: it lands in settings.clients
+// AND client_traffics AND the running core, metered like every other account.
+// ---------------------------------------------------------------------------
+
+// NodeClientCreate is the node API's create request: one account on one
+// inbound, with the credential minted by THIS panel (the hub only chooses the
+// email and the limits). The shape is shared: the hub's NodeService posts it,
+// and this panel's NodeAPIController binds it.
+type NodeClientCreate struct {
+	InboundId  int    `json:"inboundId" form:"inboundId"`
+	Email      string `json:"email" form:"email"`
+	TotalGb    int64  `json:"totalGb" form:"totalGb"`
+	ExpireDays int    `json:"expireDays" form:"expireDays"`
+	Flow       string `json:"flow" form:"flow"`
+}
+
+// NodeClientInfo is one account of an inbound as the node API reports it: the
+// credential fields the hub needs to address it, plus its metered usage, so a
+// hub can list and delete the accounts it created here.
+type NodeClientInfo struct {
+	Email      string `json:"email"`
+	ID         string `json:"id"`
+	Password   string `json:"password"`
+	Auth       string `json:"auth"`
+	Flow       string `json:"flow"`
+	Enable     bool   `json:"enable"`
+	TotalGB    int64  `json:"totalGB"`
+	ExpiryTime int64  `json:"expiryTime"`
+	Uplink     int64  `json:"uplink"`
+	Downlink   int64  `json:"downlink"`
+	LastOnline int64  `json:"lastOnline"`
+}
+
+// nodeMintable reports whether the node API can provision accounts on an
+// inbound of this protocol: the protocols whose account credential is
+// server-mintable (a uuid or a password). Everything else needs a local
+// operator decision (wireguard keypairs, ppp username pools, ikev2
+// single-account modes) and stays on the node's own UI.
+func nodeMintable(protocol model.Protocol) bool {
+	switch protocol {
+	case model.VMESS, model.VLESS, model.Trojan, model.Shadowsocks,
+		model.Hysteria, model.Hysteria2, model.TUIC, model.ANYTLS, model.NAIVE:
+		return true
+	default:
+		return false
+	}
+}
+
+// NodeAddClient mints one account on an enabled inbound through the node API.
+// It builds the protocol's settings entry the way the panel's own projector
+// does (see applyAccountCredential) and persists it through AddInboundClient,
+// the SAME path the local UI uses, so the account is metered, live-applied and
+// re-projected exactly like a local one. The created client and nothing else is
+// returned: the hub snapshots the inbound's settings for link generation.
+func (s *InboundService) NodeAddClient(req NodeClientCreate) (model.Client, error) {
+	inbound, err := s.GetInbound(req.InboundId)
+	if err != nil {
+		return model.Client{}, common.NewError("inbound not found: ", req.InboundId)
+	}
+	if !inbound.Enable {
+		return model.Client{}, common.NewError("inbound ", req.InboundId, " is disabled")
+	}
+	if !nodeMintable(inbound.Protocol) {
+		return model.Client{}, common.NewError("protocol ", inbound.Protocol,
+			" cannot be provisioned over the node api (no mintable credential)")
+	}
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		return model.Client{}, common.NewError("email is required")
+	}
+	// Reject a duplicate up front with an actionable message; AddInboundClient
+	// enforces it anyway, but the panel-wide emailHolders list is more useful.
+	if dup, err := s.checkEmailsExistForClients([]model.Client{{Email: email}}); err == nil && dup != "" {
+		return model.Client{}, common.NewError("email already exists on this panel: ", dup)
+	}
+
+	cred := s.generateRandomCredential(inbound.Protocol)
+	client := model.Client{Email: email, Enable: true, TotalGB: req.TotalGb}
+	if req.ExpireDays > 0 {
+		client.ExpiryTime = time.Now().AddDate(0, 0, req.ExpireDays).UnixMilli()
+	}
+
+	// The settings entry uses the protocol's credential keys, exactly as
+	// applyAccountCredential writes them. One entry, appended to the inbound's
+	// stored clients, is all AddInboundClient expects to splice in.
+	entry := map[string]any{"email": email, "enable": true}
+	switch inbound.Protocol {
+	case model.VMESS, model.VLESS:
+		client.ID = cred
+		entry["id"] = cred
+		if strings.TrimSpace(req.Flow) != "" {
+			client.Flow = strings.TrimSpace(req.Flow)
+			entry["flow"] = client.Flow
+		}
+	case model.TUIC:
+		// Tuic authenticates with a uuid AND a password; the uuid is the identity.
+		client.ID = cred
+		client.Password = strings.ReplaceAll(uuid.NewString(), "-", "")
+		entry["id"] = client.ID
+		entry["password"] = client.Password
+	case model.Hysteria, model.Hysteria2:
+		client.Auth = cred
+		entry["auth"] = cred
+	case model.Shadowsocks:
+		// The per-user key must be valid for the inbound cipher; mint it the
+		// same way the projector does rather than guessing a length.
+		client.Password = shadowsocksUserKey(inbound)
+		entry["password"] = client.Password
+		if iv := s.shadowsocksIV(inbound); iv != "" {
+			entry["iv"] = iv
+		}
+	case model.NAIVE:
+		// Naive defaults its Basic-auth username to the email when none is set.
+		client.Password = cred
+		entry["password"] = cred
+	default:
+		// trojan / anytls: the password IS the credential.
+		client.Password = cred
+		entry["password"] = cred
+	}
+	if client.TotalGB > 0 {
+		entry["totalGB"] = client.TotalGB
+	}
+	if client.ExpiryTime > 0 {
+		entry["expiryTime"] = client.ExpiryTime
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal([]byte(inbound.Settings), &settings); err != nil {
+		return model.Client{}, common.NewError("inbound settings are not valid json: ", err.Error())
+	}
+	clients, _ := settings["clients"].([]any)
+	settings["clients"] = append(clients, entry)
+	newSettings, err := json.Marshal(settings)
+	if err != nil {
+		return model.Client{}, err
+	}
+
+	needRestart, err := s.AddInboundClient(&model.Inbound{
+		Id:       inbound.Id,
+		Settings: string(newSettings),
+	})
+	if err != nil {
+		return model.Client{}, err
+	}
+	// AddInboundClient hot-applies through the core API and reports false when
+	// that worked; a true means the running core still lacks the account, so the
+	// panel is flagged for a restart exactly like the local UI does it.
+	if needRestart {
+		(&XrayService{}).SetToNeedRestart()
+	}
+	return client, nil
+}
+
+// shadowsocksIV mints the 12-byte IV a GCM cipher needs per user, base64'd the
+// way the panel stores it. Chacha20-poly1305 ciphers take no IV.
+func (s *InboundService) shadowsocksIV(inbound *model.Inbound) string {
+	var settings map[string]any
+	if json.Unmarshal([]byte(inbound.Settings), &settings) != nil {
+		return ""
+	}
+	method, _ := settings["method"].(string)
+	if strings.Contains(strings.ToLower(method), "chacha20") {
+		return ""
+	}
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(buf)
+}
+
+// NodeDelClientByEmail removes one account from an inbound by email — the node
+// API's counterpart of the local delete. It resolves the email to the
+// protocol's identity value first, because DelInboundClient addresses accounts
+// by that value, not by email.
+func (s *InboundService) NodeDelClientByEmail(inboundId int, email string) error {
+	inbound, err := s.GetInbound(inboundId)
+	if err != nil {
+		return common.NewError("inbound not found: ", inboundId)
+	}
+	clients, err := s.GetClients(inbound)
+	if err != nil {
+		return err
+	}
+	var target *model.Client
+	for i := range clients {
+		if sameEmail(clients[i].Email, email) {
+			target = &clients[i]
+			break
+		}
+	}
+	if target == nil {
+		return common.NewError("no client ", email, " on inbound ", inboundId)
+	}
+	_, err = s.DelInboundClient(inboundId, clientIdentity(inbound.Protocol, *target))
+	return err
+}
+
+// NodeClientList reports an inbound's accounts with their metered usage — the
+// node API's list endpoint, so a hub can show and manage the accounts it
+// created here.
+func (s *InboundService) NodeClientList(inboundId int) ([]NodeClientInfo, error) {
+	inbound, err := s.GetInbound(inboundId)
+	if err != nil {
+		return nil, common.NewError("inbound not found: ", inboundId)
+	}
+	clients, err := s.GetClients(inbound)
+	if err != nil {
+		return nil, err
+	}
+	var usage []xray.ClientTraffic
+	if err := database.GetDB().Where("inbound_id = ?", inboundId).Find(&usage).Error; err != nil {
+		return nil, err
+	}
+	byEmail := make(map[string]xray.ClientTraffic, len(usage))
+	for i := range usage {
+		byEmail[usage[i].Email] = usage[i]
+	}
+	out := make([]NodeClientInfo, 0, len(clients))
+	for i := range clients {
+		c := clients[i]
+		info := NodeClientInfo{
+			Email: c.Email, ID: c.ID, Password: c.Password, Auth: c.Auth,
+			Flow: c.Flow, Enable: c.Enable, TotalGB: c.TotalGB, ExpiryTime: c.ExpiryTime,
+		}
+		if t, ok := byEmail[c.Email]; ok {
+			info.Uplink, info.Downlink, info.LastOnline = t.Up, t.Down, t.LastOnline
+		}
+		out = append(out, info)
+	}
+	return out, nil
 }

@@ -1007,3 +1007,32 @@ type NodeStatus struct {
 	AccountCount int    `json:"accountCount"`
 	OnlineCount  int    `json:"onlineCount"`
 }
+
+// NodeAccount is a hub-owned account hosted on a REMOTE node's inbound: the hub
+// panel provisioned it through the node's token-gated API and keeps this row as
+// its ownership record, so the account shows up in the hub's subscription
+// layer even though it lives on another panel.
+//
+// InboundSnapshot is the remote inbound's full settings at creation time. The
+// subscription generator reads the account's credential out of that blob and
+// rewrites the listen address to the node's public host, which is what makes a
+// subscriber's app actually dial the node instead of the hub.
+type NodeAccount struct {
+	Id        int `json:"id" gorm:"primaryKey;autoIncrement"`
+	NodeId    int `json:"nodeId" gorm:"index"`
+	Node      Node `gorm:"foreignKey:NodeId" json:"node"`
+	// RemoteInboundId is the inbound's id ON THE NODE, which is meaningless to
+	// this panel; it exists for display and for the delete call that has to
+	// name the remote inbound by id.
+	RemoteInboundId int    `json:"remoteInboundId"`
+	Email           string `json:"email" gorm:"index"`
+	// ClientId is the credential the protocol keys on (uuid, password, ...),
+	// kept so a delete by email does not have to re-resolve it.
+	ClientId   string `json:"clientId"`
+	SubId      string `json:"subId" gorm:"index"`
+	InboundSnapshot string `json:"-" gorm:"type:text"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
+// TableName pins the table name.
+func (NodeAccount) TableName() string { return "node_accounts" }

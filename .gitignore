@@ -93,3 +93,7 @@ vpn-ui-amd64
 
 # Build scratch
 .tmphash/
+
+# local build/test artifacts (rendered page extractions)
+/*.html
+/nul

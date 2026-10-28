@@ -101,7 +101,8 @@ type Server struct {
 	index *controller.IndexController
 	panel *controller.XUIController
 	api   *controller.APIController
-	node  *controller.NodeController
+	node    *controller.NodeController
+	nodeAPI *controller.NodeAPIController
 	ws    *controller.WebSocketController
 
 	xrayService        service.XrayService
@@ -306,6 +307,9 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, s.customGeoService)
 	s.node = controller.NewNodeController(g)
+	// Node-side federation API: the public token-gated surface a hub calls to
+	// list inbounds and provision accounts on THIS panel (off by default).
+	s.nodeAPI = controller.NewNodeAPIController(g)
 
 	// Initialize WebSocket hub
 	s.wsHub = websocket.NewHub()

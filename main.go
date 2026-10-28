@@ -30,12 +30,14 @@ import (
 	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/corebundle"
 	"github.com/mhsanaei/3x-ui/v2/database"
+	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/sub"
 	"github.com/mhsanaei/3x-ui/v2/util/crypto"
 	"github.com/mhsanaei/3x-ui/v2/util/random"
 	"github.com/mhsanaei/3x-ui/v2/util/sys"
 	"github.com/mhsanaei/3x-ui/v2/web"
+	"github.com/mhsanaei/3x-ui/v2/web/controller"
 	"github.com/mhsanaei/3x-ui/v2/web/global"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v2/xray"
@@ -322,6 +324,15 @@ func runWebServer() {
 	var server *web.Server
 	server = web.NewServer()
 	global.SetWebServer(server)
+	// Node federation: the protocol link generators live in the subscription
+	// package, which the controller package cannot import (sub imports web,
+	// web wires the controller — a cycle). main is the one place both are
+	// reachable, so it hands the linker to the controller before the panel
+	// starts answering. NodeAccountLink is a per-call build: it only reads the
+	// account's snapshot plus its node's public host, no live panel state.
+	controller.NodeAccountLinker = func(na *model.NodeAccount) string {
+		return sub.NewSubServiceForFederation(service.InboundService{}, "").NodeAccountLink(na)
+	}
 	err = server.Start()
 	if err != nil {
 		log.Fatalf("Error starting web server: %v", err)

@@ -67,6 +67,8 @@
               <template v-if="!row.this">
                 <a @click="openManage(row)">[[ labels.manage ]]</a>
                 <a-divider type="vertical"></a-divider>
+                <a @click="testNode(row)"><b class="bo-accent">[[ labels.test ]]</b></a>
+                <a-divider type="vertical"></a-divider>
                 <a @click="openEdit(row)">{{ i18n "edit" }}</a>
                 <a-divider type="vertical"></a-divider>
                 <a-popconfirm title="{{ i18n "pages.nodes.delConfirm" }}"
@@ -89,6 +91,7 @@
               </a-input>
             </a-col>
             <a-col :style="{ whiteSpace: 'nowrap' }">
+              <a-button icon="key" :loading="genTok" @click="genToken">[[ labels.generateToken ]]</a-button>
               <a-button type="primary" :loading="savingToken" @click="saveNodeToken">{{ i18n "save" }}</a-button>
             </a-col>
           </a-row>
@@ -103,6 +106,41 @@
             </a-col>
           </a-row>
           <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">[[ labels.tokenHint ]]</div>
+        </a-card>
+
+        <!-- Federation: this hub's own accounts hosted on remote nodes. The
+             link is the importable config for the customer (the node's host). -->
+        <a-card hoverable :title="labels.nodeAccounts" :style="{ marginTop: '16px' }" :body-style="{ padding: 0 }">
+          <a-row :gutter="[16, 8]" :style="{ padding: '12px 12px 0' }" type="flex">
+            <a-col :style="{ whiteSpace: 'nowrap' }">
+              <a-select v-model="accountsNode" style="width: 180px" allow-clear
+                :placeholder="labels.nodes + '…'">
+                <a-select-option :value="0">All</a-select-option>
+                <a-select-option v-for="n in nodes" :key="n.id" :value="n.id">[[ n.name ]]</a-select-option>
+              </a-select>
+            </a-col>
+            <a-col :flex="1" :style="{ textAlign: 'right' }">
+              <a-button icon="sync" size="small" :loading="loadingAccounts" @click="loadNodeAccounts(accountsNode)">
+                [[ labels.refresh ]]
+              </a-button>
+            </a-col>
+          </a-row>
+          <a-table :columns="accountCols" :row-key="r => r.id" :data-source="nodeAccounts"
+            :pagination="{ pageSize: 8, size: 'small' }" :loading="loadingAccounts">
+            <template slot="accNode" slot-scope="text, row">
+              <span>[[ row.node ? row.node.name : ('#' + row.nodeId) ]]</span>
+            </template>
+            <template slot="accLink" slot-scope="text, row">
+              <span :style="{ fontFamily: 'monospace', fontSize: '11px' }">[[ row.email ]]</span>
+            </template>
+            <template slot="accAction" slot-scope="text, row">
+              <a-popconfirm title="{{ i18n "pages.nodes.nodeAccountDelConfirm" }}"
+                ok-text="{{ i18n 'confirm' }}" cancel-text="{{ i18n 'cancel' }}"
+                @confirm="delNodeAccount(row)">
+                <a style="color: var(--error)">{{ i18n "delete" }}</a>
+              </a-popconfirm>
+            </template>
+          </a-table>
         </a-card>
       </a-col>
     </a-row>
@@ -258,6 +296,49 @@
         </a-row>
       </a-card>
     </template>
+
+    <!-- Federation: manage accounts on the NODE's own inbounds through its
+         token-gated panel API, independent of the core's write path. -->
+    <a-card size="small" :title="labels.remoteInbounds" :style="{ marginTop: '12px' }">
+      <a-row :gutter="[12, 12]">
+        <a-col :xs="24" :md="8">
+          <a-button block icon="sync" :loading="manageModal.loadingInb" @click="loadInbounds">
+            [[ labels.refresh ]]
+          </a-button>
+        </a-col>
+        <a-col :xs="24" :md="16">
+          <a-select v-model="manageModal.inbId" style="width: 100%"
+            :placeholder="labels.inbounds + ' (load)'">
+            <a-select-option v-for="i in manageModal.inbounds" :key="i.id" :value="i.id">
+              [[ i.tag + ' · ' + i.protocol + ' : ' + i.port ]]
+            </a-select-option>
+          </a-select>
+        </a-col>
+        <a-col :xs="24" :md="8">
+          <a-input v-model="manageModal.prov.email" :placeholder="labels.emailPh"></a-input>
+        </a-col>
+        <a-col :xs="24" :md="8">
+          <a-input-number v-model="manageModal.prov.totalGb" :min="0" style="width: 100%"
+            :placeholder="labels.limitBytes"></a-input-number>
+        </a-col>
+        <a-col :xs="24" :md="8">
+          <a-input-number v-model="manageModal.prov.expireDays" :min="0" style="width: 100%"
+            :placeholder="labels.expiryMs"></a-input-number>
+        </a-col>
+        <a-col :xs="24" :md="8">
+          <a-input v-model="manageModal.prov.subId" placeholder="subId (optional)"></a-input>
+        </a-col>
+        <a-col :xs="24" :md="16" :style="{ textAlign: 'right' }">
+          <a-button type="primary" icon="plus" :loading="manageModal.prov.sending" @click="doProvision">
+            [[ labels.provision ]]
+          </a-button>
+        </a-col>
+      </a-row>
+      <div v-if="manageModal.prov.link" :style="{ marginTop: '12px' }">
+        <a-alert type="success" show-icon :message="manageModal.prov.link" style="word-break: break-all"></a-alert>
+        <a :style="{ marginTop: '6px', display: 'inline-block' }" @click="copyText(manageModal.prov.link)">{{ i18n "copy" }}</a>
+      </div>
+    </a-card>
   </div>
 </a-modal>
 
@@ -281,6 +362,10 @@
       nodeToken: '',
       myBaseUrl: '',
       savingToken: false,
+      genTok: false,
+      nodeAccounts: [],
+      loadingAccounts: false,
+      accountsNode: 0,
       nodeModal: {
         visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false,
         xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
@@ -290,6 +375,8 @@
         traffic: null,
         add: { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' },
         remove: { inboundTag: '', email: '' },
+        inbounds: [], inbId: null, loadingInb: false,
+        prov: { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' },
       },
       labels: {
         add: '{{ i18n "pages.nodes.add" }}',
@@ -346,6 +433,15 @@
         up: '{{ i18n "pages.nodes.up" }}',
         clients: '{{ i18n "pages.nodes.clients" }}',
         pullHint: '{{ i18n "pages.nodes.pullHint" }}',
+        test: 'pages.nodes.test',
+        testOk: 'pages.nodes.testOk',
+        remoteInbounds: 'pages.nodes.remoteInbounds',
+        provision: 'pages.nodes.provision',
+        nodeAccounts: 'pages.nodes.nodeAccounts',
+        limitBytes: 'pages.nodes.limitBytes',
+        expiryMs: 'pages.nodes.expiryMs',
+        generateToken: 'pages.nodes.generateToken',
+        tokenGenerated: 'pages.nodes.tokenGenerated',
       },
       columns: [
         { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
@@ -356,6 +452,13 @@
         { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 130, scopedSlots: { customRender: 'counts' } },
         { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 140, scopedSlots: { customRender: 'lastSeen' } },
         { title: '', align: 'center', width: 180, scopedSlots: { customRender: 'action' } },
+      ],
+      accountCols: [
+        { title: 'node', align: 'left', width: 120, scopedSlots: { customRender: 'accNode' } },
+        { title: 'email', dataIndex: 'email', align: 'left', ellipsis: true },
+        { title: 'subId', dataIndex: 'subId', align: 'left', width: 110, ellipsis: true },
+        { title: 'link', align: 'left', ellipsis: true, scopedSlots: { customRender: 'accLink' } },
+        { title: '', align: 'center', width: 90, scopedSlots: { customRender: 'accAction' } },
       ],
     },
     computed: {
@@ -423,6 +526,7 @@
           };
         }
         this.spinning = false;
+        this.loadNodeAccounts(this.accountsNode);
       },
       async refreshAll() {
         this.refreshing = true;
@@ -489,7 +593,11 @@
         this.manageModal.traffic = null;
         this.manageModal.add = { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' };
         this.manageModal.remove = { inboundTag: '', email: '' };
+        this.manageModal.inbounds = [];
+        this.manageModal.inbId = null;
+        this.manageModal.prov = { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' };
         this.manageModal.visible = true;
+        this.loadInbounds();
       },
       async refreshTraffic() {
         const n = this.manageModal.node;
@@ -561,6 +669,70 @@
         });
         this.manageModal.removing = false;
         if (msg && msg.success) this.$message.success('{{ i18n "pages.nodes.hotRemoveOk" }}');
+      },
+      async genToken() {
+        this.genTok = true;
+        const msg = await HttpUtil.post('/panel/api/nodes/token/generate');
+        this.genTok = false;
+        if (msg && msg.success && msg.obj) {
+          this.nodeToken = msg.obj.token || '';
+          if (msg.obj.baseUrl) this.myBaseUrl = msg.obj.baseUrl;
+          this.$message.success('{{ i18n "pages.nodes.tokenGenerated" }}');
+        }
+      },
+      async testNode(node) {
+        const msg = await HttpUtil.post(`/panel/api/nodes/${node.id}/test`);
+        if (msg && msg.success && msg.obj) {
+          const o = msg.obj;
+          this.$message.success(`{{ i18n "pages.nodes.testOk" }}: ${o.online ? '{{ i18n "pages.nodes.online" }}' : '{{ i18n "pages.nodes.offline" }}'}, ${o.inboundCount ?? 0} {{ i18n "pages.nodes.inbounds" }}`);
+          await this.load();
+        }
+      },
+      async loadInbounds() {
+        const n = this.manageModal.node;
+        if (!n) return;
+        this.manageModal.loadingInb = true;
+        const msg = await HttpUtil.get(`/panel/api/nodes/${n.id}/inbounds`);
+        this.manageModal.loadingInb = false;
+        if (msg && msg.success) {
+          this.manageModal.inbounds = msg.obj || [];
+          if (this.manageModal.inbounds.length && !this.manageModal.inbId)
+            this.manageModal.inbId = this.manageModal.inbounds[0].id;
+        }
+      },
+      async doProvision() {
+        const n = this.manageModal.node;
+        const p2 = this.manageModal.prov;
+        if (!n || !this.manageModal.inbId || !p2.email.trim()) {
+          this.$message.error('{{ i18n "pages.nodes.requiredFields" }}');
+          return;
+        }
+        p2.sending = true;
+        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/addClient`, {
+          inboundId: this.manageModal.inbId, email: p2.email,
+          totalGb: p2.totalGb || 0, expireDays: p2.expireDays || 0, subId: p2.subId || '',
+        });
+        p2.sending = false;
+        if (msg && msg.success) {
+          p2.link = (msg.obj && msg.obj.link) || '';
+          p2.email = '';
+          this.$message.success('{{ i18n "pages.nodes.hotAddOk" }}');
+          this.loadNodeAccounts(this.accountsNode);
+        }
+      },
+      async loadNodeAccounts(nodeId) {
+        this.loadingAccounts = true;
+        const url = '/panel/api/nodes/nodeAccounts' + (nodeId ? `?nodeId=${nodeId}` : '');
+        const msg = await HttpUtil.get(url);
+        this.loadingAccounts = false;
+        if (msg && msg.success) this.nodeAccounts = msg.obj || [];
+      },
+      async delNodeAccount(row) {
+        const msg = await HttpUtil.post(`/panel/api/nodes/nodeAccounts/del/${row.id}`);
+        if (msg && msg.success) {
+          this.$message.success('{{ i18n "pages.nodes.nodeAccountDelOk" }}');
+          this.loadNodeAccounts(this.accountsNode);
+        }
       },
       fmtBytes(b) {
         if (!b) return '0 B';

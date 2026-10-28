@@ -1387,6 +1387,18 @@
 "bulkPartial" = "حساب‌هایی که پردازش می‌شوند"
 
 [pages.nodes]
+"test" = "آزمون اتصال"
+"testOk" = "اتصال تأیید شد"
+"remoteInbounds" = "ورودی‌های راه‌دور"
+"provision" = "پیش‌بینی حساب"
+"nodeAccounts" = "حساب‌های مستقر در نود"
+"limitBytes" = "سقف حجم (بایت)"
+"expiryMs" = "انقضا (تایم‌استامپ ms)"
+"generateToken" = "تولید توکن API نود"
+"tokenGenerated" = "توکن جدید ساخته شد - آن را به هاب بدهید و در ردیف نود جایگزین کنید"
+"nodeClientDelOk" = "حساب راه‌دور حذف شد"
+"nodeAccountDelOk" = "ردیف حساب نود حذف شد"
+"nodeAccountDelConfirm" = "ردیف این حساب از این پنل حذف شود؟ حساب راه‌دور روی نود دست نمی‌خورد."
 "title" = "نودها"
 "add" = "افزودن نود"
 "edit" = "ویرایش نود"

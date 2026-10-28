@@ -54,6 +54,8 @@ func initModels() error {
 		// The multi-node registry: remote panels this dashboard polls and displays.
 		// Purely additive, read-only monitoring; an old binary ignores the table.
 		&model.Node{},
+		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
+		&model.NodeAccount{},
 		&model.OutboundTraffics{},
 		&model.Setting{},
 		&model.InboundClientIps{},

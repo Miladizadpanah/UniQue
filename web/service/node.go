@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -349,4 +350,212 @@ func (s *NodeService) PullTraffic(n *model.Node) ([]*xray.Traffic, []*xray.Clien
 	}
 	defer c.Close()
 	return c.GetTraffic(false)
+}
+
+// ---------------------------------------------------------------------------
+// Node federation: the HUB side. The hub calls the node's token-gated panel
+// API (the endpoints NodeAPIController exposes) to list its inbounds and to
+// provision accounts on them. A hub-provisioned account is tracked locally as
+// a NodeAccount so it can ride the hub's own subscriptions: the customer's
+// app dials the NODE, not the hub.
+// ---------------------------------------------------------------------------
+
+// NodeClientResult is the node API's create response: the account the node
+// minted plus the inbound's full row, which the hub snapshots for link
+// generation.
+type NodeClientResult struct {
+	Client  model.Client  `json:"client"`
+	Inbound model.Inbound `json:"inbound"`
+}
+
+// NodeApiError is the error a node API call returns when the node answered but
+// the call failed (a 4xx/5xx envelope), carrying the node's message when it
+// gave one.
+type NodeApiError struct {
+	What    string
+	Status  int
+	Message string
+}
+
+func (e *NodeApiError) Error() string {
+	if e.Message != "" {
+		return e.What + ": " + e.Message
+	}
+	return fmt.Sprintf("%s failed with status %d", e.What, e.Status)
+}
+
+const (
+	nodeInboundsPath  = "/panel/node/inbounds"
+	nodeClientsPath   = "/panel/node/clients"
+	nodeDelClientPath = "/panel/node/delClient"
+)
+
+// nodeAPIResponse is the panel's standard JSON envelope every endpoint answers
+// with; obj is kept raw so each caller decodes its own shape.
+type nodeAPIResponse struct {
+	Success bool            `json:"success"`
+	Msg     string          `json:"msg"`
+	Obj     json.RawMessage `json:"obj"`
+}
+
+// nodeAPIRoundTrip calls one of a node's token-gated endpoints: GET/POST with
+// an optional JSON body, the shared node token on X-Node-Token, and the
+// envelope decoded into out when it is non-nil. Transport errors and non-200
+// answers come back as concrete errors the UI can show verbatim.
+func nodeAPIRoundTrip(n *model.Node, method, path string, body any, out any) error {
+	client := &http.Client{Timeout: nodePollTimeout}
+	var reader io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(b)
+	}
+	u := strings.TrimRight(n.BaseUrl, "/") + path
+	req, err := http.NewRequest(method, u, reader)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if n.Token != "" {
+		req.Header.Set("X-Node-Token", n.Token)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	env := new(nodeAPIResponse)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(env); err != nil {
+		if resp.StatusCode != http.StatusOK {
+			return &NodeApiError{What: path, Status: resp.StatusCode}
+		}
+		return fmt.Errorf("decoding node response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK || !env.Success {
+		return &NodeApiError{What: path, Status: resp.StatusCode, Message: env.Msg}
+	}
+	if out != nil && len(env.Obj) > 0 && string(env.Obj) != "null" {
+		if err := json.Unmarshal(env.Obj, out); err != nil {
+			return fmt.Errorf("decoding node response body: %w", err)
+		}
+	}
+	return nil
+}
+
+// RemoteInbounds lists the node's enabled inbounds with everything the hub's
+// link generator needs: protocol, port, listen, stream settings and the full
+// settings blob (which carries each account's credential).
+func (s *NodeService) RemoteInbounds(n *model.Node) ([]model.Inbound, error) {
+	var out []model.Inbound
+	if err := nodeAPIRoundTrip(n, http.MethodGet, nodeInboundsPath, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RemoteClients lists the accounts on one of the node's inbounds, metered, so
+// the hub can show the full state of an inbound it provisions into.
+func (s *NodeService) RemoteClients(n *model.Node, inboundId int) ([]NodeClientInfo, error) {
+	var out []NodeClientInfo
+	path := fmt.Sprintf("%s?inboundId=%d", nodeClientsPath, inboundId)
+	if err := nodeAPIRoundTrip(n, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RemoteCreateClient provisions one account on a node inbound through the
+// node's own panel API (persistent + live-applied THERE) and returns the
+// account plus the inbound it landed on; the caller snapshots that inbound.
+func (s *NodeService) RemoteCreateClient(n *model.Node, req NodeClientCreate) (*NodeClientResult, error) {
+	var res NodeClientResult
+	if err := nodeAPIRoundTrip(n, http.MethodPost, nodeClientsPath, req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// RemoteDeleteClient removes one account (by email) from a node inbound.
+func (s *NodeService) RemoteDeleteClient(n *model.Node, inboundId int, email string) error {
+	body := map[string]any{"inboundId": inboundId, "email": email}
+	return nodeAPIRoundTrip(n, http.MethodPost, nodeDelClientPath, body, nil)
+}
+
+// TestNode is the "save & verify" round trip: one status poll (which also
+// refreshes the snapshot row) plus one inbounds fetch, so a token or url
+// mistake surfaces as a concrete error at save time instead of a node that
+// silently never comes online.
+func (s *NodeService) TestNode(n *model.Node) (int, error) {
+	if _, err := s.Poll(n); err != nil {
+		return 0, err
+	}
+	inbounds, err := s.RemoteInbounds(n)
+	if err != nil {
+		return 0, err
+	}
+	return len(inbounds), nil
+}
+
+// Get loads one node by id, or nil when absent (the handlers 404 it).
+func (s *NodeService) Get(id int) (*model.Node, error) {
+	var n model.Node
+	err := database.GetDB().First(&n, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// ListNodeAccounts returns the hub's virtual accounts, optionally scoped to a
+// node and/or a subscription, with their nodes preloaded so a caller can
+// resolve a node's public host without a second query.
+func (s *NodeService) ListNodeAccounts(nodeId int, subId string) ([]model.NodeAccount, error) {
+	q := database.GetDB().Model(&model.NodeAccount{}).Preload("Node")
+	if nodeId > 0 {
+		q = q.Where("node_id = ?", nodeId)
+	}
+	if subId != "" {
+		q = q.Where("sub_id = ?", subId)
+	}
+	var out []model.NodeAccount
+	err := q.Order("id desc").Find(&out).Error
+	return out, err
+}
+
+// SaveNodeAccount upserts the hub's ownership record for a remote account,
+// keyed by (node, email): re-creating the same email on the same node
+// replaces the snapshot instead of stacking rows.
+func (s *NodeService) SaveNodeAccount(na *model.NodeAccount) (*model.NodeAccount, error) {
+	db := database.GetDB()
+	var existing model.NodeAccount
+	err := db.Where("node_id = ? AND email = ?", na.NodeId, na.Email).First(&existing).Error
+	if err != nil {
+		na.CreatedAt = time.Now().UnixMilli()
+		if err := db.Create(na).Error; err != nil {
+			return nil, err
+		}
+		return na, nil
+	}
+	existing.RemoteInboundId = na.RemoteInboundId
+	existing.ClientId = na.ClientId
+	existing.SubId = na.SubId
+	existing.InboundSnapshot = na.InboundSnapshot
+	if err := db.Save(&existing).Error; err != nil {
+		return nil, err
+	}
+	return &existing, nil
+}
+
+// DelNodeAccount drops one ownership record. The REMOTE account is the
+// caller's concern; this only forgets the hub's side.
+func (s *NodeService) DelNodeAccount(id int) error {
+	return database.GetDB().Delete(&model.NodeAccount{}, "id = ?", id).Error
+}
+
+// DelNodeAccountByEmail drops the ownership record for one (node, email) pair,
+// the shape a "delete this remote client" request comes in.
+func (s *NodeService) DelNodeAccountByEmail(nodeId int, email string) error {
+	return database.GetDB().Where("node_id = ? AND email = ?", nodeId, email).Delete(&model.NodeAccount{}).Error
 }

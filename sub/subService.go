@@ -177,7 +177,13 @@ func (s *SubService) getSubs(subId string, host string) (subsResult, error) {
 		return out, err
 	}
 
-	if len(inbounds) == 0 {
+	// Node-hosted accounts: the hub's virtual clients living on remote nodes'
+	// inbounds (federation). They carry no LOCAL membership, so the scan above
+	// never sees them; they are pulled by subscription id instead. A lookup
+	// failure degrades to no node links, never to a broken subscription.
+	nodeAccounts, nodeAccountsErr := s.nodeAccountsBySubId(subId)
+
+	if len(inbounds) == 0 && len(nodeAccounts) == 0 {
 		return out, common.NewError("No inbounds found with ", subId)
 	}
 
@@ -220,6 +226,20 @@ func (s *SubService) getSubs(subId string, host string) (subsResult, error) {
 				if link := s.getLink(inbound, client.Email); link != "" {
 					out.links = append(out.links, link)
 				}
+			}
+		}
+	}
+
+	// Node-hosted accounts: their links point at the node's public host, so
+	// one subscription spans every connected panel. Disabled nodes are
+	// skipped: their links would dial a panel the operator took offline.
+	if nodeAccountsErr == nil {
+		for i := range nodeAccounts {
+			if !nodeAccounts[i].Node.Enable {
+				continue
+			}
+			if link := s.NodeAccountLink(&nodeAccounts[i]); link != "" {
+				out.links = append(out.links, link)
 			}
 		}
 	}
@@ -2473,4 +2493,77 @@ func getHostFromXFH(s string) (string, error) {
 		return realHost, nil
 	}
 	return s, nil
+}
+
+// ---------------------------------------------------------------------------
+// Node federation: links for accounts the hub provisioned on REMOTE nodes'
+// inbounds. The account's credential and stream settings come from the
+// snapshot the hub captured at creation (a full remote inbound row); the dial
+// address is rewritten to the node's public host, which is what makes the
+// customer's app reach the node instead of this panel.
+// ---------------------------------------------------------------------------
+
+// NewSubServiceForFederation builds a SubService for one-off link generation
+// against inbounds owned by remote nodes: it dials publicHost and uses the
+// provided inbound service only to parse credential entries out of the
+// settings blobs.
+func NewSubServiceForFederation(inboundSvc service.InboundService, publicHost string) *SubService {
+	return &SubService{
+		inboundService: inboundSvc,
+		settingService: service.SettingService{},
+		address:        publicHost,
+	}
+}
+
+// nodeHostFromBaseUrl answers the address a customer's app dials for a node's
+// inbounds: the host of the node's panel base url (a domain like
+// pro.uniqueme.ir or a bare IP like 141.0.11.200), with no scheme or port —
+// the port is the inbound's own, carried in the snapshot.
+func nodeHostFromBaseUrl(baseUrl string) string {
+	if baseUrl == "" {
+		return ""
+	}
+	u, err := url.Parse(baseUrl)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// NodeAccountLink builds the importable link for one hub-owned account hosted
+// on a remote node's inbound, from the snapshot captured when the hub created
+// it. The snapshot's listen address is whatever the node binds locally, so it
+// is rewritten to the node's public host before the panel's own link
+// generator runs — one code path for every protocol, local and remote alike.
+func (s *SubService) NodeAccountLink(na *model.NodeAccount) string {
+	var inb model.Inbound
+	if err := json.Unmarshal([]byte(na.InboundSnapshot), &inb); err != nil {
+		return ""
+	}
+	host := nodeHostFromBaseUrl(na.Node.BaseUrl)
+	if host == "" {
+		return ""
+	}
+	// A per-call service: the dial-address override must never touch a shared
+	// instance (the subscriber router builds one SubService at start-up and
+	// serves every poll from it).
+	svc := &SubService{
+		inboundService: s.inboundService,
+		settingService: s.settingService,
+		showInfo:       s.showInfo,
+		remarkModel:    s.remarkModel,
+		address:        host,
+	}
+	inb.Listen = host
+	return svc.getLink(&inb, na.Email)
+}
+
+// nodeAccountsBySubId returns this subscription's node-hosted accounts with
+// their nodes preloaded. A lookup error degrades to no node links, never to a
+// broken subscription: the local inbounds are what the sub is about.
+func (s *SubService) nodeAccountsBySubId(subId string) ([]model.NodeAccount, error) {
+	var out []model.NodeAccount
+	err := database.GetDB().Model(&model.NodeAccount{}).Preload("Node").
+		Where("sub_id = ?", subId).Find(&out).Error
+	return out, err
 }

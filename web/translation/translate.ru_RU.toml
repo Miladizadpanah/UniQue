@@ -1375,3 +1375,5 @@
 "nodeClientDelOk" = "Remote account removed"
 "nodeAccountDelOk" = "Node account record removed"
 "nodeAccountDelConfirm" = "Remove this account record from this panel? The remote account on the node stays."
+"ensureInbounds" = "Ensure dedicated inbounds"
+"ensureInboundsOk" = "Dedicated tcp vless + vmess inbounds are ready on the node"

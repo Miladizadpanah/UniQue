@@ -455,6 +455,55 @@ func (s *NodeService) RemoteInbounds(n *model.Node) ([]model.Inbound, error) {
 	return out, nil
 }
 
+// RemoteCreateInbound asks the node's panel to make ONE dedicated tcp
+// federation inbound of the protocol available there — created on the node
+// itself when absent (free port, tcp, no TLS, enabled, hot-applied) — and
+// returns the inbound to use. Idempotent: an existing enabled inbound of the
+// protocol is returned instead of a duplicate.
+func (s *NodeService) RemoteCreateInbound(n *model.Node, protocol string) (*model.Inbound, error) {
+	var out model.Inbound
+	req := NodeInboundCreate{Protocol: protocol}
+	if err := nodeAPIRoundTrip(n, http.MethodPost, nodeInboundsPath, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// EnsureFedInbounds guarantees BOTH dedicated inbounds exist on the node and
+// are enabled — a tcp vless and a tcp vmess: what the hub provisions into and
+// what the customer's links dial. Reading happens first; creating only what is
+// missing. Existing inbounds are never duplicated or touched.
+func (s *NodeService) EnsureFedInbounds(n *model.Node) ([]model.Inbound, error) {
+	inbounds, err := s.RemoteInbounds(n)
+	if err != nil {
+		return nil, err
+	}
+	for _, protocol := range []string{string(model.VLESS), string(model.VMESS)} {
+		if hasEnabledInbound(inbounds, protocol) {
+			continue
+		}
+		created, err := s.RemoteCreateInbound(n, protocol)
+		if err != nil {
+			return nil, err
+		}
+		inbounds = append(inbounds, *created)
+	}
+	return inbounds, nil
+}
+
+// hasEnabledInbound answers "does this list already carry a usable inbound of
+// the protocol", which is the only thing EnsureFedInbounds may assume about a
+// node's own fleet: a disabled inbound of the right protocol still needs its
+// replacement, and a different protocol's inbound does not satisfy it.
+func hasEnabledInbound(inbounds []model.Inbound, protocol string) bool {
+	for i := range inbounds {
+		if inbounds[i].Enable && inbounds[i].Protocol == model.Protocol(protocol) {
+			return true
+		}
+	}
+	return false
+}
+
 // RemoteClients lists the accounts on one of the node's inbounds, metered, so
 // the hub can show the full state of an inbound it provisions into.
 func (s *NodeService) RemoteClients(n *model.Node, inboundId int) ([]NodeClientInfo, error) {

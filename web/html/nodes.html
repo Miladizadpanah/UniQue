@@ -301,9 +301,14 @@
          token-gated panel API, independent of the core's write path. -->
     <a-card size="small" :title="labels.remoteInbounds" :style="{ marginTop: '12px' }">
       <a-row :gutter="[12, 12]">
-        <a-col :xs="24" :md="8">
+        <a-col :xs="24" :md="4">
           <a-button block icon="sync" :loading="manageModal.loadingInb" @click="loadInbounds">
             [[ labels.refresh ]]
+          </a-button>
+        </a-col>
+        <a-col :xs="24" :md="8">
+          <a-button block icon="plus" :loading="manageModal.ensuring" @click="ensureInbounds">
+            [[ labels.ensureInbounds ]]
           </a-button>
         </a-col>
         <a-col :xs="24" :md="16">
@@ -375,7 +380,7 @@
         traffic: null,
         add: { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' },
         remove: { inboundTag: '', email: '' },
-        inbounds: [], inbId: null, loadingInb: false,
+        inbounds: [], inbId: null, loadingInb: false, ensuring: false,
         prov: { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' },
       },
       labels: {
@@ -442,6 +447,7 @@
         expiryMs: 'pages.nodes.expiryMs',
         generateToken: 'pages.nodes.generateToken',
         tokenGenerated: 'pages.nodes.tokenGenerated',
+        ensureInbounds: 'pages.nodes.ensureInbounds',
       },
       columns: [
         { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
@@ -595,6 +601,7 @@
         this.manageModal.remove = { inboundTag: '', email: '' };
         this.manageModal.inbounds = [];
         this.manageModal.inbId = null;
+        this.manageModal.ensuring = false;
         this.manageModal.prov = { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' };
         this.manageModal.visible = true;
         this.loadInbounds();
@@ -694,10 +701,29 @@
         this.manageModal.loadingInb = true;
         const msg = await HttpUtil.get(`/panel/api/nodes/${n.id}/inbounds`);
         this.manageModal.loadingInb = false;
+        if (!msg || !msg.success) return;
+        this.manageModal.inbounds = msg.obj || [];
+        const has = (p) => this.manageModal.inbounds.some(i => i.enable && i.protocol === p);
+        // Auto-provision the dedicated pair on the node when it lacks one:
+        // reading comes first, creating only what is missing.
+        if (!has('vless') || !has('vmess')) {
+          this.ensureInbounds();
+          return;
+        }
+        if (!this.manageModal.inbId)
+          this.manageModal.inbId = this.manageModal.inbounds[0].id;
+      },
+      async ensureInbounds() {
+        const n = this.manageModal.node;
+        if (!n || this.manageModal.ensuring) return;
+        this.manageModal.ensuring = true;
+        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/ensureInbounds`);
+        this.manageModal.ensuring = false;
         if (msg && msg.success) {
           this.manageModal.inbounds = msg.obj || [];
           if (this.manageModal.inbounds.length && !this.manageModal.inbId)
             this.manageModal.inbId = this.manageModal.inbounds[0].id;
+          this.$message.success('{{ i18n "pages.nodes.ensureInboundsOk" }}');
         }
       },
       async doProvision() {

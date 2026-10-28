@@ -82,6 +82,7 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	// its own subscriptions, pointing the customer's app at the node).
 	nodes.POST("/:id/test", a.test)
 	nodes.GET("/:id/inbounds", a.nodeInbounds)
+	nodes.POST("/:id/ensureInbounds", a.ensureInbounds)
 	nodes.POST("/:id/addClient", a.nodeAddClient)
 	nodes.POST("/:id/delClient", a.nodeDelClient)
 	// The hub's virtual accounts (NodeAccounts), each with the importable link
@@ -336,6 +337,21 @@ func (a *NodeController) nodeInbounds(c *gin.Context) {
 		return
 	}
 	inbounds, err := a.nodeService.RemoteInbounds(node)
+	jsonObj(c, inbounds, err)
+}
+
+// ensureInbounds guarantees the node's dedicated federation inbounds — a tcp
+// vless and a tcp vmess — exist on the NODE and are enabled, creating the
+// missing ones there through its token-gated API (free port, tcp, no TLS,
+// hot-applied). It returns the full inbound list so the UI's provision form
+// can dial one immediately. Reading stays first: existing inbounds are used,
+// never duplicated.
+func (a *NodeController) ensureInbounds(c *gin.Context) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return
+	}
+	inbounds, err := a.nodeService.EnsureFedInbounds(node)
 	jsonObj(c, inbounds, err)
 }
 

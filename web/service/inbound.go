@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -5832,6 +5833,80 @@ type NodeClientCreate struct {
 	TotalGb    int64  `json:"totalGb" form:"totalGb"`
 	ExpireDays int    `json:"expireDays" form:"expireDays"`
 	Flow       string `json:"flow" form:"flow"`
+}
+
+// NodeInboundCreate is the hub's request to make ONE dedicated federation
+// inbound available on the node: the protocol is all the node needs — the
+// node picks the free port, the tag and the settings itself, so the two sides
+// can never disagree about them.
+type NodeInboundCreate struct {
+	Protocol string `json:"protocol" form:"protocol"`
+}
+
+// NodeFedTagPrefix marks the inbounds the federation creates on a node, so a
+// re-check finds them by name instead of guessing, and an operator can tell a
+// hub-made inbound from a hand-made one at a glance.
+const NodeFedTagPrefix = "vpnui-fed-"
+
+// CreateNodeFedInbound provisions ONE dedicated tcp inbound on THIS panel for
+// the federation: free port (the kernel picks it), plain tcp, no TLS — works
+// anywhere, no certificate to babysit — enabled and hot-applied, so the hub
+// can provision accounts on it immediately. Idempotent per protocol: when an
+// enabled inbound of that protocol already exists, THAT one is returned and
+// nothing is duplicated.
+func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, error) {
+	p := model.Protocol(protocol)
+	if p != model.VLESS && p != model.VMESS {
+		return nil, common.NewError("federation inbounds only support vless or vmess, got ", protocol)
+	}
+	var existing model.Inbound
+	err := database.GetDB().Where("protocol = ? AND enable = ?", p, true).First(&existing).Error
+	if err == nil {
+		return &existing, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	port, err := findFreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	// Both protocols store their accounts in settings.clients; the blob only
+	// seeds the shape, the credential is minted per account by NodeAddClient.
+	settings := `{"clients":[],"decryption":"none"}`
+	if p == model.VMESS {
+		settings = `{"clients":[]}`
+	}
+	inbound := &model.Inbound{
+		Listen:       "0.0.0.0",
+		Port:         port,
+		Protocol:     p,
+		Tag:          NodeFedTagPrefix + protocol,
+		Settings:     settings,
+		StreamSettings: `{"network":"tcp"}`,
+		Enable:       true,
+	}
+	saved, needRestart, err := s.AddInbound(inbound)
+	if err != nil {
+		return nil, err
+	}
+	if needRestart {
+		(&XrayService{}).SetToNeedRestart()
+	}
+	return saved, nil
+}
+
+// findFreeTCPPort asks the kernel for a free TCP port (bind :0, read, close).
+// The gap between close and AddInbound's own conflict check is small, and
+// AddInbound re-checks before persisting, so a collision surfaces as a
+// concrete "Port already exists" error instead of a broken inbound.
+func findFreeTCPPort() (int, error) {
+	l, err := net.Listen("tcp4", "0.0.0.0:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // NodeClientInfo is one account of an inbound as the node API reports it: the

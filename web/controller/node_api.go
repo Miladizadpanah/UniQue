@@ -42,6 +42,7 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 	// in by setting the token.
 	gp := g.Group("/panel/node", a.tokenGate)
 	gp.GET("/inbounds", a.inbounds)
+	gp.POST("/inbounds", a.createInbound)
 	gp.GET("/clients", a.clients)
 	gp.POST("/clients", a.createClient)
 	gp.POST("/delClient", a.deleteClient)
@@ -76,6 +77,25 @@ func (a *NodeAPIController) inbounds(c *gin.Context) {
 		return
 	}
 	jsonObj(c, inbounds, nil)
+}
+
+// createInbound makes ONE dedicated federation inbound available on this
+// panel: a free-port tcp vless or vmess, created here when absent (idempotent
+// per protocol), enabled and hot-applied, so the hub can provision accounts on
+// it the moment it returns. The caller (the hub) sends only the protocol; the
+// node decides the port and the settings, and answers with the inbound to use.
+func (a *NodeAPIController) createInbound(c *gin.Context) {
+	var req service.NodeInboundCreate
+	if err := c.ShouldBind(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	inbound, err := a.inboundService.CreateNodeFedInbound(req.Protocol)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, inbound, nil)
 }
 
 // clients lists one inbound's accounts with their metered usage.

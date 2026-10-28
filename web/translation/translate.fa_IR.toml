@@ -1399,6 +1399,8 @@
 "nodeClientDelOk" = "حساب راه‌دور حذف شد"
 "nodeAccountDelOk" = "ردیف حساب نود حذف شد"
 "nodeAccountDelConfirm" = "ردیف این حساب از این پنل حذف شود؟ حساب راه‌دور روی نود دست نمی‌خورد."
+"ensureInbounds" = "تأمین اینبایندهای اختصاصی"
+"ensureInboundsOk" = "اینبایند tcp vless و tcp vmess روی نود آماده شد"
 "title" = "نودها"
 "add" = "افزودن نود"
 "edit" = "ویرایش نود"

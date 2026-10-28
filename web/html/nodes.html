@@ -7,26 +7,26 @@
   <transition name="list" appear>
     <a-row :gutter="[16, 16]">
       <a-col :span="24">
-        <!-- Fleet totals across this panel and every enabled remote. -->
-        <a-row :gutter="[16, 16]" :style="{ marginBottom: '16px' }">
-          <a-col :xs="12" :md="5" v-for="s in summaryCards" :key="s.key">
-            <a-card hoverable>
-              <div :style="{ display: 'flex', flexDirection: 'column', gap: '4px' }">
-                <span :style="{ color: 'var(--text-3)' }">[[ s.label ]]</span>
-                <span class="num" :style="{ fontSize: '22px' }">[[ s.value ]]</span>
-              </div>
-            </a-card>
-          </a-col>
-        </a-row>
+        <!-- Fleet stat band -->
+        <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden', marginBottom: 'var(--gap-md)' }">
+          <div class="bo-stat-grid bo-stat-grid--5">
+            <div class="bo-stat-cell" v-for="s in summaryCards" :key="s.key">
+              <span class="bo-stat-cell-label">[[ s.label ]]</span>
+              <span class="bo-stat-cell-value num">[[ s.value ]]</span>
+            </div>
+          </div>
+        </div>
 
-        <a-card hoverable :style="{ marginBottom: '16px' }">
+        <!-- Actions -->
+        <div class="bo-tile" :style="{ marginBottom: 'var(--gap-md)', padding: 'var(--sp-4)' }">
           <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
             <a-button type="primary" icon="plus" @click="openAdd()">[[ labels.add ]]</a-button>
             <a-button icon="sync" :loading="refreshing" @click="refreshAll">[[ labels.refresh ]]</a-button>
           </div>
-        </a-card>
+        </div>
 
-        <a-card hoverable :body-style="{ padding: 0 }">
+        <!-- Node table -->
+        <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden' }">
           <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
             :scroll="isMobile ? {} : { x: 860 }" :pagination="false" bordered
             :locale='{ emptyText: `{{ i18n "noData" }}` }'>
@@ -79,11 +79,14 @@
               </template>
             </template>
           </a-table>
-        </a-card>
+        </div>
 
         <!-- This panel's side: set the token a hub uses to poll this node, and
              copy the base url to paste into the hub's node row. -->
-        <a-card hoverable :title="labels.thisPanelToken" :style="{ marginTop: '16px' }">
+        <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)' }">
+          <div class="bo-tile-head">
+            <div class="bo-tile-title">[[ labels.thisPanelToken ]]</div>
+          </div>
           <a-row :gutter="[16, 12]" type="flex">
             <a-col :flex="1">
               <a-input v-model="nodeToken" :placeholder="labels.tokenPlaceholder" @pressEnter="saveNodeToken">
@@ -106,12 +109,15 @@
             </a-col>
           </a-row>
           <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">[[ labels.tokenHint ]]</div>
-        </a-card>
+        </div>
 
         <!-- Federation: this hub's own accounts hosted on remote nodes. The
              link is the importable config for the customer (the node's host). -->
-        <a-card hoverable :title="labels.nodeAccounts" :style="{ marginTop: '16px' }" :body-style="{ padding: 0 }">
-          <a-row :gutter="[16, 8]" :style="{ padding: '12px 12px 0' }" type="flex">
+        <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)', padding: '0', overflow: 'hidden' }">
+          <div :style="{ padding: 'var(--sp-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }">
+            <span class="bo-tile-title">[[ labels.nodeAccounts ]]</span>
+          </div>
+          <a-row :gutter="[16, 8]" :style="{ padding: '0 12px' }" type="flex">
             <a-col :style="{ whiteSpace: 'nowrap' }">
               <a-select v-model="accountsNode" style="width: 180px" allow-clear
                 :placeholder="labels.nodes + '…'">
@@ -141,7 +147,7 @@
               </a-popconfirm>
             </template>
           </a-table>
-        </a-card>
+        </div>
       </a-col>
     </a-row>
   </transition>
@@ -438,16 +444,16 @@
         up: '{{ i18n "pages.nodes.up" }}',
         clients: '{{ i18n "pages.nodes.clients" }}',
         pullHint: '{{ i18n "pages.nodes.pullHint" }}',
-        test: 'pages.nodes.test',
-        testOk: 'pages.nodes.testOk',
-        remoteInbounds: 'pages.nodes.remoteInbounds',
-        provision: 'pages.nodes.provision',
-        nodeAccounts: 'pages.nodes.nodeAccounts',
-        limitBytes: 'pages.nodes.limitBytes',
-        expiryMs: 'pages.nodes.expiryMs',
-        generateToken: 'pages.nodes.generateToken',
-        tokenGenerated: 'pages.nodes.tokenGenerated',
-        ensureInbounds: 'pages.nodes.ensureInbounds',
+        test: '{{ i18n "pages.nodes.test" }}',
+        testOk: '{{ i18n "pages.nodes.testOk" }}',
+        remoteInbounds: '{{ i18n "pages.nodes.remoteInbounds" }}',
+        provision: '{{ i18n "pages.nodes.provision" }}',
+        nodeAccounts: '{{ i18n "pages.nodes.nodeAccounts" }}',
+        limitBytes: '{{ i18n "pages.nodes.limitBytes" }}',
+        expiryMs: '{{ i18n "pages.nodes.expiryMs" }}',
+        generateToken: '{{ i18n "pages.nodes.generateToken" }}',
+        tokenGenerated: '{{ i18n "pages.nodes.tokenGenerated" }}',
+        ensureInbounds: '{{ i18n "pages.nodes.ensureInbounds" }}',
       },
       columns: [
         { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },

@@ -204,6 +204,15 @@ func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 	if uerr := db.Model(&model.Node{}).Where("id = ?", n.Id).Updates(updates).Error; uerr != nil {
 		return status, uerr
 	}
+	// Push the live gauges for this node to the Prometheus exporter.
+	GetPrometheus().UpdateNodeGauges(
+		n.Name,
+		err == nil,
+		int(n.InboundCount),
+		int(n.AccountCount),
+		int(n.OnlineCount),
+		latency,
+	)
 	// The moment the node's operator approves, make the dedicated federation
 	// inbounds present THERE. Reading first is EnsureFedInbounds' own contract:
 	// an existing vless/vmess inbound is reused, only a missing one is created.
@@ -218,18 +227,16 @@ func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 }
 
 // fireNodeStatusWebhook sends a webhook notification when a node changes online/offline state.
+// Best-effort: a failed webhook must not block the poll.
 func (s *NodeService) fireNodeStatusWebhook(n *model.Node, eventType string) {
 	var whService WebhookService
-	urls, err := whService.GetConfiguredWebhookUrls()
-	if err != nil || len(urls) == 0 {
-		return
-	}
-	event := NewWebhookEvent(eventType, n.Name, map[string]any{
+	whService.FireEvent(eventType, n.Name, map[string]any{
 		"nodeId":  n.Id,
 		"baseUrl": n.BaseUrl,
 		"version": n.Version,
+		"latency": n.LatencyMs,
+		"online":  n.Online,
 	})
-	go whService.PostToMultipleWebhooks(urls, event)
 }
 
 // PollAll refreshes every enabled node. Each poll is independent and bounded,

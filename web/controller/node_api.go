@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -56,6 +57,10 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 	// into even by someone holding its token.
 	gp.POST("/pairing/request", a.pairingRequest)
 	gp.GET("/pairing/status", a.pairingStatus)
+	// mTLS: the hub's CA cert + a signed client cert for the node. The token gate
+	// still applies — mTLS is an ADDITIONAL channel, not a replacement.
+	gp.GET("/mtls/ca", a.mtlsCA)
+	gp.POST("/mtls/sign", a.mtlsSign)
 
 	writes := gp.Group("", a.approvalGate)
 	writes.POST("/inbounds", a.createInbound)
@@ -82,6 +87,34 @@ func (a *NodeAPIController) approvalGate(c *gin.Context) {
 		return
 	}
 	c.Next()
+}
+
+// mtlsCA returns the panel's CA certificate so a node can pin it for mTLS.
+func (a *NodeAPIController) mtlsCA(c *gin.Context) {
+	ca, err := a.settingService.MTLSCertBundle()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	c.Data(http.StatusOK, "application/pem-certificate", ca)
+}
+
+// mtlsSign issues a signed client cert for the named node. The node exchanges
+// this for a client cert it presents on every mTLS dial to the hub.
+func (a *NodeAPIController) mtlsSign(c *gin.Context) {
+	var body struct {
+		NodeName string `json:"nodeName"`
+	}
+	if err := c.ShouldBind(&body); err != nil || strings.TrimSpace(body.NodeName) == "" {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("node name is required"))
+		return
+	}
+	certPEM, err := a.settingService.SignClientCert(strings.TrimSpace(body.NodeName), 5*365*24*time.Hour)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	c.Data(http.StatusOK, "application/pem-certificate", certPEM)
 }
 
 // tokenGate is the constant-time node token check. Same policy as the status

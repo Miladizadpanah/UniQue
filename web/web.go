@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
+	"github.com/mhsanaei/3x-ui/v2/database"
+	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/util/common"
 	"github.com/mhsanaei/3x-ui/v2/web/controller"
@@ -98,12 +100,12 @@ type Server struct {
 	httpServer *http.Server
 	listener   net.Listener
 
-	index *controller.IndexController
-	panel *controller.XUIController
-	api   *controller.APIController
+	index   *controller.IndexController
+	panel   *controller.XUIController
+	api     *controller.APIController
 	node    *controller.NodeController
 	nodeAPI *controller.NodeAPIController
-	ws    *controller.WebSocketController
+	ws      *controller.WebSocketController
 
 	xrayService        service.XrayService
 	settingService     service.SettingService
@@ -311,6 +313,11 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	// list inbounds and provision accounts on THIS panel (off by default).
 	s.nodeAPI = controller.NewNodeAPIController(g)
 
+	// Prometheus exporter: /panel/metrics is public (no auth) so a local
+	// Prometheus scrape or a Grafana dashboard can pick up live fleet stats.
+	// Behind the same basePath group as everything else, token-less, read-only.
+	engine.GET(basePath+"/metrics", service.GetPrometheus().Handler)
+
 	// Initialize WebSocket hub
 	s.wsHub = websocket.NewHub()
 	go s.wsHub.Run()
@@ -451,6 +458,13 @@ func (s *Server) startTask() {
 	// pay nothing for it.
 	s.cron.AddJob("@every 60s", job.NewCheckNodesJob())
 
+	// Prometheus exporter: refresh the hub's own gauges on the same cadence.
+	// Reads live counters from the database (total traffic + cores up) and
+	// pushes them to the /panel/metrics endpoint. Cheap, read-only.
+	s.cron.AddFunc("@every 60s", func() {
+		refreshPrometheusPanelGauges()
+	})
+
 	// check client ips from log file every 10 sec
 	s.cron.AddJob("@every 10s", job.NewCheckClientIpJob())
 
@@ -552,6 +566,28 @@ func (s *Server) startTask() {
 	} else {
 		s.cron.Remove(entry)
 	}
+}
+
+// refreshPrometheusPanelGauges pushes the panel's live counters to the /metrics
+// exporter: total traffic, cores up. Called every 60s by the cron.
+func refreshPrometheusPanelGauges() {
+	var agg struct {
+		Up   int64
+		Down int64
+	}
+	database.GetDB().Model(&model.Inbound{}).
+		Select("SUM(up) AS up, SUM(down) AS down").
+		Scan(&agg)
+
+	svc := &service.CoreService{}
+	states := svc.GetCoresStatus()
+	running := 0
+	for _, st := range states {
+		if st.State == "running" {
+			running++
+		}
+	}
+	service.GetPrometheus().UpdatePanelGauges(int64(running), agg.Up, agg.Down)
 }
 
 // Start initializes and starts the web server with configured settings, routes, and background jobs.

@@ -305,8 +305,8 @@ mkdir -p "$OUT_DIR"
 # the remote that actually publishes these releases; fall back to the upstream
 # name when the remote is not configured (e.g. a local-only build).
 UPSTREAM_REPO="Miladizadpanah/UniQue"
-STAMP_REPO="${VPNUI_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^https://github.com/##; s#^git@github.com:##; s#\.git$##' | sed -E 's#.*/##')"
-if [[ -z "$STAMP_REPO" || "$STAMP_REPO" == "Miladizadpanah/UniQue" ]]; then
+STAMP_REPO="${VPNUI_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^https://github.com/##; s#^git@github.com:##; s#\.git$##')"
+if [[ -z "$STAMP_REPO" ]]; then
     STAMP_REPO="$UPSTREAM_REPO"
 fi
 LDFLAGS="-X github.com/mhsanaei/3x-ui/v2/config.panelRepoDefault=$STAMP_REPO"

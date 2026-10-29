@@ -193,6 +193,14 @@ func (s *SettingService) SignClientCert(subjectCN string, ttl time.Duration) ([]
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf}), nil
 }
 
+// EnsureMtlsCertsInitialized verifies that an mTLS keypair exists and is ready
+// to use. Called once at startup; if missing, it generates one. Idempotent:
+// a second call returns the existing keypair without re-generating.
+func (s *SettingService) EnsureMtlsCertsInitialized() error {
+	_, err := s.MTLSGenerate()
+	return err
+}
+
 // MTLSCertBundle returns the panel's CA cert(s), the exact byte blob a node's
 // TLS client should load as its CA bundle when dialing the panel over mTLS.
 func (s *SettingService) MTLSCertBundle() ([]byte, error) {
@@ -201,4 +209,10 @@ func (s *SettingService) MTLSCertBundle() ([]byte, error) {
 		return nil, err
 	}
 	return ca, nil
+}
+
+// GetOrCreateMtlsCert is a back-compat alias for MTLSCertBundle, kept so any
+// caller compiled against the pre-refactor name still resolves.
+func (s *SettingService) GetOrCreateMtlsCert() ([]byte, error) {
+	return s.MTLSCertBundle()
 }

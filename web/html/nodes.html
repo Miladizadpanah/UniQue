@@ -205,8 +205,9 @@
   </transition>
 </a-spin>
 
-<!-- Add / edit node. The API section is the write path: filling the API port is
-     what turns a node from read-only monitoring into a manageable server. -->
+<!-- Add / edit node. The minimal form is Name + Token: the hub auto-discovers
+     the node's Base URL from its status endpoint on save. Advanced fields
+     (Base URL override, API write path, mTLS) fold out under "More". -->
 <a-modal v-model="nodeModal.visible" :title="nodeModal.id ? labels.edit : labels.add"
   :width="600" :class="themeSwitcher.currentTheme" :footer="null">
   <a-form layout="vertical">
@@ -222,48 +223,61 @@
         </a-form-item>
       </a-col>
       <a-col :span="24">
-        <a-form-item :label="labels.baseUrl">
-          <a-input v-model="nodeModal.baseUrl" :placeholder="labels.baseUrlPlaceholder"></a-input>
-        </a-form-item>
-      </a-col>
-      <a-col :span="24">
         <a-form-item :label="labels.remark">
           <a-input v-model="nodeModal.remark" :placeholder="labels.remark"></a-input>
         </a-form-item>
       </a-col>
     </a-row>
 
-    <a-divider>{{ i18n "pages.nodes.apiConfig" }}</a-divider>
-    <a-alert :message="labels.apiHint" type="info" show-icon :style="{ marginBottom: '12px' }"></a-alert>
-    <a-row :gutter="[16, 12]">
-      <a-col :xs="24" :md="12">
-        <a-form-item :label="labels.xrayApiHost">
-          <a-input v-model="nodeModal.xrayApiHost" :placeholder="labels.xrayApiHostPh"></a-input>
-        </a-form-item>
-      </a-col>
-      <a-col :xs="24" :md="12">
-        <a-form-item :label="labels.xrayApiPort">
-          <a-input-number v-model="nodeModal.xrayApiPort" :min="0" :max="65535"
-            :placeholder="labels.apiPortPh" style="width: 100%"></a-input-number>
-        </a-form-item>
-      </a-col>
-      <a-col :xs="24" :md="12">
-        <a-form-item :label="labels.apiTlsMode">
-          <a-select v-model="nodeModal.apiTlsMode">
-            <a-select-option value="insecure">{{ i18n "pages.nodes.tlsInsecure" }}</a-select-option>
-            <a-select-option value="skip">{{ i18n "pages.nodes.tlsSkip" }}</a-select-option>
-            <a-select-option value="verify">{{ i18n "pages.nodes.tlsVerify" }}</a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-col>
-      <a-col :xs="24" :md="12" v-if="nodeModal.apiTlsMode === 'verify'">
-        <a-form-item :label="labels.apiCaPem">
-          <a-textarea v-model="nodeModal.apiCaPem" :rows="2" :placeholder="labels.apiCaPemPh"></a-textarea>
-        </a-form-item>
-      </a-col>
-    </a-row>
+    <!-- Advanced fields fold behind a "More" toggle so the common case stays
+         two inputs: name + token. The hub fills the Base URL from the node's
+         own status answer when it is left blank. -->
+    <a-button type="link" size="small" style="padding: 0; margin-bottom: 8px"
+      @click="nodeModal.showAdvanced = !nodeModal.showAdvanced">
+      [[ nodeModal.showAdvanced ? '▲ ' : '▼ ' + (i18n "pages.nodes.advanced") ]]
+    </a-button>
 
-    <a-space style="width: 100%; justifyContent: 'flex-end'">
+    <template v-if="nodeModal.showAdvanced">
+      <a-row :gutter="[16, 12]">
+        <a-col :span="24">
+          <a-form-item :label="labels.baseUrl">
+            <a-input v-model="nodeModal.baseUrl" :placeholder="labels.baseUrlPlaceholder"></a-input>
+          </a-form-item>
+        </a-col>
+      </a-row>
+
+      <a-divider>{{ i18n "pages.nodes.apiConfig" }}</a-divider>
+      <a-alert :message="labels.apiHint" type="info" show-icon :style="{ marginBottom: '12px' }"></a-alert>
+      <a-row :gutter="[16, 12]">
+        <a-col :xs="24" :md="12">
+          <a-form-item :label="labels.xrayApiHost">
+            <a-input v-model="nodeModal.xrayApiHost" :placeholder="labels.xrayApiHostPh"></a-input>
+          </a-form-item>
+        </a-col>
+        <a-col :xs="24" :md="12">
+          <a-form-item :label="labels.xrayApiPort">
+            <a-input-number v-model="nodeModal.xrayApiPort" :min="0" :max="65535"
+              :placeholder="labels.apiPortPh" style="width: 100%"></a-input-number>
+          </a-form-item>
+        </a-col>
+        <a-col :xs="24" :md="12">
+          <a-form-item :label="labels.apiTlsMode">
+            <a-select v-model="nodeModal.apiTlsMode">
+              <a-select-option value="insecure">{{ i18n "pages.nodes.tlsInsecure" }}</a-select-option>
+              <a-select-option value="skip">{{ i18n "pages.nodes.tlsSkip" }}</a-select-option>
+              <a-select-option value="verify">{{ i18n "pages.nodes.tlsVerify" }}</a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :xs="24" :md="12" v-if="nodeModal.apiTlsMode === 'verify'">
+          <a-form-item :label="labels.apiCaPem">
+            <a-textarea v-model="nodeModal.apiCaPem" :rows="2" :placeholder="labels.apiCaPemPh"></a-textarea>
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </template>
+
+    <a-space style="width: 100%; justifyContent: 'flex-end'; marginTop: '16px'">
       <a-button @click="nodeModal.visible = false">{{ i18n "cancel" }}</a-button>
       <a-button type="primary" :loading="nodeModal.saving" @click="saveNode">{{ i18n "save" }}</a-button>
     </a-space>
@@ -646,6 +660,7 @@
         return {
           visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false,
           xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
+          showAdvanced: false,
         };
       },
       openAdd() {
@@ -658,11 +673,14 @@
           token: node.token, remark: node.remark || '', saving: false,
           xrayApiHost: node.xrayApiHost || '', xrayApiPort: node.xrayApiPort || null,
           apiTlsMode: node.apiTlsMode || 'insecure', apiCaPem: node.apiCaPem || '',
+          showAdvanced: true,
         };
       },
       async saveNode() {
         const m = this.nodeModal;
-        if (!m.name.trim() || !m.baseUrl.trim()) {
+        // The minimal case is name + token: the hub auto-discovers the Base URL
+        // from the node's status endpoint. A typed Base URL is optional.
+        if (!m.name.trim() || !m.token.trim()) {
           this.$message.error(this.labels.requiredFields);
           return;
         }

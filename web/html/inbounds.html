@@ -102,7 +102,8 @@
                       <template v-if="!isMobile">{{ i18n "pages.inbounds.addGroups" }}</template>
                     </a-button>
                     <!-- Presets: one-click creation of inbounds with optimized defaults. -->
-                    <a-dropdown :trigger="['click']" v-if="!RESELLER.isReseller">
+                    <a-dropdown :trigger="['click']" v-if="!RESELLER.isReseller"
+                      @visible-change="(v) => { if (v) openPresets(); }">
                       <a-button icon="thunderbolt">
                         <template v-if="!isMobile">{{ i18n "pages.inbounds.inboundPresets" }}</template>
                       </a-button>
@@ -971,32 +972,45 @@
         this.loadingStates.spinning = spinning;
       },
       // ---- preset management ---------------------------------------------
-      // Load available presets from the server
+      // Load available presets from the server. Called lazily on first menu
+      // open and eagerly in created() so the menu is never empty when the
+      // operator first sees it.
+      presetsLoaded: false,
       async loadPresets() {
+        if (this.presetsLoaded && this.presets.length) return;
         const msg = await HttpUtil.get('/panel/api/inbounds/presets');
-        if (msg && msg.success && Array.isArray(msg.obj)) {
+        if (msg && msg.success && Array.isArray(msg.obj) && msg.obj.length) {
           this.presets = msg.obj;
+          this.presetsLoaded = true;
         }
+      },
+      // Open the presets menu: ensure the list is loaded first.
+      async openPresets() {
+        await this.loadPresets();
       },
       // Apply a preset to create a new inbound
       async applyPreset(key) {
+        await this.loadPresets();
         const preset = this.presets.find(p => p.name === key);
         if (!preset) return;
 
         this.$confirm({
-          title: this.$t ? this.$t('applyPreset') : 'Apply Preset',
+          title: '{{ i18n "pages.inbounds.applyPreset" }}',
           content: `Create "${preset.name}" with optimized settings?`,
+          okText: '{{ i18n "confirm" }}',
+          cancelText: '{{ i18n "cancel" }}',
           onOk: async () => {
             const msg = await HttpUtil.post('/panel/api/inbounds/addPreset', {
               preset: preset.name,
               remark: ''
             });
             if (msg && msg.success) {
-              this.$message.success('Inbound created: ' + preset.name);
+              this.$message.success('{{ i18n "pages.inbounds.toasts.inboundCreateSuccess" }}: ' + preset.name);
               await this.getDBInbounds();
             } else {
-              this.$message.error((msg && msg.msg) || 'Failed to create preset inbound');
+              this.$message.error((msg && msg.msg) || '{{ i18n "somethingWentWrong" }}');
             }
+          }
           }
         });
       },

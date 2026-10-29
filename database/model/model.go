@@ -1021,11 +1021,16 @@ func (NodePairingRequest) TableName() string { return "node_pairing_requests" }
 // NodeStatus is what the remote node's /panel/node/status endpoint reports. The
 // hub's Poll decodes it, but nothing here is persisted beyond Node's snapshot
 // fields; it exists so the wire format is one concrete type on both ends.
+//
+// BaseUrl is the node's own public address as it reached the requesting hub,
+// so a hub that knows only the token can still discover the URL to store on
+// its row. A blank value means "unspecified": the hub keeps the URL it had.
 type NodeStatus struct {
 	Version      string `json:"version"`
 	InboundCount int    `json:"inboundCount"`
 	AccountCount int    `json:"accountCount"`
 	OnlineCount  int    `json:"onlineCount"`
+	BaseUrl      string `json:"baseUrl"`
 }
 
 // NodeAccount is a hub-owned account hosted on a REMOTE node's inbound: the hub

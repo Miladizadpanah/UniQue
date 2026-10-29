@@ -98,7 +98,14 @@ func (s *NodeService) Save(n *model.Node) (*model.Node, error) {
 	if strings.TrimSpace(n.Name) == "" {
 		return nil, ErrNodeName
 	}
-	if !isHttpUrl(n.BaseUrl) {
+	// A node is addressable when it has a Base URL, OR when it has a token the
+	// hub can use to auto-discover the URL. The latter is the "operator only
+	// typed name + token" case: Save stores the row with a blank BaseUrl and
+	// the next Poll fills it in from the node's own status answer.
+	if strings.TrimSpace(n.BaseUrl) == "" && strings.TrimSpace(n.Token) == "" {
+		return nil, ErrNodeUrl
+	}
+	if n.BaseUrl != "" && !isHttpUrl(n.BaseUrl) {
 		return nil, ErrNodeUrl
 	}
 	n.BaseUrl = strings.TrimRight(strings.TrimSpace(n.BaseUrl), "/")
@@ -186,6 +193,12 @@ func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 			updates["inbound_count"] = status.InboundCount
 			updates["account_count"] = status.AccountCount
 			updates["online_count"] = status.OnlineCount
+			// Auto-discover the Base URL when the operator only gave a token:
+			// the node reports the address the hub reached it on, and the poll
+			// keeps it current. A typed URL is never overwritten.
+			if n.BaseUrl == "" && status.BaseUrl != "" {
+				updates["base_url"] = status.BaseUrl
+			}
 		}
 		// Fire a webhook alert on transition to online
 		s.fireNodeStatusWebhook(n, "node.online")
@@ -259,6 +272,27 @@ func (s *NodeService) PollAll() error {
 		}
 	}
 	return nil
+}
+
+// DiscoverNodeBaseUrl asks a node to report its own public base URL, so a
+// hub that knows only the node's token does not have to type the URL. The
+// node's /panel/node/status endpoint already returns the URL the panel
+// reached it on (scheme + host + base path); the hub reads that off the
+// first successful poll and uses it as the BaseUrl it stores.
+//
+// A blank BaseUrl on a node row therefore means "auto-discovered": the poller
+// keeps it current on every poll so a node that moves hosts does not need the
+// operator to re-edit it. A typed BaseUrl is trusted as-is (the operator may
+// point a node at a domain front the panel does not itself serve).
+func (s *NodeService) DiscoverNodeBaseUrl(n *model.Node) (string, error) {
+	st, err := fetchNodeStatus(n)
+	if err != nil {
+		return "", err
+	}
+	if st == nil || st.BaseUrl == "" {
+		return "", nil
+	}
+	return st.BaseUrl, nil
 }
 
 // LocalStatus is this panel's own snapshot, shaped like a remote one so the

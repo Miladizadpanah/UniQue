@@ -33,6 +33,30 @@ func GetVersion() string {
 	return strings.TrimSpace(version)
 }
 
+// panelRepoDefault is the GitHub owner/name the in-panel updater fetches release
+// assets from, stamped at build time via -ldflags. A fork's build script stamps
+// its own repo so the self-updater downloads from the fork; when it is left
+// empty (upstream builds, dev builds, or a build that did not pass the flag)
+// the updater falls back to the env override, then to the upstream repo.
+var panelRepoDefault string
+
+// GetPanelRepo answers which repo the in-panel updater should download the
+// binary and release notes from:
+//
+//  1. the build-time -ldflags value (what a fork's release binary carries),
+//  2. the VPNUI_REPO environment variable (an operator override on a running
+//     host, no recompile),
+//  3. the upstream default, so a never-stamped binary still works.
+func GetPanelRepo() string {
+	if r := strings.TrimSpace(panelRepoDefault); r != "" {
+		return r
+	}
+	if r := strings.TrimSpace(os.Getenv("VPNUI_REPO")); r != "" {
+		return r
+	}
+	return "Miladizadpanah/UniQue"
+}
+
 // GetName returns the name of the vpn-ui application.
 func GetName() string {
 	return strings.TrimSpace(name)

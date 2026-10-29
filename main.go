@@ -312,6 +312,17 @@ func runWebServer() {
 	// best-effort; see ensureMenuInstalled.
 	ensureMenuInstalled()
 
+	// Generate the panel's mTLS federation CA on first boot. Every build ships
+	// with a fresh 10-year ECDSA P-256 CA persisted to the settings table, so
+	// the /panel/node/mtls/ca and /panel/node/mtls/sign endpoints answer with a
+	// real cert out of the box. Best-effort: a host that cannot write the
+	// settings table (read-only DB) still boots, and the endpoints return an
+	// empty CA that a node's TLS layer refuses — the operator re-runs the
+	// panel once the DB is writable.
+	if merr := (&service.SettingService{}).EnsureMtlsCertsInitialized(); merr != nil {
+		logger.Warning("mTLS CA not initialized (will retry on next boot):", merr)
+	}
+
 	// The root-only control socket the `vpn-ui-amd64 ctl` CLI (and the vpn-ui menu)
 	// drives Xray and the daemons through. Started before the servers, so it is
 	// already answering by the time the panel is up, and NON-FATAL on failure: it is

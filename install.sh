@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # VPN-UI — one-line installer / updater for a server.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash
 #
 # This file is deliberately only a FRONT DOOR. The install itself lives in
 # deploy.sh, which already knows how to tell a fresh install from an in-place
@@ -16,18 +16,19 @@
 # (deploy.sh re-execs itself through sudo, which needs a readable script).
 #
 # Environment (all optional, read by deploy.sh):
+#   VPNUI_REPO=Miladizadpanah/UniQue2   repository to install from (default)
 #   VPNUI_REF=main            git ref to install from (branch or tag)
 #   PANEL_TLS=http|selfsign|letsencrypt   panel transport on a FRESH install
 #   DEPLOY_DOMAIN / DEPLOY_EMAIL / DEPLOY_CF_TOKEN   Let's Encrypt details
 #   IMPORT_DB=/root/backup.db move an existing 3x-ui/vpn-ui database in
 #
 # Usage:
-#   curl -fsSL <url>/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash
 #   sudo ./install.sh                    # from a checkout
-#   VPNUI_REF=v2.2.5 sudo ./install.sh   # pin a release
+#   VPNUI_REF=v2.9.1 sudo ./install.sh   # pin a release
 set -euo pipefail
 
-REPO="${VPNUI_REPO:-Miladizadpanah/UniQue}"
+REPO="${VPNUI_REPO:-Miladizadpanah/UniQue2}"
 REF="${VPNUI_REF:-main}"
 BASE="https://raw.githubusercontent.com/$REPO/$REF"
 

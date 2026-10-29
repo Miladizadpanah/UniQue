@@ -1,0 +1,84 @@
+{
+  "title": "vpn-ui Fleet",
+  "uid": "vpnui-fleet",
+  "schemaVersion": 39,
+  "tags": ["vpn-ui", "fleet", "xray"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "timezone": "browser",
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphPaneDefaults": {},
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Nodes Online",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "count(vpnui_node_online == 1)", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+        { "color": "red", "value": "0" },
+        { "color": "green", "value": "1" }
+      ] } }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Total Inbounds (fleet)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(vpnui_node_inbounds_total)", "refId": "A" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total Accounts (fleet)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(vpnui_node_accounts_total)", "refId": "A" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Panel Cores Up",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "vpnui_panel_cores_up", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [
+        { "color": "red", "value": "0" },
+        { "color": "orange", "value": "1" },
+        { "color": "green", "value": "4" }
+      ] } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Node Poll Latency (ms)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        { "expr": "vpnui_node_poll_latency_ms", "refId": "A", "legendFormat": "{{node}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Panel Traffic (total up / down)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "irate(vpnui_panel_traffic_up_total_bytes[5m])", "refId": "A", "legendFormat": "up" },
+        { "expr": "irate(vpnui_panel_traffic_down_total_bytes[5m])", "refId": "B", "legendFormat": "down" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Per-Node Online Clients",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "vpnui_node_online_clients", "refId": "A", "legendFormat": "{{node}}" }
+      ]
+    }
+  ],
+  "templating": { "list": [] },
+  "variables": [],
+  "schemaVersion": 39
+}

@@ -97,3 +97,5 @@ vpn-ui-amd64
 # local build/test artifacts (rendered page extractions)
 /*.html
 /nul
+
+3x-ui

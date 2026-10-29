@@ -45,6 +45,11 @@ the core rather than by a daemon, and they work as **inbounds and outbounds**:
 - Exporting account links as **TXT** and **PDF**
 - Ability to **Freeze** accounts
 - Added **checkboxes** to clients and **Inbound**s
+- **Inbound Presets** — one-click VLESS+REALITY, VLESS+TLS, Hysteria2, TUIC v5 (BBR), NaiveProxy, Shadowsocks 2022-blake3
+- **Prometheus metrics** at `/panel/metrics` — scrape it with any Prometheus or Grafana
+- **Webhook events** — `node.online`, `node.offline`, `user.created`, `user.deleted`, `traffic.limit_reached`, `inbound.created/deleted`, `node.disk_high`, `node.memory_high`
+- **mTLS federation** — the panel generates a self-signed 10-year CA, serves it at `/panel/node/mtls/ca`, and signs node client certs at `/panel/node/mtls/sign`
+- **Node anti-flapping** — a remote node is only marked offline after 3 consecutive failed polls; transient blips no longer flap the dashboard
 - **Bulk Operation** support:
     * Bulk change of accounts' traffic
     * Bulk change of accounts' days
@@ -78,7 +83,7 @@ the core rather than by a daemon, and they work as **inbounds and outbounds**:
 ## Installing the Panel
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash
 ```
 
 The same command **updates** an existing panel. On update it keeps the operator's

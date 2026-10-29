@@ -51,14 +51,58 @@ var (
 // for UpdatePanel: that path ends in restartPanel, whose no-systemd branch
 // syscall.Exec's os.Args back into itself. That is harmless for the panel, but from
 // a CLI process it would re-exec the CLI with its own `update` arguments, in a loop.
-const (
-	panelRepo      = "Miladizadpanah/UniQue"
-	PanelAsset     = "vpn-ui-amd64"
-	panelLatestAPI = "https://api.github.com/repos/" + panelRepo + "/releases/latest"
-	// PanelDownloadURL is the release asset both the in-panel updater and the CLI
-	// `update` subcommand download.
-	PanelDownloadURL = "https://github.com/" + panelRepo + "/releases/latest/download/" + PanelAsset
+// The in-panel updater resolves the release asset at BUILD time. A fork deploys
+// from its OWN repo (UniQue2 in this tree), so the default follows the repo the
+// binary was actually installed from; an operator can override both from the
+// overview without recompiling.
+var (
+	// panelRepoDefault is the repo the in-panel updater fetches release notes and
+	// the binary from. build.sh stamps it to the fork's repo at build time; when
+	// it is left empty (an un-stamped or dev build) it falls back to upstream.
+	panelRepoDefault = config.GetPanelRepo()
+	// PanelRepo and PanelDownloadURL are overridable at runtime from the panel's
+	// overview (settings keys panelRepo / panelDownloadURL), so a host installed
+	// from a fork updates from the fork, and a mis-pointed default is fixable
+	// without touching the binary.
+	PanelRepo        = panelRepoDefault
+	PanelDownloadURL = releaseDownloadURL(panelRepoDefault)
 )
+
+// PanelAsset is the release artifact name; both the installer and the updater
+// download exactly this file.
+const PanelAsset = "vpn-ui-amd64"
+
+// releaseDownloadURL builds the latest-release asset URL for one repo.
+func releaseDownloadURL(repo string) string {
+	if repo == "" {
+		repo = "Miladizadpanah/UniQue"
+	}
+	return "https://github.com/" + repo + "/releases/latest/download/" + PanelAsset
+}
+
+// panelLatestAPI is the GitHub API the updater asks for release metadata. It is
+// a var, not a const, because the repo is now runtime-configurable.
+var panelLatestAPI = latestReleaseAPI(panelRepoDefault)
+
+func latestReleaseAPI(repo string) string {
+	if repo == "" {
+		repo = "Miladizadpanah/UniQue"
+	}
+	return "https://api.github.com/repos/" + repo + "/releases/latest"
+}
+
+// SetPanelRepo overrides the update source at runtime (the overview's settings
+// write path). It re-derives both the download URL and the API URL, so a single
+// operator choice moves the whole updater.
+func SetPanelRepo(repo, downloadURL string) {
+	if strings.TrimSpace(repo) != "" {
+		PanelRepo = strings.TrimSpace(repo)
+		panelLatestAPI = latestReleaseAPI(PanelRepo)
+	}
+	if strings.TrimSpace(downloadURL) != "" {
+		PanelDownloadURL = strings.TrimSpace(downloadURL)
+	}
+}
 
 // PanelUpdateInfo reports the running version vs. the latest published release,
 // plus the release notes the overview shows before an operator commits to

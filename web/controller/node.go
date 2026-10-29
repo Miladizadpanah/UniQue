@@ -130,7 +130,19 @@ func (a *NodeController) nodeStatus(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	jsonObj(c, a.nodeService.LocalStatus(), nil)
+	jsonObj(c, a.localStatusWithBaseUrl(c), nil)
+}
+
+// localStatusWithBaseUrl is LocalStatus plus the panel's own public base URL,
+// so a hub that only holds this panel's token can discover the URL to store on
+// its row. The hub's Save reads it off the first poll and uses it as the
+// BaseUrl; a blank here means "unspecified" and the hub keeps what it had.
+func (a *NodeController) localStatusWithBaseUrl(c *gin.Context) *model.NodeStatus {
+	st := a.nodeService.LocalStatus()
+	if st != nil {
+		st.BaseUrl = a.baseUrl(c)
+	}
+	return st
 }
 
 // list returns the whole registry with each node's last snapshot.
@@ -152,6 +164,12 @@ func (a *NodeController) summary(c *gin.Context) {
 // save creates (on /add) or updates (on /update/:id) one node. The token field
 // is the remote panel's node status token; it is stored as-is and only ever sent
 // OUT to that remote node on the poll.
+//
+// A blank Base URL with a token present is the "auto-discovered" case: the hub
+// asks the node for its own public address (the node's /panel/node/status
+// reports it) and stores that, so the operator only has to type the node's
+// name and token. A typed Base URL is trusted as-is: it may point at a domain
+// front the panel does not itself serve.
 func (a *NodeController) save(c *gin.Context) {
 	var node model.Node
 	if err := c.ShouldBind(&node); err != nil {
@@ -165,6 +183,15 @@ func (a *NodeController) save(c *gin.Context) {
 			return
 		}
 		node.Id = id
+	}
+	// Auto-discover the Base URL when the operator only gave a token: the node's
+	// own status endpoint answers with the address the hub reached it on. Best
+	// effort — a node that is briefly unreachable still saves, and the next
+	// poll fills the URL in.
+	if strings.TrimSpace(node.BaseUrl) == "" && strings.TrimSpace(node.Token) != "" {
+		if discovered, derr := a.nodeService.DiscoverNodeBaseUrl(&node); derr == nil && discovered != "" {
+			node.BaseUrl = discovered
+		}
 	}
 	isNew := node.Id == 0
 	saved, err := a.nodeService.Save(&node)

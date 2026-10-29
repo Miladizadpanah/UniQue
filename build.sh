@@ -298,7 +298,20 @@ mkdir -p "$OUT_DIR"
 
 # Compile the panel itself. cgo is required: the native VPN daemons and the
 # xray core are linked in, so the binary only builds with CGO_ENABLED=1.
-CGO_ENABLED=1 GOARCH="$ARCH" go build -o "$OUT_BIN" main.go
+#
+# -ldflags stamps the panel's own repo so the in-panel self-updater
+# (config.GetPanelRepo / web/service/panelupdate.go) downloads the next release
+# from THIS fork rather than the upstream it was forked from. Derive it from
+# the remote that actually publishes these releases; fall back to the upstream
+# name when the remote is not configured (e.g. a local-only build).
+UPSTREAM_REPO="Miladizadpanah/UniQue"
+STAMP_REPO="${VPNUI_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^https://github.com/##; s#^git@github.com:##; s#\.git$##' | sed -E 's#.*/##')"
+if [[ -z "$STAMP_REPO" || "$STAMP_REPO" == "Miladizadpanah/UniQue" ]]; then
+    STAMP_REPO="$UPSTREAM_REPO"
+fi
+LDFLAGS="-X github.com/mhsanaei/3x-ui/v2/config.panelRepoDefault=$STAMP_REPO"
+info "stamping in-panel updater repo: $STAMP_REPO"
+CGO_ENABLED=1 GOARCH="$ARCH" go build -ldflags "$LDFLAGS" -o "$OUT_BIN" main.go
 
 hr
 ok "done: ${_CB:-}$(ls -lh "$OUT_BIN" | awk '{print $5}')${_CR:-} -> ${_CB:-}build/out/vpn-ui-${ARCH}${_CR:-}"

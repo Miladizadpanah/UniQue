@@ -892,7 +892,6 @@ func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 	presetName := c.PostForm("preset")
 	remark := c.PostForm("remark")
 
-	// Find the preset
 	var preset *service.InboundPreset
 	for _, p := range a.inboundService.Presets() {
 		if p.Name == presetName {
@@ -901,23 +900,31 @@ func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 		}
 	}
 	if preset == nil {
-		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), fmt.Errorf("preset not found"))
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), fmt.Errorf("preset not found: %s", presetName))
 		return
 	}
 
-	inbound, err := a.inboundService.PresetInbound(*preset, remark)
+	inbound, needRestart, err := a.inboundService.PresetInbound(*preset, remark)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
 
-	// Grant access
+	// Grant the creator access to their new inbound, the same way the add path does.
 	user := session.GetLoginUser(c)
 	if user != nil && !user.IsSuperAdmin {
-		accessService.GrantInbound(user.Id, inbound.Id)
+		if gerr := accessService.GrantInbound(user.Id, inbound.Id); gerr != nil {
+			logger.Warning("granting preset creator access to their inbound: ", gerr)
+		}
 	}
 
-	// Broadcast
+	// Project the new inbound onto any groups the caller scoped it to.
+	a.syncInboundAccounts(inbound.Id)
+
+	if needRestart {
+		a.xrayService.SetToNeedRestart()
+	}
+
 	inbounds, _ := a.inboundService.GetInboundsFor(user)
 	websocket.BroadcastInboundsToUser(user.Id, inbounds)
 

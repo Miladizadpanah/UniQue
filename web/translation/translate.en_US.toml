@@ -1779,5 +1779,11 @@
 "pairingFrom" = "wants to connect"
 "nodeMembershipsOk" = "Node memberships updated"
 
+"connection" = "Connection"
+"connStatus" = "Connection status"
+"speed" = "Tunnel speed"
+"exitIp" = "Exit IP"
+"latency" = "Latency"
+
 "pairingHub" = "Hub"
 "pairingWhen" = "Time"

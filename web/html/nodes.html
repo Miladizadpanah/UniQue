@@ -284,143 +284,60 @@
   </a-form>
 </a-modal>
 
-<!-- Manage a remote node: live traffic plus hot add / remove an account. The
-     hub reaches the node's own xray core, never its database. -->
-<a-modal v-model="manageModal.visible" :title="manageModal.node ? (labels.manage + ': ' + manageModal.node.name) : labels.manage"
-  :width="640" :class="themeSwitcher.currentTheme" :footer="null">
+<!-- Node connection + speed: what the operator actually cares about — is the
+     tunnel up, what's the node's exit IP, and how fast is it right now. No API,
+     no provisioning: the hub talks to the node through its token-gated API and
+     the tunnel is the node's own inbound, so there is nothing to "manage" here. -->
+<a-modal v-model="manageModal.visible" :title="manageModal.node ? (labels.connection + ': ' + manageModal.node.name) : labels.connection"
+  :width="600" :class="themeSwitcher.currentTheme" :footer="null">
   <div v-if="manageModal.node">
-    <a-alert v-if="!manageModal.node.pairingApproved" :message="labels.pairingNotApproved"
-      type="warning" show-icon :style="{ marginBottom: '12px' }"></a-alert>
-    <a-alert v-if="manageModal.node.xrayApiPort === 0" :message="labels.readOnly" type="warning" show-icon></a-alert>
-
-    <template v-if="manageModal.node.xrayApiPort > 0">
-      <a-card size="small" :title="labels.pullTraffic" :style="{ marginBottom: '12px' }">
-        <div :style="{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }">
-          <a-button icon="sync" :loading="manageModal.loadingTraffic" @click="refreshTraffic">
-            [[ labels.pullTraffic ]]
-          </a-button>
-          <template v-if="manageModal.traffic">
-            <a-statistic :title="labels.down" :value="fmtBytes(manageModal.traffic.down)"></a-statistic>
-            <a-statistic :title="labels.up" :value="fmtBytes(manageModal.traffic.up)"></a-statistic>
-            <a-statistic :title="labels.clients" :value="manageModal.traffic.clients"></a-statistic>
-          </template>
-          <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.pullHint ]]</span>
-        </div>
-      </a-card>
-
-      <a-card size="small" :title="labels.hotAdd" :style="{ marginBottom: '12px' }">
-        <a-row :gutter="[12, 12]">
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="labels.inboundTag" style="margin-bottom: 0">
-              <a-input v-model="manageModal.add.inboundTag" :placeholder="labels.inboundTagPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="labels.protocol" style="margin-bottom: 0">
-              <a-select v-model="manageModal.add.protocol">
-                <a-select-option value="vless">vless</a-select-option>
-                <a-select-option value="vmess">vmess</a-select-option>
-                <a-select-option value="trojan">trojan</a-select-option>
-                <a-select-option value="shadowsocks">shadowsocks</a-select-option>
-                <a-select-option value="hysteria2">hysteria2</a-select-option>
-                <a-select-option value="tuic">tuic</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="addValueLabel" style="margin-bottom: 0">
-              <a-input v-model="manageModal.add.value" :placeholder="labels.userIdPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="labels.email" style="margin-bottom: 0">
-              <a-input v-model="manageModal.add.email" :placeholder="labels.emailPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="12" v-if="manageModal.add.protocol === 'vless'">
-            <a-form-item :label="labels.flow" style="margin-bottom: 0">
-              <a-input v-model="manageModal.add.flow" :placeholder="labels.flowPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :span="24" :style="{ textAlign: 'right' }">
-            <a-button type="primary" icon="plus" :loading="manageModal.adding" @click="doHotAdd">
-              [[ labels.hotAdd ]]
-            </a-button>
-          </a-col>
-        </a-row>
-      </a-card>
-
-      <a-card size="small" :title="labels.hotRemove">
-        <a-row :gutter="[12, 12]">
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="labels.inboundTag" style="margin-bottom: 0">
-              <a-input v-model="manageModal.remove.inboundTag" :placeholder="labels.inboundTagPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="12">
-            <a-form-item :label="labels.email" style="margin-bottom: 0">
-              <a-input v-model="manageModal.remove.email" :placeholder="labels.emailPh"></a-input>
-            </a-form-item>
-          </a-col>
-          <a-col :span="24" :style="{ textAlign: 'right' }">
-            <a-button danger icon="delete" :loading="manageModal.removing" @click="doHotRemove">
-              [[ labels.hotRemove ]]
-            </a-button>
-          </a-col>
-        </a-row>
-      </a-card>
-    </template>
-
-    <!-- Federation: manage accounts on the NODE's own inbounds through its
-         token-gated panel API, independent of the core's write path. -->
-    <a-card size="small" :title="labels.remoteInbounds" :style="{ marginTop: '12px' }">
-      <a-row :gutter="[12, 12]">
-        <a-col :xs="24" :md="4">
-          <a-button block icon="sync" :loading="manageModal.loadingInb"
-            :disabled="!manageModal.node.pairingApproved" @click="loadInbounds">
-            [[ labels.refresh ]]
-          </a-button>
-        </a-col>
-        <a-col :xs="24" :md="8">
-          <a-button block icon="plus" :loading="manageModal.ensuring"
-            :disabled="!manageModal.node.pairingApproved" @click="ensureInbounds">
-            [[ labels.ensureInbounds ]]
-          </a-button>
-        </a-col>
-        <a-col :xs="24" :md="16">
-          <a-select v-model="manageModal.inbId" style="width: 100%"
-            :disabled="!manageModal.node.pairingApproved"
-            :placeholder="labels.inbounds + ' (load)'">
-            <a-select-option v-for="i in manageModal.inbounds" :key="i.id" :value="i.id">
-              [[ i.tag + ' · ' + i.protocol + ' : ' + i.port ]]
-            </a-select-option>
-          </a-select>
-        </a-col>
-        <a-col :xs="24" :md="8">
-          <a-input v-model="manageModal.prov.email" :placeholder="labels.emailPh"></a-input>
-        </a-col>
-        <a-col :xs="24" :md="8">
-          <a-input-number v-model="manageModal.prov.totalGb" :min="0" style="width: 100%"
-            :placeholder="labels.limitBytes"></a-input-number>
-        </a-col>
-        <a-col :xs="24" :md="8">
-          <a-input-number v-model="manageModal.prov.expireDays" :min="0" style="width: 100%"
-            :placeholder="labels.expiryMs"></a-input-number>
-        </a-col>
-        <a-col :xs="24" :md="8">
-          <a-input v-model="manageModal.prov.subId" placeholder="subId (optional)"></a-input>
-        </a-col>
-        <a-col :xs="24" :md="16" :style="{ textAlign: 'right' }">
-          <a-button type="primary" icon="plus" :loading="manageModal.prov.sending"
-            :disabled="!manageModal.node.pairingApproved" @click="doProvision">
-            [[ labels.provision ]]
-          </a-button>
-        </a-col>
-      </a-row>
-      <div v-if="manageModal.prov.link" :style="{ marginTop: '12px' }">
-        <a-alert type="success" show-icon :message="manageModal.prov.link" style="word-break: break-all"></a-alert>
-        <a :style="{ marginTop: '6px', display: 'inline-block' }" @click="copyText(manageModal.prov.link)">{{ i18n "copy" }}</a>
+    <!-- Connection status: online flag + last seen + the exit IP the customer's
+         traffic actually leaves from (the node's public host, not the panel's). -->
+    <a-card size="small" :title="labels.connStatus" :style="{ marginBottom: '12px' }">
+      <div :style="{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }">
+        <a-badge :status="manageModal.node.online ? 'success' : 'error'">
+          <span>[[ manageModal.node.online ? labels.online : labels.offline ]]</span>
+        </a-badge>
+        <span :style="{ color: 'var(--text-3)' }">
+          [[ manageModal.node.lastSeen ? labels.lastSeen + ': ' + IntlUtil.formatDate(manageModal.node.lastSeen / 1000000000) : labels.neverPolled ]]
+        </span>
       </div>
+      <div class="bo-cf-kv" :style="{ marginTop: '10px' }">
+        <span>{{ i18n "pages.nodes.exitIp" }}</span>
+        <b>[[ nodeHost(manageModal.node) ]]</b>
+      </div>
+      <div class="bo-cf-kv">
+        <span>{{ i18n "pages.nodes.latency" }}</span>
+        <b class="num">[[ manageModal.node.latencyMs ]] ms</b>
+      </div>
+    </a-card>
+
+    <!-- Live speed: pull the node's core stats through the token-gated API.
+         This is the "tunnel speed" — how much is moving through this node right
+         now, up and down. -->
+    <a-card size="small" :title="labels.speed" :style="{ marginBottom: '12px' }">
+      <div :style="{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }">
+        <a-button icon="sync" :loading="manageModal.loadingTraffic" @click="refreshTraffic">
+          [[ labels.refresh ]]
+        </a-button>
+        <template v-if="manageModal.traffic">
+          <a-statistic :title="labels.down" :value="fmtBytes(manageModal.traffic.down)"></a-statistic>
+          <a-statistic :title="labels.up" :value="fmtBytes(manageModal.traffic.up)"></a-statistic>
+          <a-statistic :title="labels.clients" :value="manageModal.traffic.clients"></a-statistic>
+        </template>
+        <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.pullHint ]]</span>
+      </div>
+    </a-card>
+
+    <!-- The node's own inbounds this hub serves through it, read-only: the
+         operator sees exactly which inbounds the tunnel carries and their ports. -->
+    <a-card size="small" :title="labels.remoteInbounds">
+      <div v-if="!manageModal.inbounds.length" :style="{ color: 'var(--text-3)' }">[[ labels.pullHint ]]</div>
+      <a-table v-else :columns="inbCols" :data-source="manageModal.inbounds"
+        :pagination="false" size="small" :row-key="i => i.id"
+        :locale='{ emptyText: `{{ i18n "noData" }}` }' :style="{ marginTop: '8px' }">
+        <template slot="ep" slot-scope="t, r">[[ r.tag ]] : [[ r.port ]]</template>
+      </a-table>
     </a-card>
   </div>
 </a-modal>
@@ -455,12 +372,9 @@
         xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
       },
       manageModal: {
-        visible: false, node: null, loadingTraffic: false, adding: false, removing: false,
+        visible: false, node: null, loadingTraffic: false,
         traffic: null,
-        add: { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' },
-        remove: { inboundTag: '', email: '' },
-        inbounds: [], inbId: null, loadingInb: false, ensuring: false,
-        prov: { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' },
+        inbounds: [], loadingInb: false,
       },
       labels: {
         add: '{{ i18n "pages.nodes.add" }}',
@@ -497,6 +411,11 @@
         apiCaPem: '{{ i18n "pages.nodes.apiCaPem" }}',
         apiCaPemPh: '{{ i18n "pages.nodes.apiCaPemPh" }}',
         manage: '{{ i18n "pages.nodes.manage" }}',
+        connection: '{{ i18n "pages.nodes.connection" }}',
+        connStatus: '{{ i18n "pages.nodes.connStatus" }}',
+        speed: '{{ i18n "pages.nodes.speed" }}',
+        exitIp: '{{ i18n "pages.nodes.exitIp" }}',
+        latency: '{{ i18n "pages.nodes.latency" }}',
         hotAdd: '{{ i18n "pages.nodes.hotAdd" }}',
         hotRemove: '{{ i18n "pages.nodes.hotRemove" }}',
         pullTraffic: '{{ i18n "pages.nodes.pullTraffic" }}',
@@ -564,6 +483,12 @@
         { title: 'link', align: 'left', ellipsis: true, scopedSlots: { customRender: 'accLink' } },
         { title: '', align: 'center', width: 90, scopedSlots: { customRender: 'accAction' } },
       ],
+      // The connection modal's read-only inbound list: which inbounds this node
+      // serves and on which ports — the tunnel the hub's accounts ride.
+      inbCols: [
+        { title: 'inbound', align: 'left', scopedSlots: { customRender: 'ep' } },
+        { title: 'protocol', dataIndex: 'protocol', align: 'center', width: 110 },
+      ],
     },
     computed: {
       // This panel first, then the registered remotes, so the dashboard always
@@ -602,7 +527,7 @@
       // The add-form credential label follows the protocol: ID for vless/vmess/tuic,
       // password for trojan/ss/anytls/naive, auth for hysteria.
       addValueLabel() {
-        const p = this.manageModal.add.protocol;
+        const p = this.manageModal.add && this.manageModal.add.protocol;
         if (p === 'vless' || p === 'vmess' || p === 'tuic') return this.labels.valueId;
         if (p === 'hysteria2' || p === 'hysteria') return this.labels.valueAuth;
         return this.labels.valuePassword;
@@ -720,18 +645,28 @@
         navigator.clipboard.writeText(text).then(() => this.$message.success('{{ i18n "copied" }}'))
           .catch(() => this.$message.error('{{ i18n "copyFailed" }}'));
       },
+      // The node's exit IP: the host the customer's app actually dials, which is
+      // the node's public host (its BaseUrl's hostname), not the hub's. Falls
+      // back to the raw base URL when the host cannot be parsed.
+      nodeHost(node) {
+        if (!node || !node.baseUrl) return '';
+        try {
+          const u = new URL(node.baseUrl);
+          return u.hostname;
+        } catch (e) {
+          return node.baseUrl;
+        }
+      },
       // --- write path --------------------------------------------------------
       openManage(node) {
         this.manageModal.node = node;
         this.manageModal.traffic = null;
-        this.manageModal.add = { inboundTag: '', protocol: 'vless', value: '', flow: '', email: '' };
-        this.manageModal.remove = { inboundTag: '', email: '' };
         this.manageModal.inbounds = [];
-        this.manageModal.inbId = null;
-        this.manageModal.ensuring = false;
-        this.manageModal.prov = { email: '', totalGb: null, expireDays: null, subId: '', sending: false, link: '' };
         this.manageModal.visible = true;
         this.loadInbounds();
+        // Pull live speed + online counts the moment the modal opens, so the
+        // operator sees the tunnel's current state without a second click.
+        this.refreshTraffic();
       },
       async refreshTraffic() {
         const n = this.manageModal.node;
@@ -746,64 +681,20 @@
           this.$message.success('{{ i18n "pages.nodes.pullOk" }}');
         }
       },
-      // Build the protocol-appropriate user map from the single credential field.
-      addUserMap() {
-        const a = this.manageModal.add;
-        const user = { email: a.email };
-        switch (a.protocol) {
-          case 'vless':
-          case 'vmess':
-            user.id = a.value;
-            if (a.flow) user.flow = a.flow;
-            break;
-          case 'trojan':
-          case 'shadowsocks':
-          case 'anytls':
-          case 'naive':
-            user.password = a.value;
-            break;
-          case 'hysteria2':
-          case 'hysteria':
-            user.auth = a.value;
-            break;
-          case 'tuic':
-            user.id = a.value;
-            user.password = a.value;
-            break;
-        }
-        return user;
-      },
-      async doHotAdd() {
+      // Refresh the read-only inbound list: which inbounds this node serves and
+      // on which ports — the tunnel the hub's accounts ride. Pure read; the
+      // write path lives on the node's own operator panel, so there is nothing
+      // to hot-add or provision here.
+      async loadInbounds() {
         const n = this.manageModal.node;
-        const a = this.manageModal.add;
-        if (!a.inboundTag.trim() || !a.email.trim() || !a.value.trim()) {
-          this.$message.error(this.labels.requiredFields);
-          return;
-        }
-        this.manageModal.adding = true;
-        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/hotAdd`, {
-          inboundTag: a.inboundTag, protocol: a.protocol, user: this.addUserMap(),
-        });
-        this.manageModal.adding = false;
-        if (msg && msg.success) {
-          this.$message.success('{{ i18n "pages.nodes.hotAddOk" }}');
-          this.manageModal.add = { inboundTag: a.inboundTag, protocol: a.protocol, value: '', flow: '', email: '' };
-        }
+        if (!n) return;
+        this.manageModal.loadingInb = true;
+        const msg = await HttpUtil.get(`/panel/api/nodes/${n.id}/inbounds`);
+        this.manageModal.loadingInb = false;
+        if (msg && msg.success) this.manageModal.inbounds = msg.obj || [];
       },
-      async doHotRemove() {
-        const n = this.manageModal.node;
-        const r = this.manageModal.remove;
-        if (!r.inboundTag.trim() || !r.email.trim()) {
-          this.$message.error(this.labels.requiredFields);
-          return;
-        }
-        this.manageModal.removing = true;
-        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/hotRemove`, {
-          inboundTag: r.inboundTag, email: r.email,
-        });
-        this.manageModal.removing = false;
-        if (msg && msg.success) this.$message.success('{{ i18n "pages.nodes.hotRemoveOk" }}');
-      },
+      // Generate a fresh node API token (the credential remote panels use to
+      // register against this hub).
       async genToken() {
         this.genTok = true;
         const msg = await HttpUtil.post('/panel/api/nodes/token/generate');
@@ -814,65 +705,14 @@
           this.$message.success('{{ i18n "pages.nodes.tokenGenerated" }}');
         }
       },
+      // One-shot save & verify: poll status + inbounds so a bad token or URL
+      // surfaces at save time instead of as a silently-offline node.
       async testNode(node) {
         const msg = await HttpUtil.post(`/panel/api/nodes/${node.id}/test`);
         if (msg && msg.success && msg.obj) {
           const o = msg.obj;
           this.$message.success(`{{ i18n "pages.nodes.testOk" }}: ${o.online ? '{{ i18n "pages.nodes.online" }}' : '{{ i18n "pages.nodes.offline" }}'}, ${o.inboundCount ?? 0} {{ i18n "pages.nodes.inbounds" }}`);
           await this.load();
-        }
-      },
-      async loadInbounds() {
-        const n = this.manageModal.node;
-        if (!n) return;
-        this.manageModal.loadingInb = true;
-        const msg = await HttpUtil.get(`/panel/api/nodes/${n.id}/inbounds`);
-        this.manageModal.loadingInb = false;
-        if (!msg || !msg.success) return;
-        this.manageModal.inbounds = msg.obj || [];
-        const has = (p) => this.manageModal.inbounds.some(i => i.enable && i.protocol === p);
-        // Auto-provision the dedicated pair on the node when it lacks one:
-        // reading comes first, creating only what is missing. Never before the
-        // pairing decision: the node refuses writes from an unapproved hub, and
-        // firing it here would only surface a 403 in the operator's face.
-        if (n.pairingApproved && (!has('vless') || !has('vmess'))) {
-          this.ensureInbounds();
-          return;
-        }
-        if (!this.manageModal.inbId)
-          this.manageModal.inbId = this.manageModal.inbounds[0].id;
-      },
-      async ensureInbounds() {
-        const n = this.manageModal.node;
-        if (!n || this.manageModal.ensuring) return;
-        this.manageModal.ensuring = true;
-        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/ensureInbounds`);
-        this.manageModal.ensuring = false;
-        if (msg && msg.success) {
-          this.manageModal.inbounds = msg.obj || [];
-          if (this.manageModal.inbounds.length && !this.manageModal.inbId)
-            this.manageModal.inbId = this.manageModal.inbounds[0].id;
-          this.$message.success('{{ i18n "pages.nodes.ensureInboundsOk" }}');
-        }
-      },
-      async doProvision() {
-        const n = this.manageModal.node;
-        const p2 = this.manageModal.prov;
-        if (!n || !this.manageModal.inbId || !p2.email.trim()) {
-          this.$message.error('{{ i18n "pages.nodes.requiredFields" }}');
-          return;
-        }
-        p2.sending = true;
-        const msg = await HttpUtil.post(`/panel/api/nodes/${n.id}/addClient`, {
-          inboundId: this.manageModal.inbId, email: p2.email,
-          totalGb: p2.totalGb || 0, expireDays: p2.expireDays || 0, subId: p2.subId || '',
-        });
-        p2.sending = false;
-        if (msg && msg.success) {
-          p2.link = (msg.obj && msg.obj.link) || '';
-          p2.email = '';
-          this.$message.success('{{ i18n "pages.nodes.hotAddOk" }}');
-          this.loadNodeAccounts(this.accountsNode);
         }
       },
       async loadNodeAccounts(nodeId) {

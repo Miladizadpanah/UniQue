@@ -2535,6 +2535,14 @@ func nodeHostFromBaseUrl(baseUrl string) string {
 // it. The snapshot's listen address is whatever the node binds locally, so it
 // is rewritten to the node's public host before the panel's own link
 // generator runs — one code path for every protocol, local and remote alike.
+//
+// The node's public host comes from the Node row's BaseUrl. When that is blank
+// (a node added before BaseUrl auto-discovery, or one whose poll has not yet
+// filled it in), the link would dial nothing and the subscription would show
+// "No inbounds" even though the account exists on the node. Fall back to the
+// snapshot's own listen address so the account still produces a working link
+// the moment the node's IP is reachable; the poller's auto-discovery then
+// upgrades the BaseUrl on the next cycle.
 func (s *SubService) NodeAccountLink(na *model.NodeAccount) string {
 	var inb model.Inbound
 	if err := json.Unmarshal([]byte(na.InboundSnapshot), &inb); err != nil {
@@ -2542,7 +2550,15 @@ func (s *SubService) NodeAccountLink(na *model.NodeAccount) string {
 	}
 	host := nodeHostFromBaseUrl(na.Node.BaseUrl)
 	if host == "" {
-		return ""
+		// No discovered BaseUrl yet: the snapshot's listen is the node's local
+		// bind, which is the best available dial target. A "0.0.0.0"/"::" bind
+		// means the node listens on all interfaces, so the customer's app has
+		// to use the node's public address — which we do not have, so there is
+		// nothing honest to dial; skip rather than ship a link to 0.0.0.0.
+		if inb.Listen == "" || inb.Listen == "0.0.0.0" || inb.Listen == "::" || inb.Listen == "::0" {
+			return ""
+		}
+		host = inb.Listen
 	}
 	// A per-call service: the dial-address override must never touch a shared
 	// instance (the subscriber router builds one SubService at start-up and

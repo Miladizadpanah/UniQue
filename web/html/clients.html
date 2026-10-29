@@ -508,16 +508,16 @@
 
                     <!-- Add from the client rows this page is showing -->
                     <div style="margin-top: 8px; display: flex; gap: 6px">
-                      <a-select size="small" v-model="g._addId" show-search
-                        placeholder='{{ i18n "pages.clients.groupAdd" }}'
+                      <a-select size="small" v-model="g._addIds" mode="multiple" show-search
+                        :placeholder="i18n 'pages.clients.groupAdd'"
                         :filter-option="cgFilterOption"
-                        style="width: 260px"
+                        style="width: 320px; flex: 1"
                         :dropdownClassName="themeSwitcher.currentTheme">
                         <a-select-option v-for="c in addableClients(g)" :key="c.id"
                           :value="c.id" :label="c.email">[[ c.email ]]</a-select-option>
                       </a-select>
                       <a-button size="small" icon="plus" @click="addToGroup(g)">
-                        {{ i18n "pages.clients.groupAdd" }}
+                        {{ i18n "pages.clients.groupAdd" }} ([[ (g._addIds || []).length ]])
                       </a-button>
                     </div>
                   </div>
@@ -595,7 +595,9 @@
       nodeOptions: [],
       // The operator's per-user client groups (the folders the client list is
       // organized by), managed through the Groups modal. Each group's _editing /
-      // _name / _addId are local view-state added on load, not part of the row.
+      // _name / _addIds are local view-state added on load, not part of the row.
+      // _addIds is a multi-select: the operator can pick several clients at once
+      // and add them to the group in one write.
       clientGroups: [],
       groupsModal: false,
       newGroupName: '',
@@ -990,7 +992,7 @@
         const msg = await HttpUtil.get('/panel/api/clients/groups');
         if (msg && msg.success) {
           this.clientGroups = (msg.obj || []).map(g =>
-            Object.assign({ _editing: false, _name: g.name, _addId: null }, g));
+            Object.assign({ _editing: false, _name: g.name, _addIds: [] }, g));
         }
       },
       openGroups() {
@@ -1056,11 +1058,16 @@
         return String(t).toLowerCase().includes(input.toLowerCase());
       },
       async addToGroup(g) {
-        const id = g._addId;
-        if (!id) return;
-        g._addId = null;
+        // Multiple clients at once: the picker is a multi-select, and every
+        // picked id is added in a single commit so the group's inbound
+        // projection happens once for the whole batch, not per client.
+        const ids = g._addIds || [];
+        if (!ids.length) return;
+        g._addIds = [];
         const current = (g.members || []).map(m => m.id);
-        if (!current.includes(id)) current.push(id);
+        for (const id of ids) {
+          if (!current.includes(id)) current.push(id);
+        }
         await this.commitMembers(g, current);
       },
       async removeFromGroup(g, id) {

@@ -1496,5 +1496,11 @@
 "pairingFrom" = "می‌خواهد متصل شود"
 "nodeMembershipsOk" = "عضویت نودها به‌روزرسانی شد"
 
+"connection" = "اتصال"
+"connStatus" = "وضعیت اتصال"
+"speed" = "سرعت تونل"
+"exitIp" = "آی‌پی خروجی"
+"latency" = "تأخیر"
+
 "pairingHub" = "پنل درخواست‌کننده"
 "pairingWhen" = "زمان"

@@ -528,6 +528,7 @@ const (
 	nodeInboundsPath  = "/panel/node/inbounds"
 	nodeClientsPath   = "/panel/node/clients"
 	nodeDelClientPath = "/panel/node/delClient"
+	nodePurgePath     = "/panel/node/purge"
 )
 
 // nodeAPIResponse is the panel's standard JSON envelope every endpoint answers
@@ -674,6 +675,17 @@ func (s *NodeService) RemoteCreateClient(n *model.Node, req NodeClientCreate) (*
 func (s *NodeService) RemoteDeleteClient(n *model.Node, inboundId int, email string) error {
 	body := map[string]any{"inboundId": inboundId, "email": email}
 	return nodeAPIRoundTrip(n, http.MethodPost, nodeDelClientPath, body, nil)
+}
+
+// RemotePurgeByHub tells the node to drop every account the hub provisioned on
+// it, by the set of emails the hub still tracked under this node. Called right
+// before the hub deletes its Node row, so the destination stops serving
+// orphaned accounts the moment the operator says goodbye to the node. Best
+// effort from the hub's view: the node's own inbounds keep running, but the
+// accounts that belonged to this hub go away with it.
+func (s *NodeService) RemotePurgeByHub(n *model.Node, emails []string) error {
+	body := map[string]any{"emails": emails}
+	return nodeAPIRoundTrip(n, http.MethodPost, nodePurgePath, body, nil)
 }
 
 // TestNode is the "save & verify" round trip: one status poll (which also

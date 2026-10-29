@@ -232,6 +232,28 @@ func (a *NodeController) del(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), perr)
 		return
 	}
+	// Gather this node's hub-provisioned emails BEFORE deleting the row, so the
+	// destination node can be told to drop exactly those accounts. Best effort:
+	// a purge that fails (node offline, not paired) must not block the local
+	// delete — the operator is still allowed to retire a node, and the
+	// destination's own operator can clean up its strays separately.
+	node, gerr := a.nodeService.Get(id)
+	var purgeErr error
+	if gerr == nil && node != nil && node.BaseUrl != "" {
+		accounts, _ := a.nodeService.ListNodeAccounts(id, "")
+		emails := make([]string, 0, len(accounts))
+		for i := range accounts {
+			if accounts[i].Email != "" {
+				emails = append(emails, accounts[i].Email)
+			}
+		}
+		if len(emails) > 0 {
+			purgeErr = a.nodeService.RemotePurgeByHub(node, emails)
+			if purgeErr != nil {
+				logger.Warning("node delete: remote purge of", node.Name, "failed:", purgeErr)
+			}
+		}
+	}
 	if err := a.nodeService.Delete(id); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

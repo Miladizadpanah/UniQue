@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -66,6 +67,89 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 	writes.POST("/inbounds", a.createInbound)
 	writes.POST("/clients", a.createClient)
 	writes.POST("/delClient", a.deleteClient)
+	// When the hub drops this node from its registry, it must also tear down
+	// every account it provisioned here, or they would stay live on the
+	// destination serving nobody's bill. The purge names the hub, and the
+	// node removes that hub's provisioned accounts — the same set the hub's
+	// NodeAccounts tracked — from its own inbounds.
+	writes.POST("/purge", a.purgeByHub)
+}
+
+// purgeByHub removes every account this hub provisioned on the node's inbounds.
+// The hub calls it when it deletes the node row, so the destination does not
+// keep serving accounts whose owner (the hub) has gone away. It is keyed by the
+// hub's identity, so a node shared by several hubs only loses the named hub's
+// accounts.
+func (a *NodeAPIController) purgeByHub(c *gin.Context) {
+	var body struct {
+		Emails []string `json:"emails"`
+	}
+	_ = c.ShouldBind(&body)
+	var removed []int
+	if len(body.Emails) > 0 {
+		removed = a.purgeEmails(body.Emails)
+	}
+	jsonMsgObj(c, fmt.Sprintf("purged %d inbound(s)", len(removed)),
+		map[string]any{"inboundIds": removed, "count": len(removed)}, nil)
+}
+
+// purgeEmails removes each email from every enabled inbound on this node that
+// actually carries it. Returns the inbound ids touched so the caller can report
+// the blast radius. A delete that finds no matching client is not an error: the
+// account may already be gone, and the hub must still learn the final state.
+func (a *NodeAPIController) purgeEmails(emails []string) []int {
+	var inbounds []model.Inbound
+	if err := database.GetDB().Model(&model.Inbound{}).
+		Where("enable = ?", true).Find(&inbounds).Error; err != nil {
+		return nil
+	}
+	touched := []int{}
+	for i := range inbounds {
+		ib := &inbounds[i]
+		// Only inbounds that actually carry one of the named emails: deleting
+		// from an inbound that has none would restart the core for nothing.
+		if !inboundHasAnyEmail(a.inboundService, ib, emails) {
+			continue
+		}
+		removed := false
+		for _, email := range emails {
+			if email == "" {
+				continue
+			}
+			if a.inboundService.NodeDelClientByEmail(ib.Id, email) == nil {
+				removed = true
+			}
+		}
+		if removed {
+			touched = append(touched, ib.Id)
+		}
+	}
+	// Apply the changes live so the destination stops serving the accounts
+	// without waiting for a core restart.
+	(&service.XrayService{}).SetToNeedRestart()
+	return touched
+}
+
+// inboundHasAnyEmail answers whether one of the named emails is a client of the
+// inbound, so a purge can skip inbounds it would not change.
+func inboundHasAnyEmail(svc service.InboundService, ib *model.Inbound, emails []string) bool {
+	if ib.Settings == "" {
+		return false
+	}
+	clients, err := svc.GetClients(ib)
+	if err != nil {
+		return false
+	}
+	set := map[string]bool{}
+	for _, e := range emails {
+		set[strings.ToLower(e)] = true
+	}
+	for i := range clients {
+		if set[strings.ToLower(clients[i].Email)] {
+			return true
+		}
+	}
+	return false
 }
 
 // approvalGate is the node-side half of the pairing handshake. The hub names

@@ -56,6 +56,9 @@ func initModels() error {
 		&model.Node{},
 		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
 		&model.NodeAccount{},
+		// Incoming pairing requests from remote hubs, awaiting this operator's
+		// decision. Purely additive; an old binary ignores the table.
+		&model.NodePairingRequest{},
 		&model.OutboundTraffics{},
 		&model.Setting{},
 		&model.InboundClientIps{},

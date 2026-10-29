@@ -5828,11 +5828,22 @@ func (s *InboundService) DelInboundClientByEmail(inboundId int, email string) (b
 // email and the limits). The shape is shared: the hub's NodeService posts it,
 // and this panel's NodeAPIController binds it.
 type NodeClientCreate struct {
-	InboundId  int    `json:"inboundId" form:"inboundId"`
-	Email      string `json:"email" form:"email"`
-	TotalGb    int64  `json:"totalGb" form:"totalGb"`
-	ExpireDays int    `json:"expireDays" form:"expireDays"`
+	InboundId int    `json:"inboundId" form:"inboundId"`
+	Email     string `json:"email" form:"email"`
+	// TotalGb is BYTES, like model.Client.TotalGB.
+	TotalGb int64 `json:"totalGb" form:"totalGb"`
+	// ExpireDays is the older, day-granularity shape the Nodes page's provision
+	// box still posts. ExpiryTime wins when both are present.
+	ExpireDays int `json:"expireDays" form:"expireDays"`
+	// ExpiryTime is the exact deadline in Unix milliseconds. Negative keeps the
+	// local model's "days from first use" meaning (the magnitude is the delay).
+	// The client form sends this so an account created here and one created on
+	// the hub age identically.
+	ExpiryTime int64  `json:"expiryTime" form:"expiryTime"`
 	Flow       string `json:"flow" form:"flow"`
+	// Enable is optional so the Nodes page's older provision call (which does not
+	// send it) still creates an enabled account. nil means enabled.
+	Enable *bool `json:"enable" form:"enable"`
 }
 
 // NodeInboundCreate is the hub's request to make ONE dedicated federation
@@ -5878,13 +5889,13 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 		settings = `{"clients":[]}`
 	}
 	inbound := &model.Inbound{
-		Listen:       "0.0.0.0",
-		Port:         port,
-		Protocol:     p,
-		Tag:          NodeFedTagPrefix + protocol,
-		Settings:     settings,
+		Listen:         "0.0.0.0",
+		Port:           port,
+		Protocol:       p,
+		Tag:            NodeFedTagPrefix + protocol,
+		Settings:       settings,
 		StreamSettings: `{"network":"tcp"}`,
-		Enable:       true,
+		Enable:         true,
 	}
 	saved, needRestart, err := s.AddInbound(inbound)
 	if err != nil {
@@ -5970,15 +5981,24 @@ func (s *InboundService) NodeAddClient(req NodeClientCreate) (model.Client, erro
 	}
 
 	cred := s.generateRandomCredential(inbound.Protocol)
-	client := model.Client{Email: email, Enable: true, TotalGB: req.TotalGb}
-	if req.ExpireDays > 0 {
+	enabled := true
+	if req.Enable != nil {
+		enabled = *req.Enable
+	}
+	client := model.Client{Email: email, Enable: enabled, TotalGB: req.TotalGb}
+	switch {
+	case req.ExpiryTime != 0:
+		// Exact deadline (or a negative delayed-start duration), so the node's
+		// account ages exactly like the hub's account.
+		client.ExpiryTime = req.ExpiryTime
+	case req.ExpireDays > 0:
 		client.ExpiryTime = time.Now().AddDate(0, 0, req.ExpireDays).UnixMilli()
 	}
 
 	// The settings entry uses the protocol's credential keys, exactly as
 	// applyAccountCredential writes them. One entry, appended to the inbound's
 	// stored clients, is all AddInboundClient expects to splice in.
-	entry := map[string]any{"email": email, "enable": true}
+	entry := map[string]any{"email": email, "enable": enabled}
 	switch inbound.Protocol {
 	case model.VMESS, model.VLESS:
 		client.ID = cred

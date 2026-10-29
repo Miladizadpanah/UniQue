@@ -345,6 +345,14 @@ func (s *SettingService) SetTgBotToken(token string) error {
 	return s.setString("tgBotToken", token)
 }
 
+func (s *SettingService) GetWebhooks() (string, error) {
+	return s.getString("webhooks")
+}
+
+func (s *SettingService) SetWebhooks(url string) error {
+	return s.setString("webhooks", url)
+}
+
 func (s *SettingService) GetTgBotProxy() (string, error) {
 	return s.getString("tgBotProxy")
 }

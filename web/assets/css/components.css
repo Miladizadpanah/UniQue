@@ -1339,6 +1339,23 @@ html[data-theme-animations='off'] .log-live-dot { animation:none; }
 .bo-cf-ib.on { border-color:var(--accent); background:var(--accent-weak); }
 .bo-cf-ib .ant-checkbox-wrapper { width:100%; }
 
+/* The federation groups in the client form: one block per approved node. The
+   head says WHERE the traffic exits (node name + its public host), which is
+   the whole point of the group, so the host rides the head, not a footnote. */
+.bo-cf-node {
+  border:1px solid var(--border); border-radius:8px;
+  margin-bottom:8px; overflow:hidden;
+}
+.bo-cf-node-head {
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  padding:8px 10px;
+  background:var(--accent-weak, rgba(0,0,0,0.03));
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+}
+.bo-cf-node-head .ant-tag { margin-inline-end:0; }
+.bo-cf-node .bo-cf-ib:last-child { margin-bottom:0; }
+
 /* The bulk form reuses the shell above, and adds three things to it.
 
    A rail value that is a name rather than a figure (the target inbound) can be

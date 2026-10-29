@@ -47,6 +47,10 @@
           <span>{{ i18n "pages.clients.inbounds" }}</span>
           <b>[[ clientMembershipModal.selected.length ]]</b>
         </div>
+        <div class="bo-cf-kv" v-if="clientMembershipModal.nodeSelected.length">
+          <span>{{ i18n "pages.clients.nodesSection" }}</span>
+          <b>[[ clientMembershipModal.nodeSelected.length ]]</b>
+        </div>
       </div>
 
       <div class="bo-cf-tabs" role="tablist">
@@ -249,11 +253,55 @@
           message='{{ i18n "pages.clients.sameProtocolRefused" }}'></a-alert>
         <!-- Ticking nothing is allowed and saves. It is stated here because an empty
              checklist otherwise reads as a form that is not finished yet, and this
-             one is a decision: the account keeps everything and serves nobody. -->
-        <a-alert v-if="!clientMembershipModal.selected.length" type="warning" show-icon
+             one is a decision: the account keeps everything and serves nobody.
+             Node groups below count as a selection, so the warning only shows
+             when BOTH are empty. -->
+        <a-alert v-if="!clientMembershipModal.selected.length && !clientMembershipModal.nodeSelected.length" type="warning" show-icon
           :style="{ marginTop: '12px' }"
           message='{{ i18n "pages.clients.noInbounds" }}'
           description='{{ i18n "pages.clients.noInboundsHint" }}'></a-alert>
+
+        <!-- Remote node groups: one block per APPROVED node, drawn from the
+             hub's federation registry. Ticking an inbound attaches this client
+             to that node — its traffic exits through the node's own IP, and
+             the link rides the hub's subscription. Unapproved or unreachable
+             nodes are absent by design, not hidden. -->
+        <div v-if="clientMembershipModal.nodeOptions.length" :style="{ marginTop: '14px' }">
+          <div :style="{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }">
+            <a-icon type="deployment-unit"></a-icon>
+            <b>{{ i18n "pages.clients.nodesSection" }}</b>
+          </div>
+          <div v-for="opt in clientMembershipModal.nodeOptions" :key="opt.node.id"
+            class="bo-cf-node">
+            <div class="bo-cf-node-head">
+              <a-icon type="global"></a-icon>
+              <b>{{ i18n "pages.clients.nodeLabel" }}: [[ opt.node.name ]]</b>
+              <span class="bo-dim" v-if="clientMembershipModal.nodeHost(opt.node)">
+                [[ clientMembershipModal.nodeHost(opt.node) ]]
+              </span>
+              <a-tag color="green">{{ i18n "pages.nodes.pairingConnected" }}</a-tag>
+            </div>
+            <a-checkbox-group v-model="clientMembershipModal.nodeSelected" :style="{ width: '100%' }">
+              <div class="bo-cf-ib" v-for="ib in opt.inbounds" :key="opt.node.id + '-' + ib.id"
+                :class="{ on: clientMembershipModal.nodeSelected.includes(opt.node.id + ':' + ib.id) }">
+                <a-checkbox :value="opt.node.id + ':' + ib.id">
+                  [[ ib.remark || ib.tag || ('#' + ib.id) ]]
+                  <a-tag>[[ ib.protocol ]]</a-tag>
+                  <span class="bo-dim">:[[ ib.port ]]</span>
+                </a-checkbox>
+              </div>
+            </a-checkbox-group>
+          </div>
+          <a-alert type="info" show-icon :style="{ marginTop: '10px' }"
+            message='{{ i18n "pages.clients.nodeMemberHint" }}'></a-alert>
+        </div>
+
+        <!-- The local part saved but the node part failed: say so in place and
+             let OK retry ONLY the node sync (the local account already exists). -->
+        <a-alert v-if="clientMembershipModal.nodeSyncError" type="error" show-icon
+          :style="{ marginTop: '12px' }"
+          message='[[ clientMembershipModal.nodeSyncError ]]'
+          description='{{ i18n "pages.clients.nodeSyncPartial" }}'></a-alert>
       </template>
       <!-- Credentials: field-first, because the account stores ONE of each and
            several protocols share them. -->
@@ -400,6 +448,22 @@
     // The group folders handed in by the page; empty for a role that cannot
     // read them, in which case no chips render and the checklist is unchanged.
     groups: [],
+    // The federation groups: per approved node, the inbounds it serves. Empty
+    // when the panel has no approved nodes (the common single-server case) and
+    // for roles without the node permission — then the section simply does not
+    // render, which is the right answer for both.
+    nodeOptions: [],
+    // Ticks in the node groups, as "nodeId:remoteInboundId" keys.
+    nodeSelected: [],
+    // The account's CURRENT node memberships as fetched on open: the diff base
+    // for the save, and the reason a sync must run even when no node group is
+    // visible (a node-only client whose hub lists the options elsewhere).
+    nodeMembers: [],
+    // Set after the LOCAL save lands, so a retry after a node-sync failure
+    // does not re-create the account (its email is taken by then).
+    localSaved: false,
+    // The node-sync failure shown in place; cleared on a successful retry.
+    nodeSyncError: '',
     selected: [],
     totalGb: 0,
     days: 0,
@@ -537,9 +601,14 @@
       };
     },
 
-    show({ row = null, storedBy = {}, assignable = [], groups = [], onDone = null }) {
+    async show({ row = null, storedBy = {}, assignable = [], groups = [], nodeOptions = [], onDone = null }) {
       this.assignable = assignable;
       this.groups = groups || [];
+      this.nodeOptions = nodeOptions || [];
+      this.nodeMembers = [];
+      this.nodeSelected = [];
+      this.localSaved = false;
+      this.nodeSyncError = '';
       this.onDone = onDone;
       this.isEdit = !!row;
       this.row = row;
@@ -570,6 +639,10 @@
           ? Math.max(0, Math.ceil((row.expiryTime - Date.now()) / 86400000))
           : (row.expiryTime < 0 ? Math.round(Math.abs(row.expiryTime) / 86400000) : 0);
         this.selected = (row.memberships || []).map(m => m.inboundId);
+        // The account's node-hosted memberships, pre-checked when the groups
+        // are visible; kept either way, because a sync on save must remove the
+        // ones the operator unticks even when the group section is hidden.
+        await this.loadNodeMembers(row.email);
         // null on the wire is what "inherits the inbound" looks like, and it has to
         // come back as an EMPTY box rather than as a 0: 0 is a real value in two of
         // these three fields and means unlimited. Number(null) is 0, so the null
@@ -1014,13 +1087,33 @@
       }
 
       this.confirmLoading = true;
-      const msg = this.isEdit ? await this.saveEdit(email, ids)
-                              : await this.saveNew(email, ids);
-      this.confirmLoading = false;
+      // First pass: the local account. A later pass (localSaved set) only
+      // retries the node sync, because re-running saveNew would hit the
+      // duplicate-email guard and saveEdit would re-address an unchanged write.
+      let msg;
+      if (this.localSaved) {
+        msg = { success: true };
+      } else {
+        msg = this.isEdit ? await this.saveEdit(email, ids)
+                          : await this.saveNew(email, ids);
+        if (msg && msg.success) this.localSaved = true;
+      }
       if (msg && msg.success) {
+        // The node-hosted memberships ride on top of the local account: created
+        // and removed on their node through the node's own panel. A failure
+        // there keeps the form open with the reason in place — the local save
+        // stands, the operator fixes the node problem and presses OK again.
+        const nmsg = await this.syncNodeMembers(email);
+        if (nmsg && !nmsg.success) {
+          this.confirmLoading = false;
+          this.nodeSyncError = nmsg.msg ? String(nmsg.msg) : String(nmsg);
+          return;
+        }
+        this.confirmLoading = false;
         this.close();
         if (this.onDone) this.onDone();
       }
+      this.confirmLoading = false;
     },
 
     // Every way out of this form goes through here. pickDate is the important
@@ -1031,6 +1124,58 @@
       this.visible = false;
       this.pickDate = false;
       this.confirmLoading = false;
+    },
+
+    // The node's public host, for the "exits through here" line: the hostname
+    // of the node's base url — the IP the customer's traffic actually exits
+    // from. The port is deliberately NOT shown: the panel's management port is
+    // not the inbound's port, and the link itself carries the inbound port.
+    nodeHost(node) {
+      try {
+        const u = new URL(node.baseUrl);
+        return u.hostname;
+      } catch (e) {
+        return node.baseUrl || '';
+      }
+    },
+    // The account's node-hosted memberships, as "nodeId:remoteInboundId" keys.
+    // A 403 (no node permission) or an unreachable answer leaves both empty:
+    // the form then offers no groups and removes nothing, which is the safe
+    // read of "I cannot see them".
+    async loadNodeMembers(email) {
+      if (!email) return;
+      const msg = await HttpUtil.get('/panel/api/nodes/nodeMemberships?email=' + encodeURIComponent(email));
+      if (msg && msg.success) {
+        this.nodeMembers = msg.obj || [];
+        this.nodeSelected = this.nodeMembers.slice();
+      }
+    },
+    // Make the account's node-hosted memberships match the ticks. Runs AFTER
+    // the local save; the refs cover adds AND removals, so an empty list is a
+    // real answer ("on no node anymore") whenever there is anything to diff
+    // against. No groups, nothing ticked, nothing stored: nothing to do.
+    async syncNodeMembers(email) {
+      if (!this.nodeOptions.length && !this.nodeSelected.length && !this.nodeMembers.length) {
+        return null;
+      }
+      const refs = this.nodeSelected.map(key => {
+        const i = key.indexOf(':');
+        return { nodeId: Number(key.slice(0, i)), remoteInboundId: Number(key.slice(i + 1)) };
+      });
+      return await HttpUtil.post('/panel/api/nodes/nodeMemberships', {
+        email: email,
+        subId: this.client.subId || '',
+        // BYTES: the server's NodeClientCreate speaks the same unit the local
+        // save uses. Sending the form's GB value here made every node quota
+        // 2^30 times too small.
+        totalGb: (this.totalGb || 0) * 1073741824,
+        // The exact deadline (or negative delayed-start duration), not a day
+        // count: a delayed-start account must not begin counting when the hub
+        // creates it on the node.
+        expiryTime: this.postedExpiry(),
+        enable: this.client.enable !== false,
+        refs: refs,
+      });
     },
 
     // The entry to post, in the shape the ADDRESSED inbound's protocol expects.

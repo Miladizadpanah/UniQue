@@ -76,6 +76,8 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getClientTrafficsById/:id", read, a.getClientTrafficsById)
 
 	g.POST("/add", requirePerm(model.PermCreateInbound), a.addInbound)
+	g.POST("/addPreset", requirePerm(model.PermCreateInbound), a.addInboundFromPreset)
+	g.GET("/presets", read, a.listPresets)
 	// Display order only. Gated on editInbound rather than on the read bit because
 	// the order is the PANEL's, not the viewer's: one admin's drag moves the row in
 	// every other admin's list too, which is not something a read-only account (or a
@@ -883,6 +885,48 @@ func (a *InboundController) addInbound(c *gin.Context) {
 	// every other admin a table that isn't theirs.
 	inbounds, _ := a.inboundService.GetInboundsFor(user)
 	websocket.BroadcastInboundsToUser(user.Id, inbounds)
+}
+
+// addInboundFromPreset creates a new inbound from a preset with optimized defaults.
+func (a *InboundController) addInboundFromPreset(c *gin.Context) {
+	presetName := c.PostForm("preset")
+	remark := c.PostForm("remark")
+
+	// Find the preset
+	var preset *service.InboundPreset
+	for _, p := range a.inboundService.Presets() {
+		if p.Name == presetName {
+			preset = &p
+			break
+		}
+	}
+	if preset == nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), fmt.Errorf("preset not found"))
+		return
+	}
+
+	inbound, err := a.inboundService.PresetInbound(*preset, remark)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+
+	// Grant access
+	user := session.GetLoginUser(c)
+	if user != nil && !user.IsSuperAdmin {
+		accessService.GrantInbound(user.Id, inbound.Id)
+	}
+
+	// Broadcast
+	inbounds, _ := a.inboundService.GetInboundsFor(user)
+	websocket.BroadcastInboundsToUser(user.Id, inbounds)
+
+	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+}
+
+// listPresets returns all available inbound presets.
+func (a *InboundController) listPresets(c *gin.Context) {
+	jsonObj(c, a.inboundService.Presets(), nil)
 }
 
 // delInbound deletes an inbound configuration by its ID.

@@ -101,7 +101,19 @@
                       @click="openGroupsModal">
                       <template v-if="!isMobile">{{ i18n "pages.inbounds.addGroups" }}</template>
                     </a-button>
-                    <!-- Presets: removed - saved inbound templates are no longer offered. -->
+                    <!-- Presets: one-click creation of inbounds with optimized defaults. -->
+                    <a-dropdown :trigger="['click']" v-if="!RESELLER.isReseller">
+                      <a-button icon="thunderbolt">
+                        <template v-if="!isMobile">{{ i18n "pages.inbounds.inboundPresets" }}</template>
+                      </a-button>
+                      <a-menu slot="overlay" @click="a => applyPreset(a)"
+                        :theme="themeSwitcher.currentTheme">
+                        <a-menu-item v-for="p in presets" :key="p.name" :title="p.description">
+                          <a-icon :type="p.recommended ? 'star' : 'bolt'"></a-icon>
+                          [[ p.name ]]
+                        </a-menu-item>
+                      </a-menu>
+                    </a-dropdown>
                     <a-dropdown :trigger="['click']">
                       <a-button type="primary" icon="menu">
                         <template v-if="!isMobile">{{ i18n
@@ -948,10 +960,45 @@
       clientGroupOptions: [],
       scopeInbound: { visible: false, id: 0, groups: [] },
       scopeSaving: false,
+      // Presets for quick inbound creation
+      presets: [],
+    },
+    created() {
+      this.loadPresets();
     },
     methods: {
       loading(spinning = true) {
         this.loadingStates.spinning = spinning;
+      },
+      // ---- preset management ---------------------------------------------
+      // Load available presets from the server
+      async loadPresets() {
+        const msg = await HttpUtil.get('/panel/api/inbounds/presets');
+        if (msg && msg.success && Array.isArray(msg.obj)) {
+          this.presets = msg.obj;
+        }
+      },
+      // Apply a preset to create a new inbound
+      async applyPreset(key) {
+        const preset = this.presets.find(p => p.name === key);
+        if (!preset) return;
+
+        this.$confirm({
+          title: this.$t ? this.$t('applyPreset') : 'Apply Preset',
+          content: `Create "${preset.name}" with optimized settings?`,
+          onOk: async () => {
+            const msg = await HttpUtil.post('/panel/api/inbounds/addPreset', {
+              preset: preset.name,
+              remark: ''
+            });
+            if (msg && msg.success) {
+              this.$message.success('Inbound created: ' + preset.name);
+              await this.getDBInbounds();
+            } else {
+              this.$message.error((msg && msg.msg) || 'Failed to create preset inbound');
+            }
+          }
+        });
       },
       // ---- client-group scoping ("who may use this inbound") ----------------
       // Open the picker for one inbound: load the group options once, then the

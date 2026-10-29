@@ -993,10 +993,30 @@ type Node struct {
 	// ApiCaPem is the PEM CA bundle used to pin the node's API certificate in
 	// verify mode. Optional; blank in insecure/skip.
 	ApiCaPem string `json:"apiCaPem" form:"apiCaPem" gorm:"default:''"`
+	// PairingApproved: true once the remote node operator has explicitly approved
+	// THIS hub's connection request. Poll flips it on/off as the remote pairing
+	// status changes. Unapproved nodes stay read-only (status polling only).
+	PairingApproved bool `json:"pairingApproved" gorm:"default:0"`
 }
 
 // TableName pins the table name.
 func (Node) TableName() string { return "nodes" }
+
+// NodePairingRequest is a pending (or decided) request from a HUB panel asking
+// to federate with this node. The node's operator sees it on the Nodes page and
+// approves or declines it. One row per hub, keyed by hub name. Status is
+// "pending" until the operator decides ("approved" / "declined").
+type NodePairingRequest struct {
+	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	HubName   string `json:"hubName" gorm:"uniqueIndex"`
+	HubUrl    string `json:"hubUrl" gorm:"index"`
+	Status    string `json:"status" gorm:"default:'pending'"`
+	CreatedAt int64  `json:"createdAt"`
+	DecidedAt int64  `json:"decidedAt"`
+}
+
+// TableName pins the table name.
+func (NodePairingRequest) TableName() string { return "node_pairing_requests" }
 
 // NodeStatus is what the remote node's /panel/node/status endpoint reports. The
 // hub's Poll decodes it, but nothing here is persisted beyond Node's snapshot

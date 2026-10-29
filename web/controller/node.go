@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
+	"github.com/mhsanaei/3x-ui/v2/util/common"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 )
 
@@ -57,6 +60,13 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	// call it without a panel login; the token is the only credential.
 	g.GET("/panel/node/status", a.nodeStatus)
 
+	// Deleting a client also removes the accounts this hub provisioned for it on
+	// remote nodes. That is client management, not fleet configuration, so it
+	// carries the client-delete permission and the same ownership check as the
+	// local delete routes instead of the Xray-settings bit the Nodes API uses.
+	g.POST("/panel/api/nodes/nodeMemberships/del/:email",
+		requirePerm(model.PermDeleteClient), requireClientAccess(), a.delNodeMembershipsByEmail)
+
 	// The hub's management API. Node management is core-configuration-class work,
 	// so it takes the Xray settings bit, matching other fleet-wide settings.
 	nodes := g.Group("/panel/api/nodes")
@@ -89,6 +99,17 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	// the customer gets.
 	nodes.GET("/nodeAccounts", a.listNodeAccounts)
 	nodes.POST("/nodeAccounts/del/:id", a.delNodeAccount)
+	// Pairing: the hub's half of the handshake (ask this node's operator to
+	// approve), and THIS panel's incoming requests for its own operator to
+	// decide.
+	nodes.POST("/:id/requestPairing", a.requestPairing)
+	nodes.GET("/pairings", a.listPairings)
+	nodes.POST("/pairings/decide/:id", a.decidePairing)
+	// The client form's remote groups: the inbounds an approved node serves,
+	// and the attach/detach of one client's node-hosted accounts.
+	nodes.GET("/nodeOptions", a.nodeOptions)
+	nodes.GET("/nodeMemberships", a.listNodeMemberships)
+	nodes.POST("/nodeMemberships", a.syncNodeMemberships)
 	// Mint a fresh random token for THIS panel's node API, replacing the old one.
 	nodes.POST("/token/generate", a.generateToken)
 }
@@ -145,10 +166,34 @@ func (a *NodeController) save(c *gin.Context) {
 		}
 		node.Id = id
 	}
+	isNew := node.Id == 0
 	saved, err := a.nodeService.Save(&node)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
+	}
+	// Adding a node with a token sends the pairing request straight away, so the
+	// destination operator's incoming-requests list fills without a second click.
+	// It is best-effort: an old or briefly unreachable node must not fail the
+	// save, and the Nodes page still offers the explicit Request action. A node
+	// that is already approved (a re-add under the same hub name) is provisioned
+	// immediately, which is what keeps the add flow turnkey.
+	if isNew && saved.Token != "" {
+		status, perr := a.nodeService.RemotePairingRequest(saved, service.NodeHubIdentity(), a.baseUrl(c))
+		if perr != nil {
+			logger.Warning("pairing request for new node", saved.Name, ":", perr)
+		} else if status == service.PairingApproved {
+			if uerr := database.GetDB().Model(&model.Node{}).Where("id = ?", saved.Id).
+				Update("pairing_approved", true).Error; uerr != nil {
+				logger.Warning("recording pairing approval for node", saved.Name, ":", uerr)
+			}
+			if fresh, gerr := a.nodeService.Get(saved.Id); gerr == nil {
+				saved = fresh
+			}
+			if _, ferr := a.nodeService.EnsureFedInbounds(saved); ferr != nil {
+				logger.Warning("provisioning federation inbounds on", saved.Name, ":", ferr)
+			}
+		}
 	}
 	jsonObj(c, saved, nil)
 }
@@ -207,8 +252,8 @@ func (a *NodeController) hotAdd(c *gin.Context) {
 		return
 	}
 	var body struct {
-		InboundTag string     `json:"inboundTag" form:"inboundTag"`
-		Protocol   string     `json:"protocol" form:"protocol"`
+		InboundTag string         `json:"inboundTag" form:"inboundTag"`
+		Protocol   string         `json:"protocol" form:"protocol"`
 		User       map[string]any `json:"user" form:"user"`
 	}
 	if err := c.ShouldBind(&body); err != nil {
@@ -329,10 +374,27 @@ func (a *NodeController) test(c *gin.Context) {
 	}, err)
 }
 
+// requireApproved is the hub-side half of the pairing handshake: the
+// federation write paths only run on a node whose operator APPROVED this
+// panel's connection request. Status polling stays open — approval governs
+// writing to the node, not watching it.
+func (a *NodeController) requireApproved(c *gin.Context) (*model.Node, bool) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return nil, false
+	}
+	if !node.PairingApproved {
+		jsonMsg(c, I18nWeb(c, "pages.nodes.pairingNotApproved"),
+			common.NewError("node", node.Name, "has not approved this panel's connection request yet"))
+		return nil, false
+	}
+	return node, true
+}
+
 // nodeInbounds lists the node's enabled inbounds, settings blob included: the
 // hub's UI shows them and snapshots one when it creates an account on it.
 func (a *NodeController) nodeInbounds(c *gin.Context) {
-	node, ok := a.nodeByID(c)
+	node, ok := a.requireApproved(c)
 	if !ok {
 		return
 	}
@@ -347,7 +409,7 @@ func (a *NodeController) nodeInbounds(c *gin.Context) {
 // can dial one immediately. Reading stays first: existing inbounds are used,
 // never duplicated.
 func (a *NodeController) ensureInbounds(c *gin.Context) {
-	node, ok := a.nodeByID(c)
+	node, ok := a.requireApproved(c)
 	if !ok {
 		return
 	}
@@ -360,7 +422,7 @@ func (a *NodeController) ensureInbounds(c *gin.Context) {
 // ownership row and the inbound snapshot, and from there the account rides the
 // hub's subscriptions, pointing the customer's app at the node.
 func (a *NodeController) nodeAddClient(c *gin.Context) {
-	node, ok := a.nodeByID(c)
+	node, ok := a.requireApproved(c)
 	if !ok {
 		return
 	}
@@ -426,7 +488,7 @@ func (a *NodeController) nodeDelClient(c *gin.Context) {
 	if err := a.nodeService.RemoteDeleteClient(node, body.InboundId, body.Email); err != nil {
 		logger.Warning("remote client delete on node", node.Name, ":", err)
 	}
-	if err := a.nodeService.DelNodeAccountByEmail(node.Id, body.Email); err != nil {
+	if err := a.nodeService.DelNodeAccountByRef(node.Id, body.InboundId, body.Email); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
@@ -491,4 +553,157 @@ func (a *NodeController) generateToken(c *gin.Context) {
 		return
 	}
 	jsonObj(c, gin.H{"token": token, "baseUrl": a.baseUrl(c)}, nil)
+}
+
+// ---------------------------------------------------------------------------
+// Pairing, hub side: ask the node's operator to approve this panel, and the
+// operator's view of the requests THIS panel has received.
+// ---------------------------------------------------------------------------
+
+// requestPairing is the hub's ask: register this panel with the node for
+// approval and report the state straight away when a decision already exists.
+// A just-returned approval lands on the row now; the poll keeps it current
+// from there (and flips it off if the node operator ever declines it).
+func (a *NodeController) requestPairing(c *gin.Context) {
+	node, ok := a.nodeByID(c)
+	if !ok {
+		return
+	}
+	status, err := a.nodeService.RemotePairingRequest(node, service.NodeHubIdentity(), a.baseUrl(c))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if status == service.PairingApproved {
+		// The snapshot fields are owned by the poller (Save's update map
+		// excludes them), so the approval flag gets its own single-column
+		// write rather than a full save.
+		if uerr := database.GetDB().Model(&model.Node{}).Where("id = ?", node.Id).Update("pairing_approved", true).Error; uerr != nil {
+			jsonMsg(c, I18nWeb(c, "somethingWentWrong"), uerr)
+			return
+		}
+		// The approval is the unlock: make the dedicated pair present on the node
+		// right now instead of waiting for the next poll. Reading comes first
+		// inside EnsureFedInbounds, so existing inbounds are reused, not duplicated.
+		node.PairingApproved = true
+		if _, ferr := a.nodeService.EnsureFedInbounds(node); ferr != nil {
+			logger.Warning("pairing approved but federation inbounds on", node.Name, "are not ready:", ferr)
+		}
+	}
+	jsonObj(c, gin.H{"status": status}, nil)
+}
+
+// listPairings is this panel's incoming connection requests: what the operator
+// still has to decide. Newest first, as stored.
+func (a *NodeController) listPairings(c *gin.Context) {
+	reqs, err := a.nodeService.ListPairings()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, reqs, nil)
+}
+
+// decidePairing is the node operator's call: approve (the two panels become a
+// federation — the two dedicated inbounds are made present HERE, created when
+// absent, so the hub can provision the moment it hears back) or decline.
+func (a *NodeController) decidePairing(c *gin.Context) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), perr)
+		return
+	}
+	var body struct {
+		Approve bool `json:"approve" form:"approve"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if err := a.nodeService.DecidePairing(id, body.Approve); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if body.Approve {
+		for _, protocol := range []string{string(model.VLESS), string(model.VMESS)} {
+			if _, ferr := a.inboundService.CreateNodeFedInbound(protocol); ferr != nil {
+				logger.Warning("pairing approval: fed inbound", protocol, "not ready:", ferr)
+			}
+		}
+	}
+	jsonMsg(c, I18nWeb(c, "pages.nodes.pairingDecided"), nil)
+}
+
+// ---------------------------------------------------------------------------
+// Node groups for the client's membership form.
+// ---------------------------------------------------------------------------
+
+// nodeOptions is the remote groups: per approved node, the inbounds it serves
+// right now. The client form draws one "Node: <name>" block out of each.
+func (a *NodeController) nodeOptions(c *gin.Context) {
+	jsonObj(c, a.nodeService.NodeInboundOptions(), nil)
+}
+
+// listNodeMemberships is one client's current node-hosted memberships, as the
+// form's "nodeId:remoteInboundId" keys — what the checkboxes pre-check.
+func (a *NodeController) listNodeMemberships(c *gin.Context) {
+	email := strings.TrimSpace(c.Query("email"))
+	if email == "" {
+		jsonObj(c, []string{}, nil)
+		return
+	}
+	accounts, err := a.nodeService.ListNodeAccountsByEmail(email)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	refs := make([]string, 0, len(accounts))
+	for i := range accounts {
+		refs = append(refs, service.NodeRefKey(accounts[i].NodeId, accounts[i].RemoteInboundId))
+	}
+	jsonObj(c, refs, nil)
+}
+
+// syncNodeMemberships makes the client's node-hosted accounts match the form's
+// ticks: adds create them on their node, removals drop them there and here.
+// Runs after the local save, so a client can live on node inbounds only.
+func (a *NodeController) syncNodeMemberships(c *gin.Context) {
+	var body struct {
+		Email      string                      `json:"email" form:"email"`
+		SubId      string                      `json:"subId" form:"subId"`
+		TotalGb    int64                       `json:"totalGb" form:"totalGb"`
+		ExpiryTime int64                       `json:"expiryTime" form:"expiryTime"`
+		Enable     *bool                       `json:"enable" form:"enable"`
+		Refs       []service.NodeMembershipRef `json:"refs" form:"refs"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	enable := true
+	if body.Enable != nil {
+		enable = *body.Enable
+	}
+	if err := a.nodeService.SyncNodeMemberships(body.Email, body.SubId, body.TotalGb, body.ExpiryTime, enable, body.Refs); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.nodes.nodeMembershipsOk"), nil)
+}
+
+// delNodeMembershipsByEmail removes every remote account this hub owns for one
+// client, the cleanup half of deleting the client. Rows whose node could not be
+// reached are reported back and kept, so the operator can retry rather than
+// orphan an account on a node they no longer track.
+func (a *NodeController) delNodeMembershipsByEmail(c *gin.Context) {
+	email := strings.TrimSpace(c.Param("email"))
+	if email == "" {
+		jsonObj(c, gin.H{"failed": []string{}}, nil)
+		return
+	}
+	failed := a.nodeService.DeleteNodeMembershipsForEmail(email)
+	if failed == nil {
+		failed = []string{}
+	}
+	jsonObj(c, gin.H{"failed": failed}, nil)
 }

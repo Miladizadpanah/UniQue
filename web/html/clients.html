@@ -589,6 +589,10 @@
       // inbound at a time. Best-effort: a role that cannot read groups just gets
       // no chips, and nothing else about either form changes.
       inboundGroups: [],
+      // The federation groups for the client form: per approved node, the
+      // inbounds it serves. Empty when no node is approved (or the role lacks
+      // the node permission) — the form's node section then stays hidden.
+      nodeOptions: [],
       // The operator's per-user client groups (the folders the client list is
       // organized by), managed through the Groups modal. Each group's _editing /
       // _name / _addId are local view-state added on load, not part of the row.
@@ -967,6 +971,13 @@
         const msg = await HttpUtil.get('/panel/api/inbounds/groups');
         if (msg && msg.success && Array.isArray(msg.obj)) this.inboundGroups = msg.obj;
       },
+      // The approved nodes and the inbounds they serve, for the client form's
+      // remote groups. A 403 (no node permission) or a down node leaves the
+      // list empty — the section simply does not render.
+      async loadNodeOptions() {
+        const msg = await HttpUtil.get('/panel/api/nodes/nodeOptions');
+        if (msg && msg.success && Array.isArray(msg.obj)) this.nodeOptions = msg.obj;
+      },
       async loadAssignable() {
         const msg = await HttpUtil.get('/panel/api/clients/assignable');
         if (msg && msg.success) this.assignable = msg.obj || [];
@@ -1089,7 +1100,7 @@
       },
       async reload(showSpin) {
         if (showSpin) this.spinning = true;
-        await Promise.all([this.getDBInbounds(), this.loadOnlineState(), this.loadAssignable(), this.loadInboundGroups(), this.loadClientGroups()]);
+        await Promise.all([this.getDBInbounds(), this.loadOnlineState(), this.loadAssignable(), this.loadInboundGroups(), this.loadClientGroups(), this.loadNodeOptions()]);
         this.spinning = false;
       },
 
@@ -1246,7 +1257,10 @@
       // server mints whatever credential each protocol needs. Editing one
       // membership's protocol fields is what openEdit is for.
       openAdd() {
-        clientMembershipModal.show({ assignable: this.assignable, groups: this.inboundGroups, onDone: () => this.getDBInbounds() });
+        clientMembershipModal.show({
+          assignable: this.assignable, groups: this.inboundGroups,
+          nodeOptions: this.nodeOptions, onDone: () => this.getDBInbounds(),
+        });
       },
       // The SAME form as add, opened on an existing account. There used to be a
       // second, older one here (modals/clientsModal + form/client), reached from
@@ -1256,7 +1270,8 @@
       openEdit(row) {
         clientMembershipModal.show({
           row, storedBy: this.storedClients(row),
-          assignable: this.assignable, groups: this.inboundGroups, onDone: () => this.getDBInbounds(),
+          assignable: this.assignable, groups: this.inboundGroups,
+          nodeOptions: this.nodeOptions, onDone: () => this.getDBInbounds(),
         });
       },
       // Bulk add opens straight onto the form. The inbounds are ticked inside it,
@@ -1473,12 +1488,22 @@
           const msg = await HttpUtil.post(
             `/panel/api/inbounds/delAccount/${encodeURIComponent(row.email)}`);
           if (!msg || !msg.success) stuck.push(row.email);
-          return stuck;
+        } else {
+          for (const m of (row.memberships || [])) {
+            const msg = await HttpUtil.post(
+              `/panel/api/inbounds/${m.inboundId}/delClientByEmail/${encodeURIComponent(row.email)}`);
+            if (!msg || !msg.success) stuck.push(m.remark || (m.protocol + ':' + m.port));
+          }
         }
-        for (const m of (row.memberships || [])) {
-          const msg = await HttpUtil.post(
-            `/panel/api/inbounds/${m.inboundId}/delClientByEmail/${encodeURIComponent(row.email)}`);
-          if (!msg || !msg.success) stuck.push(m.remark || (m.protocol + ':' + m.port));
+        // ...and the same client may also own accounts on remote nodes: the
+        // federation writes are keyed by email, not by a local inbound. They are
+        // independent of the local result (a client deleted here but left live
+        // there is an unbilled account), so they run either way and report the
+        // nodes that could not be reached.
+        const nodeMsg = await HttpUtil.post(
+          `/panel/api/nodes/nodeMemberships/del/${encodeURIComponent(row.email)}`);
+        if (nodeMsg && nodeMsg.success && nodeMsg.obj && Array.isArray(nodeMsg.obj.failed)) {
+          for (const n of nodeMsg.obj.failed) stuck.push(n);
         }
         return stuck;
       },

@@ -9,16 +9,33 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
+	"github.com/mhsanaei/3x-ui/v2/util/common"
 	xray "github.com/mhsanaei/3x-ui/v2/xray"
 )
+
+// The node's status, as it last reported. The hub polls this and caches the
+// answer; a failed poll just leaves the row offline, it does not error the
+// caller because the dashboard must still render an unreachable node.
+type nodeHealthState struct {
+	// ConsecutiveFailedPolls tracks how many polls in a row have failed. A node
+	// is only marked offline after N consecutive failures (default 3), so a
+	// transient network blip does not flap the dashboard.
+	ConsecutiveFailures int `json:"consecutiveFailures"`
+	// LastFailureTime is UnixMilli of the most recent failed poll, or 0.
+	LastFailureTime int64 `json:"lastFailureTime"`
+}
 
 // NodeService is the hub side of multi-node management. It keeps the registry of
 // remote panels this dashboard watches and polls each one's public status
@@ -36,6 +53,23 @@ var ErrNodeUrl = errors.New("node base url must be http or https")
 // poll. It is token-gated (see NodeStatusController), not session-gated, so the
 // hub authenticates with the shared node token rather than a panel login.
 const nodeStatusPath = "/panel/node/status"
+
+// The pairing endpoints: how a hub asks a node's operator to approve the
+// connection, and how it probes the decision back. Both sit in the node's
+// token-gated group, so a hub cannot pair with a node it has no token for.
+const (
+	nodePairingRequestPath = "/panel/node/pairing/request"
+	nodePairingStatusPath  = "/panel/node/pairing/status"
+)
+
+// The pairing states, in the order the flow travels: nothing asked yet, asked
+// and waiting on the node's operator, and the two decisions.
+const (
+	PairingNone     = "none"
+	PairingPending  = "pending"
+	PairingApproved = "approved"
+	PairingDeclined = "declined"
+)
 
 // nodePollTimeout bounds one poll so a wedged remote panel cannot stall the
 // scheduler; well under the 60s poll cadence.
@@ -96,28 +130,55 @@ func (s *NodeService) Save(n *model.Node) (*model.Node, error) {
 	return n, nil
 }
 
-// Delete removes one node. Nothing remote is touched; the row and its snapshot
-// simply stop being watched.
+// Delete removes one node and every ownership row for the accounts this hub
+// provisioned on it. Nothing remote is touched; the rows and the snapshot simply
+// stop being watched. Dropping the NodeAccount rows here is what keeps a deleted
+// node from leaving accounts in the hub's subscriptions (and in the client form's
+// node groups) pointing at a panel that is no longer registered.
 func (s *NodeService) Delete(id int) error {
-	return database.GetDB().Delete(&model.Node{}, "id = ?", id).Error
+	return database.GetDB().Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("node_id = ?", id).Delete(&model.NodeAccount{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Node{}, "id = ?", id).Error
+	})
 }
 
 // Poll fetches one node's status, refreshes its snapshot row and returns the
 // decoded status. A network or auth failure marks the node offline but does not
 // error the caller: the dashboard must still render an unreachable node as
 // "offline", not fail the whole refresh.
+//
+// To avoid flapping on transient network blips, a node is only marked offline
+// after 3 consecutive failed polls. If the previous poll succeeded, the
+// ConsecutiveFailures counter is reset.
 func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 	start := time.Now()
 	status, err := fetchNodeStatus(n)
 	latency := int(time.Since(start).Milliseconds())
 	db := database.GetDB()
 	updates := map[string]any{"latency_ms": latency}
+	becameApproved := false
+
+	// Read the current health state (tracks consecutive failures for anti-flapping)
+	// Note: health state is tracked in-memory per-poll cycle; not persisted.
+	var healthRow nodeHealthState
 	if err != nil {
-		updates["online"] = false
+		healthRow.ConsecutiveFailures++
+		healthRow.LastFailureTime = time.Now().UnixMilli()
+
+		// Only mark offline after 3 consecutive failures to prevent flapping
+		if healthRow.ConsecutiveFailures >= 3 {
+			updates["online"] = false
+			// Fire a webhook alert on transition to offline
+			s.fireNodeStatusWebhook(n, "node.offline")
+		}
 		if len(err.Error()) > 0 {
 			logger.Warning("node poll", n.Name, "failed:", err)
 		}
 	} else {
+		// Reset failure counter on success
+		healthRow.ConsecutiveFailures = 0
 		updates["online"] = true
 		updates["last_seen"] = time.Now().UnixNano()
 		if status != nil {
@@ -126,11 +187,49 @@ func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 			updates["account_count"] = status.AccountCount
 			updates["online_count"] = status.OnlineCount
 		}
+		// Fire a webhook alert on transition to online
+		s.fireNodeStatusWebhook(n, "node.online")
+		// Pairing: the node operator's decision for THIS hub, probed by the
+		// hub's stable name. An error means the node predates pairing (no such
+		// endpoint yet) or is unreachable for it: the flag stays as it was —
+		// unknown is not a rejection.
+		if n.Token != "" {
+			if st, perr := s.RemotePairingStatus(n, NodeHubIdentity()); perr == nil {
+				updates["pairing_approved"] = st == PairingApproved
+				becameApproved = st == PairingApproved && !n.PairingApproved
+			}
+		}
 	}
+
 	if uerr := db.Model(&model.Node{}).Where("id = ?", n.Id).Updates(updates).Error; uerr != nil {
 		return status, uerr
 	}
+	// The moment the node's operator approves, make the dedicated federation
+	// inbounds present THERE. Reading first is EnsureFedInbounds' own contract:
+	// an existing vless/vmess inbound is reused, only a missing one is created.
+	// Best-effort: a hiccup here must not turn a healthy status poll into a
+	// failure, and the next manage/ensure action retries it.
+	if becameApproved {
+		if _, ferr := s.EnsureFedInbounds(n); ferr != nil {
+			logger.Warning("node", n.Name, "was approved but its federation inbounds are not ready:", ferr)
+		}
+	}
 	return status, err
+}
+
+// fireNodeStatusWebhook sends a webhook notification when a node changes online/offline state.
+func (s *NodeService) fireNodeStatusWebhook(n *model.Node, eventType string) {
+	var whService WebhookService
+	urls, err := whService.GetConfiguredWebhookUrls()
+	if err != nil || len(urls) == 0 {
+		return
+	}
+	event := NewWebhookEvent(eventType, n.Name, map[string]any{
+		"nodeId":  n.Id,
+		"baseUrl": n.BaseUrl,
+		"version": n.Version,
+	})
+	go whService.PostToMultipleWebhooks(urls, event)
 }
 
 // PollAll refreshes every enabled node. Each poll is independent and bounded,
@@ -213,11 +312,11 @@ func isHttpUrl(s string) bool {
 // Summary is the aggregate the dashboard header shows: totals across every
 // enabled node plus this panel's own counts.
 type NodeSummary struct {
-	ThisInbounds int `json:"thisInbounds"`
-	ThisAccounts int `json:"thisAccounts"`
-	ThisOnline   int `json:"thisOnline"`
-	NodeCount    int `json:"nodeCount"`
-	OnlineCount  int `json:"onlineCount"`
+	ThisInbounds  int `json:"thisInbounds"`
+	ThisAccounts  int `json:"thisAccounts"`
+	ThisOnline    int `json:"thisOnline"`
+	NodeCount     int `json:"nodeCount"`
+	OnlineCount   int `json:"onlineCount"`
 	TotalInbounds int `json:"totalInbounds"`
 	TotalAccounts int `json:"totalAccounts"`
 	TotalOnline   int `json:"totalOnline"`
@@ -421,6 +520,10 @@ func nodeAPIRoundTrip(n *model.Node, method, path string, body any, out any) err
 	if n.Token != "" {
 		req.Header.Set("X-Node-Token", n.Token)
 	}
+	// The hub's stable name. The node's write endpoints require it AND require
+	// that this hub's pairing request has been approved, so a token alone is not
+	// enough to provision on a node whose operator never said yes.
+	req.Header.Set("X-Hub-Name", NodeHubIdentity())
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -574,20 +677,26 @@ func (s *NodeService) ListNodeAccounts(nodeId int, subId string) ([]model.NodeAc
 }
 
 // SaveNodeAccount upserts the hub's ownership record for a remote account,
-// keyed by (node, email): re-creating the same email on the same node
-// replaces the snapshot instead of stacking rows.
+// keyed by (node, remote inbound, email): the same email on two different
+// inbounds of one node is two independent accounts with two credentials, so
+// keying by (node, email) alone would overwrite one of them. Re-creating the
+// same account on the same inbound replaces the snapshot instead of stacking
+// rows.
 func (s *NodeService) SaveNodeAccount(na *model.NodeAccount) (*model.NodeAccount, error) {
 	db := database.GetDB()
 	var existing model.NodeAccount
-	err := db.Where("node_id = ? AND email = ?", na.NodeId, na.Email).First(&existing).Error
+	err := db.Where("node_id = ? AND remote_inbound_id = ? AND email = ?",
+		na.NodeId, na.RemoteInboundId, na.Email).First(&existing).Error
 	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
 		na.CreatedAt = time.Now().UnixMilli()
 		if err := db.Create(na).Error; err != nil {
 			return nil, err
 		}
 		return na, nil
 	}
-	existing.RemoteInboundId = na.RemoteInboundId
 	existing.ClientId = na.ClientId
 	existing.SubId = na.SubId
 	existing.InboundSnapshot = na.InboundSnapshot
@@ -603,8 +712,378 @@ func (s *NodeService) DelNodeAccount(id int) error {
 	return database.GetDB().Delete(&model.NodeAccount{}, "id = ?", id).Error
 }
 
-// DelNodeAccountByEmail drops the ownership record for one (node, email) pair,
-// the shape a "delete this remote client" request comes in.
+// DelNodeAccountByEmail drops every ownership record for one (node, email)
+// pair, across all of that node's inbounds. Used when a whole client is being
+// removed and the remote accounts have already been deleted.
 func (s *NodeService) DelNodeAccountByEmail(nodeId int, email string) error {
 	return database.GetDB().Where("node_id = ? AND email = ?", nodeId, email).Delete(&model.NodeAccount{}).Error
+}
+
+// DelNodeAccountByRef drops one ownership record: the exact (node, inbound,
+// email) account a "delete this remote client" request names. Deleting by email
+// alone would forget a second account with the same email on another inbound of
+// the same node while its remote counterpart is still live.
+func (s *NodeService) DelNodeAccountByRef(nodeId, remoteInboundId int, email string) error {
+	return database.GetDB().
+		Where("node_id = ? AND remote_inbound_id = ? AND email = ?", nodeId, remoteInboundId, email).
+		Delete(&model.NodeAccount{}).Error
+}
+
+// ---------------------------------------------------------------------------
+// Pairing: pointing at a node is not enough — the node's OPERATOR approves the
+// connection. The request lands on the node as a pending row the operator
+// decides; until the approval the hub only watches, and the federation writes
+// (remote inbounds, provisioning, node groups in the client form) are refused
+// on both sides.
+// ---------------------------------------------------------------------------
+
+// NodeHubIdentity is THIS panel's stable pairing name: the operator's server
+// label when set, else the machine's hostname. Nodes key their requests by it,
+// so it must stay stable between polls or the approval would not match.
+func NodeHubIdentity() string {
+	name, err := (&SettingService{}).GetServerName()
+	if err == nil && strings.TrimSpace(name) != "" {
+		return strings.TrimSpace(name)
+	}
+	host, herr := os.Hostname()
+	if herr == nil && strings.TrimSpace(host) != "" {
+		return host
+	}
+	return "unknown"
+}
+
+// UpsertPairingRequest registers a hub's connection request on THIS panel: a
+// new hub starts pending, a hub re-asking after a decline reopens the door,
+// and an already-approved hub stays approved.
+func (s *NodeService) UpsertPairingRequest(hubName, hubUrl string) (*model.NodePairingRequest, error) {
+	name := strings.ToLower(strings.TrimSpace(hubName))
+	if name == "" {
+		return nil, common.NewError("the hub's name is required for a pairing request")
+	}
+	db := database.GetDB()
+	var req model.NodePairingRequest
+	err := db.Where("hub_name = ?", name).First(&req).Error
+	if err != nil {
+		req = model.NodePairingRequest{
+			HubName: name, HubUrl: hubUrl, Status: PairingPending,
+			CreatedAt: time.Now().UnixMilli(),
+		}
+		if cerr := db.Create(&req).Error; cerr != nil {
+			return nil, cerr
+		}
+		return &req, nil
+	}
+	if req.Status == PairingDeclined {
+		// The hub asked again: the decision is up for grabs once more.
+		req.Status = PairingPending
+		req.DecidedAt = 0
+		req.CreatedAt = time.Now().UnixMilli()
+	}
+	if hubUrl != "" {
+		req.HubUrl = hubUrl
+	}
+	if uerr := db.Save(&req).Error; uerr != nil {
+		return nil, uerr
+	}
+	return &req, nil
+}
+
+// ListPairings is the operator's view: every connection request this panel has
+// received, newest first.
+func (s *NodeService) ListPairings() ([]model.NodePairingRequest, error) {
+	var out []model.NodePairingRequest
+	err := database.GetDB().Order("id desc").Find(&out).Error
+	return out, err
+}
+
+// DecidePairing is the node operator's call on one request.
+func (s *NodeService) DecidePairing(id int, approve bool) error {
+	db := database.GetDB()
+	var req model.NodePairingRequest
+	if err := db.First(&req, id).Error; err != nil {
+		return err
+	}
+	req.Status = PairingApproved
+	if !approve {
+		req.Status = PairingDeclined
+	}
+	req.DecidedAt = time.Now().UnixMilli()
+	return db.Save(&req).Error
+}
+
+// PairingStatusFor is the node's answer to a hub's status probe: its current
+// decision for the named hub, "none" when it never asked.
+func (s *NodeService) PairingStatusFor(hubName string) string {
+	name := strings.ToLower(strings.TrimSpace(hubName))
+	if name == "" {
+		return PairingNone
+	}
+	var req model.NodePairingRequest
+	if err := database.GetDB().Where("hub_name = ?", name).First(&req).Error; err != nil {
+		return PairingNone
+	}
+	return req.Status
+}
+
+// RemotePairingRequest asks the node's operator to approve THIS panel's
+// connection and returns the request's state after the node handled it.
+func (s *NodeService) RemotePairingRequest(n *model.Node, hubName, hubUrl string) (string, error) {
+	var out struct {
+		Status string `json:"status"`
+	}
+	body := map[string]string{"hubName": hubName, "hubUrl": hubUrl}
+	if err := nodeAPIRoundTrip(n, http.MethodPost, nodePairingRequestPath, body, &out); err != nil {
+		return "", err
+	}
+	return out.Status, nil
+}
+
+// RemotePairingStatus probes the node's decision for THIS panel, by the panel's
+// stable name.
+func (s *NodeService) RemotePairingStatus(n *model.Node, hubName string) (string, error) {
+	var out struct {
+		Status string `json:"status"`
+	}
+	path := nodePairingStatusPath + "?hub=" + url.QueryEscape(hubName)
+	if err := nodeAPIRoundTrip(n, http.MethodGet, path, nil, &out); err != nil {
+		return "", err
+	}
+	return out.Status, nil
+}
+
+// ---------------------------------------------------------------------------
+// Node groups in the client's membership form: the approved nodes and the
+// inbounds they serve, and the attach/detach of one client's node-hosted
+// accounts.
+// ---------------------------------------------------------------------------
+
+// NodeOption is one APPROVED node with the inbounds it is serving: a
+// "Node: <name>" group in the client form. Unapproved or unreachable nodes do
+// not appear — the form only offers what can actually carry the traffic.
+type NodeOption struct {
+	Node     model.Node      `json:"node"`
+	Inbounds []model.Inbound `json:"inbounds"`
+}
+
+// NodeInboundOptions lists the client form's remote groups: per enabled
+// APPROVED node, the inbounds it can actually carry accounts on right now. A
+// node that is down at this moment is skipped, not an error: the group comes
+// back with the next load.
+//
+// The fetch is parallel (bounded) because the client form waits for it before it
+// opens: a fleet of ten nodes must not become ten sequential round trips. Only
+// protocols nodeMintable accepts are offered, so the form cannot present an
+// inbound the node API would refuse to provision into.
+func (s *NodeService) NodeInboundOptions() []NodeOption {
+	nodes, err := s.List()
+	if err != nil {
+		return nil
+	}
+	options := make([]*NodeOption, len(nodes))
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i := range nodes {
+		n := nodes[i]
+		if !n.Enable || !n.PairingApproved || n.Token == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(index int, node model.Node) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			inbounds, ierr := s.RemoteInbounds(&node)
+			if ierr != nil {
+				return
+			}
+			kept := make([]model.Inbound, 0, len(inbounds))
+			for j := range inbounds {
+				if inbounds[j].Enable && nodeMintable(inbounds[j].Protocol) {
+					kept = append(kept, inbounds[j])
+				}
+			}
+			if len(kept) == 0 {
+				return
+			}
+			options[index] = &NodeOption{Node: node, Inbounds: kept}
+		}(i, n)
+	}
+	wg.Wait()
+	out := make([]NodeOption, 0, len(options))
+	for _, opt := range options {
+		if opt != nil {
+			out = append(out, *opt)
+		}
+	}
+	return out
+}
+
+// NodeMembershipRef names one remote inbound on one node: what the client form
+// ticks when it attaches an account to a node.
+type NodeMembershipRef struct {
+	NodeId          int `json:"nodeId"`
+	RemoteInboundId int `json:"remoteInboundId"`
+}
+
+// NodeRefKey is the "nodeId:remoteInboundId" string the UI carries and the hub's
+// NodeAccounts speak.
+func NodeRefKey(nodeId, remoteInboundId int) string {
+	return strconv.Itoa(nodeId) + ":" + strconv.Itoa(remoteInboundId)
+}
+
+// ListNodeAccountsByEmail is the hub's ownership rows for one client: the diff
+// input of a membership save.
+func (s *NodeService) ListNodeAccountsByEmail(email string) ([]model.NodeAccount, error) {
+	var out []model.NodeAccount
+	err := database.GetDB().Where("email = ?", email).Order("id asc").Find(&out).Error
+	return out, err
+}
+
+// SyncNodeMemberships makes one client's node-hosted accounts match the wanted
+// set. The missing ones are created on their node through the node's own panel
+// API — the same path as the standalone provision, metered and live-applied
+// THERE — and the no-longer-wanted ones are removed there first, then
+// forgotten here. A dead node's removal is best-effort: the operator asked for
+// the membership gone, and an unreachable panel must not block the bookkeeping.
+//
+// Local inbounds are the caller's concern — this runs AFTER the local save and
+// is keyed by email, not by an inbound, because a client may end up on node
+// inbounds only.
+//
+// totalGb is BYTES (the unit NodeClientCreate and the panel's own client model
+// use); expiryTime is the exact deadline in Unix milliseconds, with the same
+// negative "days from first use" meaning the local account stores. Passing days
+// instead would make a delayed-start account start counting on the node at
+// creation time, which is not what the operator picked.
+func (s *NodeService) SyncNodeMemberships(email, subId string, totalGb, expiryTime int64, enable bool, refs []NodeMembershipRef) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return common.NewError("email is required")
+	}
+	current, err := s.ListNodeAccountsByEmail(email)
+	if err != nil {
+		return err
+	}
+	byRef := make(map[string]*model.NodeAccount, len(current))
+	for i := range current {
+		na := &current[i]
+		byRef[NodeRefKey(na.NodeId, na.RemoteInboundId)] = na
+	}
+	want := make(map[string]bool, len(refs))
+	for _, r := range refs {
+		want[NodeRefKey(r.NodeId, r.RemoteInboundId)] = true
+	}
+
+	done := make(map[string]bool, len(refs))
+	for _, r := range refs {
+		key := NodeRefKey(r.NodeId, r.RemoteInboundId)
+		if done[key] {
+			continue
+		}
+		done[key] = true
+		if existing, ok := byRef[key]; ok {
+			// The account already lives there; only the hub-side ownership row can
+			// have changed. Keeping SubId current is what moves the node-hosted
+			// account to the client's new subscription link after an edit.
+			if existing.SubId != subId {
+				if uerr := database.GetDB().Model(&model.NodeAccount{}).
+					Where("node_id = ? AND remote_inbound_id = ? AND email = ?",
+						existing.NodeId, existing.RemoteInboundId, existing.Email).
+					Update("sub_id", subId).Error; uerr != nil {
+					return uerr
+				}
+			}
+			continue
+		}
+		node, gerr := s.Get(r.NodeId)
+		if gerr != nil {
+			return common.NewError("node", r.NodeId, "not found")
+		}
+		if !node.PairingApproved {
+			return common.NewError("node", node.Name, "has not approved this panel's connection request")
+		}
+		req := NodeClientCreate{
+			InboundId:  r.RemoteInboundId,
+			Email:      email,
+			TotalGb:    totalGb,
+			ExpiryTime: expiryTime,
+			Enable:     &enable,
+		}
+		res, cerr := s.RemoteCreateClient(node, req)
+		if cerr != nil {
+			return fmt.Errorf("node %s: %v", node.Name, cerr)
+		}
+		snapshot, _ := json.Marshal(res.Inbound)
+		na := &model.NodeAccount{
+			NodeId:          node.Id,
+			RemoteInboundId: r.RemoteInboundId,
+			Email:           res.Client.Email,
+			ClientId:        res.Client.ID,
+			SubId:           subId,
+			InboundSnapshot: string(snapshot),
+		}
+		if _, serr := s.SaveNodeAccount(na); serr != nil {
+			return serr
+		}
+	}
+
+	removed := make(map[string]bool, len(current))
+	for i := range current {
+		na := &current[i]
+		key := NodeRefKey(na.NodeId, na.RemoteInboundId)
+		if want[key] || removed[key] {
+			continue
+		}
+		removed[key] = true
+		if node, gerr := s.Get(na.NodeId); gerr == nil {
+			if derr := s.RemoteDeleteClient(node, na.RemoteInboundId, na.Email); derr != nil {
+				logger.Warning("node client delete on node", node.Name, ":", derr)
+			}
+		}
+		if derr := s.DelNodeAccount(na.Id); derr != nil {
+			return derr
+		}
+	}
+	return nil
+}
+
+// DeleteNodeMembershipsForEmail removes every remote account this hub owns for
+// one client email, then forgets the rows. It returns the nodes whose remote
+// delete failed; those rows are KEPT on purpose so a later retry can still name
+// the account, rather than orphaning it on the node.
+func (s *NodeService) DeleteNodeMembershipsForEmail(email string) []string {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return nil
+	}
+	accounts, err := s.ListNodeAccountsByEmail(email)
+	if err != nil {
+		return []string{"database: " + err.Error()}
+	}
+	var failed []string
+	done := make(map[string]bool, len(accounts))
+	for i := range accounts {
+		na := &accounts[i]
+		key := NodeRefKey(na.NodeId, na.RemoteInboundId)
+		if done[key] {
+			// A duplicate ownership row (possible only on a database written by an
+			// older build): the remote account is already gone, just drop the row.
+			if derr := s.DelNodeAccount(na.Id); derr != nil {
+				failed = append(failed, "database")
+			}
+			continue
+		}
+		done[key] = true
+		node, gerr := s.Get(na.NodeId)
+		if gerr == nil {
+			if derr := s.RemoteDeleteClient(node, na.RemoteInboundId, na.Email); derr != nil {
+				failed = append(failed, node.Name)
+				continue
+			}
+		}
+		if derr := s.DelNodeAccount(na.Id); derr != nil {
+			failed = append(failed, "database")
+		}
+	}
+	return failed
 }

@@ -34,8 +34,19 @@
             <template slot="status" slot-scope="text, row">
               <a-badge :status="row.this ? 'processing' : (row.online ? 'success' : 'error')"
                 :text="row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline)">
-                <span slot="text">[[ row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline) ]]</span>
               </a-badge>
+            </template>
+
+            <!-- The pairing handshake: what the node's operator has decided for
+                 this panel. "—" on this panel's own row; the hub row shows the
+                 live state, updated by every poll. -->
+            <template slot="pairing" slot-scope="text, row">
+              <template v-if="row.this"><span :style="{ color: 'var(--text-3)' }">—</span></template>
+              <template v-else>
+                <a-badge :status="row.pairingApproved ? 'success' : 'warning'"
+                  :text="row.pairingApproved ? labels.pairingConnected : labels.pairingPending">
+                </a-badge>
+              </template>
             </template>
 
             <!-- Write path availability: a node with an API port is manageable;
@@ -76,13 +87,54 @@
                   @confirm="del(row)">
                   <a style="color: var(--error)">{{ i18n "delete" }}</a>
                 </a-popconfirm>
+                <a-divider type="vertical" v-if="!row.pairingApproved"></a-divider>
+                <!-- The hub's half of the handshake: ask this node's operator to
+                     approve, and the node's decision lands on the pairing column
+                     on the next poll. -->
+                <a v-if="!row.pairingApproved" @click="requestPairing(row)"
+                  :style="{ color: 'var(--accent)' }">[[ labels.requestPairing ]]</a>
               </template>
             </template>
           </a-table>
         </div>
 
-        <!-- This panel's side: set the token a hub uses to poll this node, and
-             copy the base url to paste into the hub's node row. -->
+        <!-- This panel's side: the connection requests other panels have made
+             for federation, and this panel's own token that hubs poll with. -->
+        <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)' }">
+          <div class="bo-tile-head" :style="{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }">
+            <div class="bo-tile-title">[[ labels.incomingRequests ]]</div>
+            <a-badge v-if="pendingPairings.length" :count="pendingPairings.length" :overflow-count="99"></a-badge>
+          </div>
+          <a-table :columns="pairingCols" :row-key="r => r.id" :data-source="pairings"
+            :pagination="false" :locale='{ emptyText: `{{ i18n "noData" }}` }'>
+            <template slot="pairingHub" slot-scope="text, row">
+              <div>[[ row.hubName ]]</div>
+              <div :style="{ color: 'var(--text-3)', fontSize: '11px' }" v-if="row.hubUrl">[[ row.hubUrl ]]</div>
+            </template>
+            <template slot="pairingStatus" slot-scope="text, row">
+              <a-badge :status="row.status === 'approved' ? 'success' : (row.status === 'declined' ? 'error' : 'warning')"
+                :text="pairingStatusLabel(row.status)">
+              </a-badge>
+            </template>
+            <template slot="pairingWhen" slot-scope="text, row">
+              <span v-if="row.decidedAt">[[ IntlUtil.formatDate(row.decidedAt / 1000) ]]</span>
+              <span v-else :style="{ color: 'var(--text-3)' }">[[ IntlUtil.formatDate(row.createdAt / 1000) ]]</span>
+            </template>
+            <template slot="pairingAction" slot-scope="text, row">
+              <template v-if="row.status === 'pending'">
+                <a-button type="primary" size="small" icon="check" @click="decidePairing(row, true)">
+                  [[ labels.pairingApprove ]]
+                </a-button>
+                <a-button size="small" style="margin-left: 6px" @click="decidePairing(row, false)">
+                  [[ labels.pairingDecline ]]
+                </a-button>
+              </template>
+              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
+            </template>
+          </a-table>
+          <div :style="{ color: 'var(--text-3)', fontSize: '12px', marginTop: '8px' }">[[ labels.pairingHint ]]</div>
+        </div>
+
         <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)' }">
           <div class="bo-tile-head">
             <div class="bo-tile-title">[[ labels.thisPanelToken ]]</div>
@@ -223,6 +275,8 @@
 <a-modal v-model="manageModal.visible" :title="manageModal.node ? (labels.manage + ': ' + manageModal.node.name) : labels.manage"
   :width="640" :class="themeSwitcher.currentTheme" :footer="null">
   <div v-if="manageModal.node">
+    <a-alert v-if="!manageModal.node.pairingApproved" :message="labels.pairingNotApproved"
+      type="warning" show-icon :style="{ marginBottom: '12px' }"></a-alert>
     <a-alert v-if="manageModal.node.xrayApiPort === 0" :message="labels.readOnly" type="warning" show-icon></a-alert>
 
     <template v-if="manageModal.node.xrayApiPort > 0">
@@ -308,17 +362,20 @@
     <a-card size="small" :title="labels.remoteInbounds" :style="{ marginTop: '12px' }">
       <a-row :gutter="[12, 12]">
         <a-col :xs="24" :md="4">
-          <a-button block icon="sync" :loading="manageModal.loadingInb" @click="loadInbounds">
+          <a-button block icon="sync" :loading="manageModal.loadingInb"
+            :disabled="!manageModal.node.pairingApproved" @click="loadInbounds">
             [[ labels.refresh ]]
           </a-button>
         </a-col>
         <a-col :xs="24" :md="8">
-          <a-button block icon="plus" :loading="manageModal.ensuring" @click="ensureInbounds">
+          <a-button block icon="plus" :loading="manageModal.ensuring"
+            :disabled="!manageModal.node.pairingApproved" @click="ensureInbounds">
             [[ labels.ensureInbounds ]]
           </a-button>
         </a-col>
         <a-col :xs="24" :md="16">
           <a-select v-model="manageModal.inbId" style="width: 100%"
+            :disabled="!manageModal.node.pairingApproved"
             :placeholder="labels.inbounds + ' (load)'">
             <a-select-option v-for="i in manageModal.inbounds" :key="i.id" :value="i.id">
               [[ i.tag + ' · ' + i.protocol + ' : ' + i.port ]]
@@ -340,7 +397,8 @@
           <a-input v-model="manageModal.prov.subId" placeholder="subId (optional)"></a-input>
         </a-col>
         <a-col :xs="24" :md="16" :style="{ textAlign: 'right' }">
-          <a-button type="primary" icon="plus" :loading="manageModal.prov.sending" @click="doProvision">
+          <a-button type="primary" icon="plus" :loading="manageModal.prov.sending"
+            :disabled="!manageModal.node.pairingApproved" @click="doProvision">
             [[ labels.provision ]]
           </a-button>
         </a-col>
@@ -377,6 +435,7 @@
       nodeAccounts: [],
       loadingAccounts: false,
       accountsNode: 0,
+      pairings: [],
       nodeModal: {
         visible: false, id: 0, name: '', baseUrl: '', token: '', remark: '', saving: false,
         xrayApiHost: '', xrayApiPort: null, apiTlsMode: 'insecure', apiCaPem: '',
@@ -454,6 +513,24 @@
         generateToken: '{{ i18n "pages.nodes.generateToken" }}',
         tokenGenerated: '{{ i18n "pages.nodes.tokenGenerated" }}',
         ensureInbounds: '{{ i18n "pages.nodes.ensureInbounds" }}',
+        // pairing handshake
+        pairing: '{{ i18n "pages.nodes.pairing" }}',
+        pairingNone: '{{ i18n "pages.nodes.pairingNone" }}',
+        pairingPending: '{{ i18n "pages.nodes.pairingPending" }}',
+        pairingConnected: '{{ i18n "pages.nodes.pairingConnected" }}',
+        pairingDeclined: '{{ i18n "pages.nodes.pairingDeclined" }}',
+        requestPairing: '{{ i18n "pages.nodes.requestPairing" }}',
+        requestPairingSent: '{{ i18n "pages.nodes.requestPairingSent" }}',
+        requestPairingApproved: '{{ i18n "pages.nodes.requestPairingApproved" }}',
+        incomingRequests: '{{ i18n "pages.nodes.incomingRequests" }}',
+        pairingApprove: '{{ i18n "pages.nodes.pairingApprove" }}',
+        pairingDecline: '{{ i18n "pages.nodes.pairingDecline" }}',
+        pairingHint: '{{ i18n "pages.nodes.pairingHint" }}',
+        pairingNotApproved: '{{ i18n "pages.nodes.pairingNotApproved" }}',
+        pairingFrom: '{{ i18n "pages.nodes.pairingFrom" }}',
+        pairingStatusCol: '{{ i18n "pages.nodes.pairing" }}',
+        pairingHub: '{{ i18n "pages.nodes.pairingHub" }}',
+        pairingWhen: '{{ i18n "pages.nodes.pairingWhen" }}',
       },
       columns: [
         { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
@@ -461,6 +538,7 @@
         { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 80 },
         { title: '{{ i18n "status" }}', align: 'center', width: 90, scopedSlots: { customRender: 'status' } },
         { title: '{{ i18n "pages.nodes.apiCol" }}', align: 'center', width: 100, scopedSlots: { customRender: 'api' } },
+        { title: '{{ i18n "pages.nodes.pairing" }}', align: 'center', width: 120, scopedSlots: { customRender: 'pairing' } },
         { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 130, scopedSlots: { customRender: 'counts' } },
         { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 140, scopedSlots: { customRender: 'lastSeen' } },
         { title: '', align: 'center', width: 180, scopedSlots: { customRender: 'action' } },
@@ -515,6 +593,19 @@
         if (p === 'hysteria2' || p === 'hysteria') return this.labels.valueAuth;
         return this.labels.valuePassword;
       },
+      // The operator's open asks, and the table shape for the incoming tile.
+      pendingPairings() {
+        return this.pairings.filter(p => p.status === 'pending');
+      },
+      pairingCols() {
+        const L = this.labels;
+        return [
+          { title: L.pairingHub, align: 'left', width: 180, scopedSlots: { customRender: 'pairingHub' } },
+          { title: L.pairingStatusCol, align: 'center', width: 130, scopedSlots: { customRender: 'pairingStatus' } },
+          { title: L.pairingWhen, align: 'center', width: 150, scopedSlots: { customRender: 'pairingWhen' } },
+          { title: '', align: 'center', width: 170, scopedSlots: { customRender: 'pairingAction' } },
+        ];
+      },
     },
     methods: {
       async load() {
@@ -539,6 +630,7 @@
         }
         this.spinning = false;
         this.loadNodeAccounts(this.accountsNode);
+        this.loadPairings();
       },
       async refreshAll() {
         this.refreshing = true;
@@ -546,6 +638,9 @@
         if (msg && msg.success) this.nodes = msg.obj || [];
         this.refreshing = false;
         await this.load();
+        // A poll just refreshed every pairing flag — the table's connection
+        // column re-renders from the same rows.
+        this.loadPairings();
       },
       blankNode() {
         return {
@@ -571,6 +666,7 @@
           this.$message.error(this.labels.requiredFields);
           return;
         }
+        const isNew = !m.id;
         m.saving = true;
         const url = m.id ? `/panel/api/nodes/update/${m.id}` : '/panel/api/nodes/add';
         const msg = await HttpUtil.post(url, {
@@ -582,6 +678,13 @@
         if (msg && msg.success) {
           m.visible = false;
           await this.load();
+          // A new node's pairing request is sent by the server in the same call.
+          // Say so, so the operator knows the next step is on the destination:
+          // its operator has to approve this panel under Incoming requests.
+          if (isNew && msg.obj) {
+            this.$message.success(msg.obj.pairingApproved
+              ? this.labels.requestPairingApproved : this.labels.requestPairingSent);
+          }
         }
       },
       async del(node) {
@@ -711,8 +814,10 @@
         this.manageModal.inbounds = msg.obj || [];
         const has = (p) => this.manageModal.inbounds.some(i => i.enable && i.protocol === p);
         // Auto-provision the dedicated pair on the node when it lacks one:
-        // reading comes first, creating only what is missing.
-        if (!has('vless') || !has('vmess')) {
+        // reading comes first, creating only what is missing. Never before the
+        // pairing decision: the node refuses writes from an unapproved hub, and
+        // firing it here would only surface a 403 in the operator's face.
+        if (n.pairingApproved && (!has('vless') || !has('vmess'))) {
           this.ensureInbounds();
           return;
         }
@@ -764,6 +869,44 @@
         if (msg && msg.success) {
           this.$message.success('{{ i18n "pages.nodes.nodeAccountDelOk" }}');
           this.loadNodeAccounts(this.accountsNode);
+        }
+      },
+      // --- pairing handshake ------------------------------------------------
+      async loadPairings() {
+        const msg = await HttpUtil.get('/panel/api/nodes/pairings');
+        if (msg && msg.success) this.pairings = msg.obj || [];
+      },
+      pairingStatusLabel(status) {
+        switch (status) {
+          case 'approved': return this.labels.pairingConnected;
+          case 'declined': return this.labels.pairingDeclined;
+          case 'pending': return this.labels.pairingPending;
+          default: return this.labels.pairingNone;
+        }
+      },
+      // The hub's ask: send this panel's identity to the node; the node's operator
+      // then sees it under incoming requests. A just-returned approval is
+      // reported at once, so the pairing column can flip without waiting for
+      // the next poll.
+      async requestPairing(row) {
+        const msg = await HttpUtil.post(`/panel/api/nodes/${row.id}/requestPairing`);
+        if (msg && msg.success && msg.obj) {
+          if (msg.obj.status === 'approved') {
+            row.pairingApproved = true;
+            this.$message.success(this.labels.requestPairingApproved);
+          } else {
+            this.$message.success(this.labels.requestPairingSent);
+          }
+        }
+      },
+      // The node operator's decision on an incoming request: approve (which also
+      // makes the node's dedicated inbounds ready THERE) or decline.
+      async decidePairing(row, approve) {
+        const msg = await HttpUtil.post(`/panel/api/nodes/pairings/decide/${row.id}`, { approve });
+        if (msg && msg.success) {
+          row.status = approve ? 'approved' : 'declined';
+          row.decidedAt = Date.now();
+          this.$message.success(this.pairingStatusLabel(row.status));
         }
       },
       fmtBytes(b) {

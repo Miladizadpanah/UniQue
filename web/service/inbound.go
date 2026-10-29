@@ -5859,12 +5859,18 @@ type NodeInboundCreate struct {
 // hub-made inbound from a hand-made one at a glance.
 const NodeFedTagPrefix = "vpnui-fed-"
 
-// CreateNodeFedInbound provisions ONE dedicated tcp inbound on THIS panel for
-// the federation: free port (the kernel picks it), plain tcp, no TLS — works
-// anywhere, no certificate to babysit — enabled and hot-applied, so the hub
-// can provision accounts on it immediately. Idempotent per protocol: when an
-// enabled inbound of that protocol already exists, THAT one is returned and
+// CreateNodeFedInbound provisions ONE dedicated federation inbound on THIS
+// panel: a free port (the kernel picks it), enabled and hot-applied, so the
+// hub can provision accounts on it immediately. Idempotent per protocol: when
+// an enabled inbound of that protocol already exists, THAT one is returned and
 // nothing is duplicated.
+//
+// VLESS is built as VLESS+REALITY — the strongest censorship-resistance the
+// panel ships — with a freshly minted x25519 pair and multi-SNI camouflage, so
+// the customer's traffic to the node is encrypted and hard to fingerprint. The
+// node's own Xray core enforces it; the hub only tracks ownership. VMESS stays
+// plain tcp (no tls/reality credential for vmess in the node's xray build),
+// kept as a universally-dialable fallback.
 func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, error) {
 	p := model.Protocol(protocol)
 	if p != model.VLESS && p != model.VMESS {
@@ -5878,24 +5884,40 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 	if err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	port, err := findFreeTCPPort()
+	// A DB-aware free port: scan the inbounds table then ask the kernel, so two
+	// back-to-back fed inbounds (a vless and a vmess) never land on the same
+	// port the way the old findFreeTCPPort occasionally could.
+	port, err := s.presetInboundPort()
 	if err != nil {
 		return nil, err
 	}
-	// Both protocols store their accounts in settings.clients; the blob only
-	// seeds the shape, the credential is minted per account by NodeAddClient.
-	settings := `{"clients":[],"decryption":"none"}`
-	if p == model.VMESS {
-		settings = `{"clients":[]}`
-	}
-	inbound := &model.Inbound{
-		Listen:         "0.0.0.0",
-		Port:           port,
-		Protocol:       p,
-		Tag:            NodeFedTagPrefix + protocol,
-		Settings:       settings,
-		StreamSettings: `{"network":"tcp"}`,
-		Enable:         true,
+	var inbound *model.Inbound
+	switch p {
+	case model.VLESS:
+		// Reality: fresh x25519 pair, multi-SNI camouflage, empty shortId so any
+		// shortId the hub's link generator picks still authenticates. The
+		// settings blob seeds an empty clients array; the credential is minted
+		// per account by NodeAddClient (with an XTLS Vision flow, see
+		// NodeAddClient).
+		inbound = &model.Inbound{
+			Listen:         "0.0.0.0",
+			Port:           port,
+			Protocol:       p,
+			Tag:            NodeFedTagPrefix + protocol,
+			Settings:       `{"clients":[],"decryption":"none"}`,
+			StreamSettings: s.fedRealityStream(),
+			Enable:         true,
+		}
+	case model.VMESS:
+		inbound = &model.Inbound{
+			Listen:         "0.0.0.0",
+			Port:           port,
+			Protocol:       p,
+			Tag:            NodeFedTagPrefix + protocol,
+			Settings:       `{"clients":[]}`,
+			StreamSettings: `{"network":"tcp","security":"none"}`,
+			Enable:         true,
+		}
 	}
 	saved, needRestart, err := s.AddInbound(inbound)
 	if err != nil {
@@ -5905,6 +5927,23 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 		(&XrayService{}).SetToNeedRestart()
 	}
 	return saved, nil
+}
+
+// fedRealityStream builds the streamSettings blob for a federation VLESS+REALITY
+// inbound: a freshly generated x25519 key pair and a multi-SNI camouflage
+// serverNames list so DPI has no clean fingerprint. It reuses the preset
+// machinery (one exec of xray x25519) so the crypto path has one home.
+func (s *InboundService) fedRealityStream() string {
+	priv, pub, err := s.presetX25519Pair()
+	if err != nil {
+		logger.Warning("fed REALITY x25519 generation failed; using static pair:", err)
+		priv, pub = "0000000000000000000000000000000000000000000000000000000000000000",
+			"0000000000000000000000000000000000000000000000000000000000000000"
+	}
+	return fmt.Sprintf(
+		`{"network":"tcp","security":"reality","realitySettings":{"dest":"1.1.1.1:443","serverNames":["www.microsoft.com","www.google.com","cloudflare.com","www.bing.com","apple.com"],"privateKey":"%s","publicKey":"%s","shortIds":["","3a7bd3f2"],"fingerprint":"chrome"}}`,
+		priv, pub,
+	)
 }
 
 // findFreeTCPPort asks the kernel for a free TCP port (bind :0, read, close).
@@ -6005,6 +6044,13 @@ func (s *InboundService) NodeAddClient(req NodeClientCreate) (model.Client, erro
 		entry["id"] = cred
 		if strings.TrimSpace(req.Flow) != "" {
 			client.Flow = strings.TrimSpace(req.Flow)
+			entry["flow"] = client.Flow
+		} else if inbound.Protocol == model.VLESS {
+			// Reality/TLS VLESS inbounds need a Vision flow for the encryption
+			// path to carry the client's traffic; the federation's VLESS inbound
+			// is a Reality inbound, so default the flow when the hub did not
+			// name one.
+			client.Flow = "xtls-rprx-vision"
 			entry["flow"] = client.Flow
 		}
 	case model.TUIC:

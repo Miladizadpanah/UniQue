@@ -4,7 +4,7 @@ The next-generation 3x-ui panel: multi-node federation, node-hosted inbounds, cl
 inbound presets, live monitoring and security automation. One-line install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue/main/install.sh | sudo bash
 ```
 
 Update an existing panel from inside the UI (Settings → Update), or re-run the same

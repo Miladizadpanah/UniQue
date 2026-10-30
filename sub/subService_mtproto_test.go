@@ -127,7 +127,7 @@ func TestEncodeURIComponentGoMatchesJS(t *testing.T) {
 		"a*b":     "a*b",   // * kept
 		"a'b":     "a'b",   // ' kept
 		"a/b?c=d": "a%2Fb%3Fc%3Dd",
-		"é":  "%C3%A9", // each UTF-8 byte percent-encoded
+		"é":       "%C3%A9", // each UTF-8 byte percent-encoded
 	}
 	for in, want := range cases {
 		if got := encodeURIComponentGo(in); got != want {

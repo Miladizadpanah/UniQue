@@ -899,17 +899,17 @@ func (InboundClientGroup) TableName() string { return "inbound_client_groups" }
 // Role is "direct" (default: Hub is Iran, Spokes abroad) or "reverse"
 // (Spokes are Iran, Hub abroad). Reverse mode flips the egress direction.
 type TunnelMesh struct {
-	Id         int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name       string `json:"name" gorm:"unique;not null"`
-	Role       string `json:"role" gorm:"not null;default:direct"` // "direct" | "reverse"
-	Protocol   string `json:"protocol" gorm:"not null;default:xhttp"` // "xhttp" | "tuic" | "naive"
+	Id       int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name     string `json:"name" gorm:"unique;not null"`
+	Role     string `json:"role" gorm:"not null;default:direct"`    // "direct" | "reverse"
+	Protocol string `json:"protocol" gorm:"not null;default:xhttp"` // "xhttp" | "tuic" | "naive"
 	// Hub node
 	HubHost string `json:"hubHost" gorm:"not null"` // IP or domain
 	HubPort int    `json:"hubPort" gorm:"not null;default:443"`
 	// CA + server cert for the Hub's TLS. Empty = self-signed (auto-generated).
-	CAPath     string `json:"caPath" gorm:"not null"`
-	CertPath   string `json:"certPath" gorm:"not null"`
-	KeyPath    string `json:"keyPath" gorm:"not null"`
+	CAPath   string `json:"caPath" gorm:"not null"`
+	CertPath string `json:"certPath" gorm:"not null"`
+	KeyPath  string `json:"keyPath" gorm:"not null"`
 	// Cert metadata for auto-renewal and UI display.
 	CertSerial string `json:"certSerial"`
 	CertExp    int64  `json:"certExp" gorm:"default:0"` // Unix seconds
@@ -917,7 +917,7 @@ type TunnelMesh struct {
 	Spokes string `json:"spokes" gorm:"not null;default:'[]'"`
 	// Enabled gates the Xray config injection. A disabled tunnel keeps its DB
 	// rows and certs but generates no Xray inbounds/outbounds.
-	Enable bool `json:"enable" gorm:"default:1"`
+	Enable bool   `json:"enable" gorm:"default:1"`
 	Remark string `json:"remark"`
 }
 
@@ -935,20 +935,20 @@ type TunnelSpoke struct {
 	// LatencyMs is the last measured Hub->Spoke RTT. 0 = unmeasured.
 	LatencyMs int `json:"latencyMs" gorm:"default:0"`
 	// LastSeen is UnixNano of the last successful Xray connection check.
-	LastSeen int64 `json:"lastSeen" gorm:"default:0"`
+	LastSeen int64  `json:"lastSeen" gorm:"default:0"`
 	Remark   string `json:"remark"`
 }
 
 // TunnelSpokeStatus is the live health of one spoke, derived from the Xray API
 // (not stored in the DB). Populated by TunnelService.Status() for the UI.
 type TunnelSpokeStatus struct {
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	CertSerial  string `json:"certSerial"`
-	Online      bool   `json:"online"`
-	LatencyMs   int    `json:"latencyMs"`
-	LastSeen    int64  `json:"lastSeen"`
-	Remark      string `json:"remark"`
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	CertSerial string `json:"certSerial"`
+	Online     bool   `json:"online"`
+	LatencyMs  int    `json:"latencyMs"`
+	LastSeen   int64  `json:"lastSeen"`
+	Remark     string `json:"remark"`
 	// ExitIP is the spoke's external IP as seen from the Hub's Xray egress.
 	// Only valid in "direct" mode; empty in "reverse".
 	ExitIP string `json:"exitIP"`
@@ -960,14 +960,14 @@ type TunnelSpokeStatus struct {
 // own. This is a monitoring surface only: the hub reads a remote node, it does
 // not write to it, so a misbehaving remote panel can never reach this one.
 type Node struct {
-	Id    int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
-	Name  string `json:"name" form:"name" gorm:"not null"`
+	Id   int    `json:"id" form:"id" gorm:"primaryKey;autoIncrement"`
+	Name string `json:"name" form:"name" gorm:"not null"`
 	// BaseUrl is the remote panel's https base, e.g. https://node2.example.com:2096
 	BaseUrl string `json:"baseUrl" form:"baseUrl" gorm:"not null"`
 	// Token is the remote node's node API token; the hub sends it on the X-Node-Token
 	// header when polling. Stored in plaintext, like other panel credentials.
-	Token string `json:"token" form:"token" gorm:"not null"`
-	Enable bool  `json:"enable" form:"enable" gorm:"default:1"`
+	Token  string `json:"token" form:"token" gorm:"not null"`
+	Enable bool   `json:"enable" form:"enable" gorm:"default:1"`
 	Remark string `json:"remark" form:"remark"`
 	// LastSeen is UnixNano of the last successful poll. 0 = never polled.
 	LastSeen int64 `json:"lastSeen" gorm:"default:0"`
@@ -1043,9 +1043,9 @@ type NodeStatus struct {
 // rewrites the listen address to the node's public host, which is what makes a
 // subscriber's app actually dial the node instead of the hub.
 type NodeAccount struct {
-	Id        int `json:"id" gorm:"primaryKey;autoIncrement"`
-	NodeId    int `json:"nodeId" gorm:"index"`
-	Node      Node `gorm:"foreignKey:NodeId" json:"node"`
+	Id     int  `json:"id" gorm:"primaryKey;autoIncrement"`
+	NodeId int  `json:"nodeId" gorm:"index"`
+	Node   Node `gorm:"foreignKey:NodeId" json:"node"`
 	// RemoteInboundId is the inbound's id ON THE NODE, which is meaningless to
 	// this panel; it exists for display and for the delete call that has to
 	// name the remote inbound by id.
@@ -1053,10 +1053,10 @@ type NodeAccount struct {
 	Email           string `json:"email" gorm:"index"`
 	// ClientId is the credential the protocol keys on (uuid, password, ...),
 	// kept so a delete by email does not have to re-resolve it.
-	ClientId   string `json:"clientId"`
-	SubId      string `json:"subId" gorm:"index"`
+	ClientId        string `json:"clientId"`
+	SubId           string `json:"subId" gorm:"index"`
 	InboundSnapshot string `json:"-" gorm:"type:text"`
-	CreatedAt  int64  `json:"createdAt"`
+	CreatedAt       int64  `json:"createdAt"`
 }
 
 // TableName pins the table name.

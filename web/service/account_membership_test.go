@@ -791,7 +791,7 @@ func TestLoginNameCannotBeAnotherAccountsEmail(t *testing.T) {
 		t.Fatalf("findNewDuplicateLogin: %v", err)
 	}
 	if dup == "" {
-		t.Error("a login equal to ANOTHER account's email was accepted: RADIUS would "+
+		t.Error("a login equal to ANOTHER account's email was accepted: RADIUS would " +
 			"authenticate it as that account")
 	}
 	// An account may of course use its OWN email as its login.

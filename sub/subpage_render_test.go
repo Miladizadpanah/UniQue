@@ -51,7 +51,7 @@ func TestSubpageParsesAndRenders(t *testing.T) {
 		"downloadByte": 1288490188, "uploadByte": 3650722255, "totalByte": 10737418240,
 		"subUrl": "http://sub.example.com/subs/42", "subJsonUrl": "http://sub.example.com/subs/42/sub/json",
 		"subClashUrl": "http://sub.example.com/subs/42/clash",
-		"result": []string{"vless://uuid@1.2.3.4:443?encryption=none", "vmess://AAAA"},
+		"result":      []string{"vless://uuid@1.2.3.4:443?encryption=none", "vmess://AAAA"},
 		"configs": []SubConfigLink{
 			{Label: "OpenVPN", Filename: "client.ovpn", Url: "http://sub.example.com/subs/42/configs/openvpn"},
 			{Label: "WireGuard", Filename: "wg.conf", Url: "http://sub.example.com/subs/42/configs/wg"},

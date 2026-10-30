@@ -217,14 +217,14 @@ func pageData(page string) map[string]any {
 		// web/controller/xui.go). The pages put it in front of asset URLs and set
 		// it as axios's baseURL, while their API calls carry `/panel/api/...`
 		// already — so the default "/" is the only value that resolves both.
-		"base_path": "/",
-		"perms":       perms,
-		"me":          1,
-		"reseller":    map[string]any{"isReseller": false},
-		"two_factor":  false,
-		"cur_ver":     "2.2.6-preview",
-		"asset_ver":   "preview",
-		"donate":      []any{},
+		"base_path":  "/",
+		"perms":      perms,
+		"me":         1,
+		"reseller":   map[string]any{"isReseller": false},
+		"two_factor": false,
+		"cur_ver":    "2.2.6-preview",
+		"asset_ver":  "preview",
+		"donate":     []any{},
 	}
 }
 

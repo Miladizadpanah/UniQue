@@ -530,6 +530,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 
 	return xrayConfig, nil
 }
+
 // translateVpnRoutingRules rewrites routing rules so that "user" (email) matches
 // for L2TP/PPTP clients are translated to "source" (IP) matches.
 //

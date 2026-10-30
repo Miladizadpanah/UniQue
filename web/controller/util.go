@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -128,6 +129,16 @@ func html(c *gin.Context, name string, title string, data gin.H) {
 	// control the reseller is not allowed to have. Empty map for everyone else, so
 	// a template reads {{ if .reseller.isReseller }} without a nil check.
 	data["reseller"] = templateReseller(c)
+	// JSON-safe copies for embedding inside <script> blocks. A raw Go map prints
+	// as map[key:value ...] which is not valid JavaScript and would abort the
+	// entire script block (blank page). These keep the map form for Go template
+	// conditionals and add a JSON form for JavaScript object literals.
+	if permsJSON, err := json.Marshal(data["perms"]); err == nil {
+		data["permsJSON"] = string(permsJSON)
+	}
+	if resellerJSON, err := json.Marshal(data["reseller"]); err == nil {
+		data["resellerJSON"] = string(resellerJSON)
+	}
 	// The caller's own 2FA state, for the security panel's switch. The SECRET is
 	// never shipped: the settings blob used to carry it, which handed every
 	// logged-in admin the shared factor.

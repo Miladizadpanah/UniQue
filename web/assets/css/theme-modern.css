@@ -1,0 +1,459 @@
+/* ============================================================
+   theme-modern.css — VPN-UI (UniQue2) Modern Theme Layer
+   ============================================================
+   Loaded AFTER tokens.css and custom.css.
+   Adds glassmorphism, gradients, smooth motion, and a
+   polished dark/light design without breaking existing
+   component markup.
+============================================================ */
+
+/* ------------------------------------------------------------
+   1. CSS Variables — Modern color system & elevation
+------------------------------------------------------------ */
+
+:root {
+  --brand-start:#008771;
+  --brand-end:#1bbf9f;
+  --brand-gradient:linear-gradient(135deg, var(--brand-start), var(--brand-end));
+  --brand-glow:rgba(27,191,159,.35);
+  --elev-1:0 2px 8px -2px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.04);
+  --elev-2:0 8px 24px -4px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.04);
+  --elev-3:0 16px 40px -8px rgba(0,0,0,.10),0 4px 8px rgba(0,0,0,.06);
+  --glass-bg:rgba(255,255,255,.06);
+  --glass-border:rgba(255,255,255,.08);
+  --glass-blur:blur(16px) saturate(1.2);
+  --radius-card:14px;
+  --radius-btn:10px;
+  --radius-input:10px;
+  --dur-spring:.35s cubic-bezier(.34,1.56,.64,1);
+  --dur-glide:.28s cubic-bezier(.4,0,.2,1);
+}
+
+body.dark {
+  --brand-start:#1bbf9f;
+  --brand-end:#00d4aa;
+  --brand-glow:rgba(27,191,159,.22);
+  --glass-bg:rgba(255,255,255,.04);
+  --glass-border:rgba(255,255,255,.06);
+}
+
+/* ------------------------------------------------------------
+   2. Base body & typography
+------------------------------------------------------------ */
+
+body {
+  background:var(--bg);
+  min-height:100vh;
+  font-feature-settings:"cv01","cv02","cv03","cv04","liga","kern";
+}
+
+body::before {
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:radial-gradient(circle at 15% 25%, rgba(27,191,159,.06) 0%, transparent 40%),
+            radial-gradient(circle at 80% 75%, rgba(0,135,113,.05) 0%, transparent 40%);
+  pointer-events:none;
+}
+
+/* ------------------------------------------------------------
+   3. Sidebar — glass rail + modern items
+------------------------------------------------------------ */
+
+.bo-rail {
+  background:var(--surface);
+  border-inline-end:1px solid var(--border);
+  box-shadow:var(--elev-1);
+  backdrop-filter:var(--glass-blur);
+  transition:width var(--dur-glide),box-shadow var(--dur-glide);
+}
+
+.bo-rail--collapsed {
+  box-shadow:none;
+}
+
+.bo-rail-brand a {
+  display:flex;
+  align-items:center;
+  gap:var(--sp-2);
+  padding:var(--sp-4);
+  color:var(--text);
+  text-decoration:none;
+  font-weight:var(--fw-bold);
+  font-size:var(--fs-lg);
+  letter-spacing:-.02em;
+}
+
+.bo-rail-brand img {
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  box-shadow:var(--elev-1);
+}
+
+.bo-rail-item {
+  display:flex;
+  align-items:center;
+  gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-4);
+  color:var(--text-2);
+  text-decoration:none;
+  border-radius:10px;
+  margin:2px 8px;
+  transition:all var(--dur-glide);
+  white-space:nowrap;
+}
+
+.bo-rail-item:hover {
+  background:var(--accent-weak);
+  color:var(--accent);
+  transform:translateX(4px);
+  box-shadow:0 4px 12px -4px var(--accent-weak);
+}
+
+.bo-rail-item.is-active {
+  background:var(--brand-gradient);
+  color:var(--on-accent);
+  box-shadow:var(--elev-2);
+}
+
+.bo-rail-item.is-active a-icon {
+  color:var(--on-accent);
+}
+
+.bo-rail-collapse {
+  margin:var(--sp-3) var(--sp-4);
+  border-radius:10px;
+  transition:all var(--dur-glide);
+}
+
+.bo-rail-collapse:hover {
+  background:var(--surface-2);
+}
+
+/* ------------------------------------------------------------
+   4. Topbar
+------------------------------------------------------------ */
+
+.bo-topbar {
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  box-shadow:var(--elev-1);
+  position:sticky;
+  top:0;
+  z-index:100;
+  backdrop-filter:var(--glass-blur);
+}
+
+.bo-topbar-inner {
+  padding:0 var(--sp-6);
+}
+
+.bo-topbar-title {
+  font-size:var(--fs-lg);
+  font-weight:var(--fw-semibold);
+  color:var(--text);
+  letter-spacing:-.01em;
+}
+
+/* ------------------------------------------------------------
+   5. Cards — glass surface + hover lift
+------------------------------------------------------------ */
+
+.bo-card,
+.a-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-card);
+  box-shadow:var(--elev-1);
+  transition:transform var(--dur-spring),box-shadow var(--dur-glide),border-color var(--dur-glide);
+  overflow:hidden;
+}
+
+.bo-card:hover,
+.a-card:hover {
+  transform:translateY(-2px);
+  box-shadow:var(--elev-2);
+  border-color:var(--border-strong);
+}
+
+/* ------------------------------------------------------------
+   6. Buttons — modern gradient primary
+------------------------------------------------------------ */
+
+.a-btn {
+  border-radius:var(--radius-btn);
+  font-weight:var(--fw-medium);
+  transition:all var(--dur-glide);
+  box-shadow:0 2px 4px rgba(0,0,0,.04);
+}
+
+.a-btn:hover {
+  transform:translateY(-1px);
+  box-shadow:0 6px 16px -4px rgba(0,0,0,.10);
+}
+
+.a-btn-primary {
+  background:var(--brand-gradient);
+  border:none;
+  color:var(--on-accent);
+}
+
+.a-btn-primary:hover {
+  filter:brightness(1.05);
+  box-shadow:0 0 20px var(--brand-glow);
+}
+
+.a-btn-default {
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  color:var(--text-2);
+}
+
+.a-btn-default:hover {
+  background:var(--border);
+  color:var(--text);
+}
+
+/* ------------------------------------------------------------
+   7. Inputs & Selects
+------------------------------------------------------------ */
+
+.a-input,
+.a-select-selector,
+.ant-input {
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-input);
+  color:var(--text);
+  transition:all var(--dur-glide);
+}
+
+.a-input:focus,
+.a-select-selector:focus,
+.ant-input:focus {
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-weak);
+  outline:none;
+}
+
+.a-select-arrow {
+  color:var(--text-3);
+}
+
+/* ------------------------------------------------------------
+   8. Tables — refined rows + hover state
+------------------------------------------------------------ */
+
+.ant-table {
+  background:var(--surface);
+  border-radius:var(--radius-card);
+  overflow:hidden;
+}
+
+.ant-table-thead > tr > th {
+  background:var(--surface-2);
+  color:var(--text-2);
+  font-weight:var(--fw-medium);
+  font-size:var(--fs-sm);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  border-bottom:1px solid var(--border);
+  padding:var(--sp-4);
+}
+
+.ant-table-tbody > tr {
+  transition:background var(--dur-glide);
+  border-bottom:1px solid var(--border);
+}
+
+.ant-table-tbody > tr:hover {
+  background:var(--surface-2);
+}
+
+.ant-table-tbody > tr.ant-table-row-selected {
+  background:var(--accent-weak);
+}
+
+.ant-table-cell {
+  color:var(--text);
+  border-bottom:none;
+}
+
+/* ------------------------------------------------------------
+   9. Badges & status pills
+------------------------------------------------------------ */
+
+.a-badge,
+.ant-badge-status {
+  border-radius:var(--radius-pill);
+  font-size:var(--fs-xs);
+  font-weight:var(--fw-medium);
+  padding:2px 10px;
+}
+
+.ant-badge-status-success {
+  background:var(--ok-weak);
+  color:var(--ok);
+}
+
+.ant-badge-status-error,
+.ant-badge-status-processing {
+  background:var(--error-weak);
+  color:var(--error);
+}
+
+.ant-badge-status-warning {
+  background:var(--warn-weak);
+  color:var(--warn);
+}
+
+/* ------------------------------------------------------------
+   10. Modals — backdrop blur + rounded
+------------------------------------------------------------ */
+
+.ant-modal {
+  backdrop-filter:blur(8px);
+}
+
+.ant-modal-content {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:var(--elev-3);
+}
+
+.ant-modal-header {
+  border-bottom:none;
+  padding:var(--sp-5) var(--sp-6);
+}
+
+.ant-modal-title {
+  font-size:var(--fs-lg);
+  font-weight:var(--fw-semibold);
+  color:var(--text);
+}
+
+.ant-modal-body {
+  padding:var(--sp-6);
+}
+
+/* ------------------------------------------------------------
+   11. Alerts & toasts
+------------------------------------------------------------ */
+
+.a-alert,
+.ant-alert {
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--surface-2);
+}
+
+.a-alert-error,
+.ant-alert-error {
+  background:var(--error-weak);
+  border-color:var(--error);
+  color:var(--error);
+}
+
+/* ------------------------------------------------------------
+   12. Spinner / loading states
+------------------------------------------------------------ */
+
+.a-spin,
+.ant-spin {
+  color:var(--accent);
+}
+
+/* ------------------------------------------------------------
+   13. Scrollbar — thin, modern
+------------------------------------------------------------ */
+
+::-webkit-scrollbar {
+  width:8px;
+  height:8px;
+}
+
+::-webkit-scrollbar-track {
+  background:transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background:rgba(0,0,0,.15);
+  border-radius:4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background:rgba(0,0,0,.25);
+}
+
+body.dark ::-webkit-scrollbar-thumb {
+  background:rgba(255,255,255,.15);
+}
+
+body.dark ::-webkit-scrollbar-thumb:hover {
+  background:rgba(255,255,255,.25);
+}
+
+/* ------------------------------------------------------------
+   14. Utility classes
+------------------------------------------------------------ */
+
+.glass {
+  background:var(--glass-bg);
+  backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+}
+
+.gradient-text {
+  background:var(--brand-gradient);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.shadow-elev-2 {
+  box-shadow:var(--elev-2);
+}
+
+.fade-in {
+  animation:fadeIn var(--dur-spring) both;
+}
+
+@keyframes fadeIn {
+  from{opacity:0;transform:translateY(8px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* ------------------------------------------------------------
+   15. Login page polish
+------------------------------------------------------------ */
+
+.login-page .ant-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  box-shadow:var(--elev-2);
+}
+
+.login-page .a-btn-primary {
+  width:100%;
+  padding:var(--sp-3);
+  font-size:var(--fs-md);
+}
+
+/* ------------------------------------------------------------
+   16. Responsive tweaks
+------------------------------------------------------------ */
+
+@media (max-width:768px) {
+  .bo-rail {
+    width:60px;
+  }
+  .bo-rail-item span {
+    display:none;
+  }
+  .bo-rail-item {
+    justify-content:center;
+    padding:var(--sp-3);
+  }
+}

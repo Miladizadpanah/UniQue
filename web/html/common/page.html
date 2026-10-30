@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{{ .base_path }}assets/ant-design-vue/antd.min.css">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/tokens.css?{{ .asset_ver }}">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/custom.css?{{ .asset_ver }}">
+  <link rel="stylesheet" href="{{ .base_path }}assets/css/theme-modern.css?{{ .asset_ver }}">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/components.css?{{ .asset_ver }}">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/ant-bridge.css?{{ .asset_ver }}">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/terminal.css?{{ .asset_ver }}">
@@ -67,6 +68,7 @@
 {{ end }}
 
 {{ define "page/head_end" }}
+{{ template "page/body_scripts" . }}
 </head>
 {{ end }}
 
@@ -87,7 +89,7 @@
       { isReseller: false, unlimited: false, allowanceBytes: 0, spentBytes: 0,
         availableBytes: 0, daysPerGb: 0, minCreateGb: 0, minAddGb: 0,
         allowExternalProxy: false },
-      {{ .reseller }}
+      {{ .resellerJSON }}
     );
 
     // The caller's capability set, keyed by the same slugs the templates read as
@@ -99,7 +101,7 @@
     // Like .perms and RESELLER this drives what the UI SHOWS, never what it
     // ALLOWS: the routes stay reachable by direct request and the middleware is
     // the enforcement.
-    const PERMS = Object.assign({}, {{ .perms }});
+    const PERMS = Object.assign({}, {{ .permsJSON }});
   </script>
 {{ end }}
 

@@ -305,7 +305,16 @@ mkdir -p "$OUT_DIR"
 # the remote that actually publishes these releases; fall back to the upstream
 # name when the remote is not configured (e.g. a local-only build).
 UPSTREAM_REPO="Miladizadpanah/UniQue"
-STAMP_REPO="${VPNUI_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^https://github.com/##; s#^git@github.com:##; s#\.git$##')"
+STAMP_REPO="${VPNUI_REPO:-}"
+if [[ -z "$STAMP_REPO" ]]; then
+    # Derive owner/name from the origin remote: strip the scheme+host prefixes
+    # (https://github.com/  or  git@github.com:) and the trailing .git. Two plain
+    # sed steps, no command-substitution-in-string quoting.
+    REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+    STAMP_REPO="${REMOTE_URL#https://github.com/}"
+    STAMP_REPO="${STAMP_REPO#git@github.com:}"
+    STAMP_REPO="${STAMP_REPO%.git}"
+fi
 if [[ -z "$STAMP_REPO" ]]; then
     STAMP_REPO="$UPSTREAM_REPO"
 fi

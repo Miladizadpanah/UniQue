@@ -220,12 +220,15 @@
       }
       // Only rewrite the request paths the server registers under basePath:
       // API ("/panel/..."), assets ("/assets/..."), subscriptions
-      // ("/subscription/...") and the WebSocket ("/ws"). A favicon or other
+      // ("/subscription/..."), the WebSocket ("/ws"), and login routes
+      // ("/login", "/getTwoFactorEnable", "/logout"). A favicon or other
       // host-root document URL must keep resolving against the host, not the
       // base path, so it is left untouched. Idempotent: an already-prefixed
       // URL is not stacked again.
-      if (/^\/(panel|assets|subscription|ws)(\/|$)/.test(config.url)
-          && !config.url.startsWith(basePath)) {
+      if (
+        /^\/(panel|assets|subscription|ws|login|getTwoFactorEnable|logout)(\/|$)/.test(config.url)
+          && !config.url.startsWith(basePath)
+      ) {
         config.url = basePath + config.url;
       }
       return config;

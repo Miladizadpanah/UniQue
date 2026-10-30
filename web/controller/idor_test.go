@@ -13,7 +13,6 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/util/crypto"
 	"github.com/mhsanaei/3x-ui/v2/web/locale"
 	"github.com/mhsanaei/3x-ui/v2/xray"
@@ -21,7 +20,6 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"github.com/op/go-logging"
 	"github.com/xlzd/gotp"
 )
 
@@ -75,7 +73,7 @@ func newIdorFixture(t *testing.T) *idorFixture {
 	t.Helper()
 	// The controllers log; without this the package-level logger is nil and any
 	// warning panics rather than reporting the finding under test.
-	logger.InitLogger(logging.CRITICAL)
+	initTestLogger(t)
 	if err := database.InitDB(filepath.Join(t.TempDir(), "idor.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

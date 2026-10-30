@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -40,6 +41,13 @@ const (
 
 func newSubTestDB(t *testing.T) {
 	t.Helper()
+	// Point the file backend at a temp dir: config.GetLogFolder defaults to
+	// /var/log/vpn-ui which the CI runner cannot create without root. The
+	// logger's nil-safe wrapper makes the init failure a no-op, but pointing
+	// it at a writable dir keeps the "handlers log, don't panic" contract.
+	if err := os.Setenv("VPNUI_LOG_FOLDER", t.TempDir()); err != nil {
+		t.Fatalf("set VPNUI_LOG_FOLDER: %v", err)
+	}
 	subTestLoggerOnce.Do(func() { logger.InitLogger(logging.ERROR) })
 	if err := database.InitDB(filepath.Join(t.TempDir(), "sub-test.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)

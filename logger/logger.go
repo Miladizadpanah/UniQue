@@ -14,7 +14,7 @@ import (
 
 const (
 	maxLogBufferSize = 10240                 // Maximum log entries kept in memory
-	logFileName      = "vpn-ui.log"            // Log file name
+	logFileName      = "vpn-ui.log"          // Log file name
 	timeFormat       = "2006/01/02 15:04:05" // Log timestamp format
 )
 
@@ -116,62 +116,88 @@ func CloseLogger() {
 	}
 }
 
+// ensureLogger guarantees the package logger is non-nil before any log call.
+// A test binary (or a fresh process that has not run main) reaches a logger
+// wrapper without ever calling InitLogger; the nil check makes those calls a
+// no-op instead of a segfault, so the very first warning in a handler reports
+// the finding under test rather than killing the whole test binary.
+func ensureLogger() {
+	if logger == nil {
+		logger = logging.MustGetLogger("vpn-ui")
+		if consoleBackend := initDefaultBackend(); consoleBackend != nil {
+			leveledBackend := logging.AddModuleLevel(consoleBackend)
+			leveledBackend.SetLevel(logging.INFO, "vpn-ui")
+			logger.SetBackend(leveledBackend)
+		}
+	}
+}
+
 // Debug logs a debug message and adds it to the log buffer.
 func Debug(args ...any) {
+	ensureLogger()
 	logger.Debug(args...)
 	addToBuffer("DEBUG", fmt.Sprint(args...))
 }
 
 // Debugf logs a formatted debug message and adds it to the log buffer.
 func Debugf(format string, args ...any) {
+	ensureLogger()
 	logger.Debugf(format, args...)
 	addToBuffer("DEBUG", fmt.Sprintf(format, args...))
 }
 
 // Info logs an info message and adds it to the log buffer.
 func Info(args ...any) {
+	ensureLogger()
 	logger.Info(args...)
 	addToBuffer("INFO", fmt.Sprint(args...))
 }
 
 // Infof logs a formatted info message and adds it to the log buffer.
 func Infof(format string, args ...any) {
+	ensureLogger()
 	logger.Infof(format, args...)
 	addToBuffer("INFO", fmt.Sprintf(format, args...))
 }
 
 // Notice logs a notice message and adds it to the log buffer.
 func Notice(args ...any) {
+	ensureLogger()
 	logger.Notice(args...)
 	addToBuffer("NOTICE", fmt.Sprint(args...))
 }
 
 // Noticef logs a formatted notice message and adds it to the log buffer.
 func Noticef(format string, args ...any) {
+	ensureLogger()
 	logger.Noticef(format, args...)
 	addToBuffer("NOTICE", fmt.Sprintf(format, args...))
 }
 
 // Warning logs a warning message and adds it to the log buffer.
 func Warning(args ...any) {
+	ensureLogger()
 	logger.Warning(args...)
 	addToBuffer("WARNING", fmt.Sprint(args...))
 }
 
 // Warningf logs a formatted warning message and adds it to the log buffer.
 func Warningf(format string, args ...any) {
+	ensureLogger()
 	logger.Warningf(format, args...)
 	addToBuffer("WARNING", fmt.Sprintf(format, args...))
 }
 
 // Error logs an error message and adds it to the log buffer.
 func Error(args ...any) {
+	ensureLogger()
 	logger.Error(args...)
 	addToBuffer("ERROR", fmt.Sprint(args...))
 }
 
 // Errorf logs a formatted error message and adds it to the log buffer.
 func Errorf(format string, args ...any) {
+	ensureLogger()
 	logger.Errorf(format, args...)
 	addToBuffer("ERROR", fmt.Sprintf(format, args...))
 }

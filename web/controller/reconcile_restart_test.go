@@ -6,10 +6,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
-
-	"github.com/op/go-logging"
 )
 
 // Adding or editing an account on an Xray-native inbound is applied to the RUNNING
@@ -23,7 +20,7 @@ import (
 // decision.
 func newReconcileFixture(t *testing.T, protocol model.Protocol) (*InboundController, int) {
 	t.Helper()
-	logger.InitLogger(logging.CRITICAL)
+	initTestLogger(t)
 	if err := database.InitDB(filepath.Join(t.TempDir(), "reconcile.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

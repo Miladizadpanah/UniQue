@@ -11,11 +11,9 @@ import (
 	"testing"
 
 	"github.com/mhsanaei/3x-ui/v2/database"
-	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/op/go-logging"
 )
 
 // probeVpnOutDriver stands in for a real protocol driver. It records the config it
@@ -81,7 +79,7 @@ func newVpnOutTestDB(t *testing.T) {
 	// jsonMsg logs every failure it reports, and the package logger is a nil pointer
 	// until something initialises it (main does, a test binary does not), which turns
 	// an error response into a segfault rather than a test failure.
-	logger.InitLogger(logging.CRITICAL)
+	initTestLogger(t)
 	if err := database.InitDB(filepath.Join(t.TempDir(), "vpnout.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

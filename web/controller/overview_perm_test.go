@@ -10,11 +10,9 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/locale"
 
 	"github.com/gin-gonic/gin"
-	"github.com/op/go-logging"
 )
 
 // The overview is gated by TWO bits that must not collapse into one another.
@@ -132,7 +130,7 @@ func newPermTestDB(t *testing.T) {
 	t.Helper()
 	// The controllers log; without this the package-level logger is nil and any
 	// warning panics rather than reporting the finding under test.
-	logger.InitLogger(logging.CRITICAL)
+	initTestLogger(t)
 	if err := database.InitDB(filepath.Join(t.TempDir(), "overviewperm.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

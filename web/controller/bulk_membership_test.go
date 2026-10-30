@@ -12,12 +12,10 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
-	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/web/locale"
 	"github.com/mhsanaei/3x-ui/v2/xray"
 
 	"github.com/gin-gonic/gin"
-	"github.com/op/go-logging"
 )
 
 // Bulk membership: adding the selected accounts to, or removing them from, a set
@@ -42,8 +40,10 @@ func newBulkMembershipEnv(t *testing.T) *bulkMembershipEnv {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	// The handlers log; a nil package logger panics on the first warning instead of
-	// reporting the finding under test.
-	logger.InitLogger(logging.CRITICAL)
+	// reporting the finding under test. initTestLogger also points the file backend
+	// at a temp dir so CI (no root, no /var/log/vpn-ui) doesn't fail on a permission
+	// error.
+	initTestLogger(t)
 	if err := database.InitDB(filepath.Join(t.TempDir(), "membership.db")); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}

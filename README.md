@@ -1,4 +1,4 @@
-# VPN-UI (UniQue2)
+# VPN-UI (UniQue)
 
 The next-generation 3x-ui panel: multi-node federation, node-hosted inbounds, client groups,
 inbound presets, live monitoring and security automation. One-line install:

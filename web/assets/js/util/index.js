@@ -37,6 +37,14 @@ class HttpUtil {
             return msg;
         } catch (error) {
             console.error('GET request failed:', error);
+            // 404 = route not found: expected when the running binary is older
+            // than the HTML calling a newly-added endpoint. A 404 toast on
+            // every page load is noise, so swallow it and return a silent
+            // failure. Callers that need to distinguish 404 from other errors
+            // can check `msg.success === false && msg.msg === ''`.
+            if (error.response && error.response.status === 404) {
+                return new Msg(false, '');
+            }
             const errorMsg = new Msg(false, error.response?.data?.msg || error.response?.data?.message || error.message || 'Request failed');
             this._handleMsg(errorMsg);
             return errorMsg;
@@ -51,6 +59,9 @@ class HttpUtil {
             return msg;
         } catch (error) {
             console.error('POST request failed:', error);
+            if (error.response && error.response.status === 404) {
+                return new Msg(false, '');
+            }
             const errorMsg = new Msg(false, error.response?.data?.msg || error.response?.data?.message || error.message || 'Request failed');
             this._handleMsg(errorMsg);
             return errorMsg;

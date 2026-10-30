@@ -205,7 +205,30 @@
 <script src="{{ .base_path }}assets/js/util/index.js?{{ .asset_ver }}"></script>
 <script>
   const basePath = '{{ .base_path }}';
+  // All API/asset call sites use root-absolute URLs ("/panel/api/...",
+  // "/assets/...", "/subscription/..."). The panel is mounted under a base path
+  // (e.g. "/subs/"), so the real route is "/subs/panel/api/...". Axios treats a
+  // leading "/" as absolute and ignores baseURL, which is why a root-absolute
+  // request 404s under a base path. Prepend the base path to any such URL so the
+  // request lands on the route the server actually registered. Relative URLs
+  // (no leading "/") are left alone; they already resolve under the page.
   axios.defaults.baseURL = basePath;
+  if (basePath && basePath !== "/") {
+    axios.interceptors.request.use((config) => {
+      if (typeof config.url === "string" && config.url.startsWith("/")) {
+        // Only rewrite the request paths the server registers under basePath:
+        // API ("/panel/..."), assets ("/assets/..."), subscriptions
+        // ("/subscription/...") and the WebSocket ("/ws"). A favicon or other
+        // host-root document URL must keep resolving against the host, not the
+        // base path, so it is left untouched. Idempotent: an already-prefixed
+        // URL is not stacked again.
+        if (/^\/(panel|assets|subscription|ws)(\/|$)/.test(config.url) && !config.url.startsWith(basePath)) {
+          config.url = basePath + config.url;
+        }
+      }
+      return config;
+    });
+  }
 </script>
 <script src="{{ .base_path }}assets/js/websocket.js?{{ .asset_ver }}"></script>
 {{ end }}

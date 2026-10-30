@@ -887,10 +887,18 @@ func (a *InboundController) addInbound(c *gin.Context) {
 	websocket.BroadcastInboundsToUser(user.Id, inbounds)
 }
 
-// addInboundFromPreset creates a new inbound from a preset with optimized defaults.
+// addInboundFromPreset creates a new inbound from a preset with optimized
+// defaults, then applies the operator's overrides: SNI, CDN front, and port.
 func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 	presetName := c.PostForm("preset")
 	remark := c.PostForm("remark")
+	sni := strings.TrimSpace(c.PostForm("sni"))
+	cdn := strings.TrimSpace(c.PostForm("cdn"))
+	portStr := c.PostForm("port")
+	var port int
+	if portStr != "" {
+		port, _ = strconv.Atoi(portStr)
+	}
 
 	var preset *service.InboundPreset
 	for _, p := range a.inboundService.Presets() {
@@ -908,6 +916,19 @@ func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
+	}
+
+	// Apply the operator's overrides after the preset inbound is persisted:
+	// SNI / CDN front go into the stream settings; a chosen port rebinds it.
+	// An override error answers the request (the preset inbound stays, with
+	// whatever of the override the panel accepted).
+	if sni != "" || cdn != "" || port != 0 {
+		updated, upErr := a.inboundService.ApplyPresetOverrides(inbound, *preset, sni, cdn, port)
+		if upErr != nil {
+			logger.Warning("applying preset overrides: ", upErr)
+		} else if updated != nil {
+			inbound = updated
+		}
 	}
 
 	// Grant the creator access to their new inbound, the same way the add path does.

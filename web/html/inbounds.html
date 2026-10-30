@@ -107,7 +107,7 @@
                       <a-button icon="thunderbolt">
                         <template v-if="!isMobile">{{ i18n "pages.inbounds.inboundPresets" }}</template>
                       </a-button>
-                      <a-menu slot="overlay" @click="a => applyPreset(a)"
+                      <a-menu slot="overlay" @click="a => openPresetModal(a)"
                         :theme="themeSwitcher.currentTheme">
                         <a-menu-item v-for="p in presets" :key="p.name" :title="p.description">
                           <a-icon :type="p.recommended ? 'star' : 'bolt'"></a-icon>
@@ -115,6 +115,38 @@
                         </a-menu-item>
                       </a-menu>
                     </a-dropdown>
+                    <!-- Preset options modal: remark / SNI / CDN front / port before creating -->
+                    <a-modal v-model="presetModal.visible" :title="presetModal.name"
+                      :confirm-loading="presetModal.saving" :mask-closable="false"
+                      @ok="submitPreset"
+                      :ok-text="{{ i18n "confirm" }}" :cancel-text="{{ i18n "cancel" }}"
+                      :overlay-class-name="themeSwitcher.currentTheme">
+                      <a-form layout="vertical" :style="{ marginTop: '12px' }">
+                        <a-form-item :label="{{ i18n "remark" }}">
+                          <a-input v-model.trim="presetModal.remark" :placeholder="presetModal.name"></a-input>
+                        </a-form-item>
+                        <a-form-item :label="{{ i18n "presetSni" }}"
+                          v-if="presetModal.security === 'tls' || presetModal.security === 'reality'">
+                          <a-input v-model.trim="presetModal.sni" placeholder="example.com"></a-input>
+                          <div :style="{ color: 'var(--text-3)', fontSize: '12px', marginTop: '4px' }">
+                            {{ i18n "presetSniHint" }}
+                          </div>
+                        </a-form-item>
+                        <a-form-item :label="{{ i18n "presetCdnEndpoint" }}" v-if="presetModal.security === 'tls'">
+                          <a-input v-model.trim="presetModal.cdn" placeholder="cdn.example.com:443"></a-input>
+                          <div :style="{ color: 'var(--text-3)', fontSize: '12px', marginTop: '4px' }">
+                            {{ i18n "presetCdnHint" }}
+                          </div>
+                        </a-form-item>
+                        <a-form-item :label="{{ i18n "pages.inbounds.port" }}">
+                          <a-input-number v-model="presetModal.port" :min="1" :max="65535"
+                            style="width: 160px"></a-input-number>
+                          <a-button size="small" :style="{ marginLeft: '8px' }" @click="presetModal.port = 0">
+                            {{ i18n "presetRandomPort" }}
+                          </a-button>
+                        </a-form-item>
+                      </a-form>
+                    </a-modal>
                     <a-dropdown :trigger="['click']">
                       <a-button type="primary" icon="menu">
                         <template v-if="!isMobile">{{ i18n
@@ -962,6 +994,12 @@
       scopeSaving: false,
       // Presets for quick inbound creation
       presets: [],
+      // The preset options modal: SNI / CDN front / port / remark before creating.
+      // security drives which fields render; 0 port = the panel picks one.
+      presetModal: {
+        visible: false, name: '', security: '', remark: '', sni: '', cdn: '',
+        port: 0, saving: false,
+      },
     },
     created() {
       this.loadPresets();
@@ -987,31 +1025,46 @@
       async openPresets() {
         await this.loadPresets();
       },
-      // Apply a preset to create a new inbound
-      async applyPreset(key) {
+      // Open the preset options modal: seed the form, show it.
+      async openPresetModal(name) {
         await this.loadPresets();
-        const preset = this.presets.find(p => p.name === key);
+        const preset = this.presets.find(p => p.name === name);
         if (!preset) return;
-
-        this.$confirm({
-          title: '{{ i18n "pages.inbounds.applyPreset" }}',
-          content: `Create "${preset.name}" with optimized settings?`,
-          okText: '{{ i18n "confirm" }}',
-          cancelText: '{{ i18n "cancel" }}',
-          onOk: async () => {
-            const msg = await HttpUtil.post('/panel/api/inbounds/addPreset', {
-              preset: preset.name,
-              remark: ''
-            });
-            if (msg && msg.success) {
-              this.$message.success('{{ i18n "pages.inbounds.toasts.inboundCreateSuccess" }}: ' + preset.name);
-              await this.getDBInbounds();
-            } else {
-              this.$message.error((msg && msg.msg) || '{{ i18n "somethingWentWrong" }}');
-            }
+        this.presetModal = {
+          visible: true,
+          name: preset.name,
+          security: preset.security || '',
+          remark: '',
+          sni: '',
+          cdn: '',
+          port: 0,
+          saving: false,
+        };
+      },
+      // Submit the preset options: create the inbound with the chosen SNI / CDN / port.
+      async submitPreset() {
+        const m = this.presetModal;
+        m.saving = true;
+        try {
+          const msg = await HttpUtil.post('/panel/api/inbounds/addPreset', {
+            preset: m.name,
+            remark: m.remark,
+            sni: m.sni,
+            cdn: m.cdn,
+            port: m.port,
+          });
+          if (msg && msg.success) {
+            this.$message.success(
+              '{{ i18n "pages.inbounds.toasts.inboundCreateSuccess" }}: ' + m.name
+            );
+            m.visible = false;
+            await this.getDBInbounds();
+          } else {
+            this.$message.error((msg && msg.msg) || '{{ i18n "somethingWentWrong" }}');
           }
-          }
-        });
+        } finally {
+          m.saving = false;
+        }
       },
       // ---- client-group scoping ("who may use this inbound") ----------------
       // Open the picker for one inbound: load the group options once, then the

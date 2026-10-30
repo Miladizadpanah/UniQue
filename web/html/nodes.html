@@ -234,7 +234,7 @@
          own status answer when it is left blank. -->
     <a-button type="link" size="small" style="padding: 0; margin-bottom: 8px"
       @click="nodeModal.showAdvanced = !nodeModal.showAdvanced">
-      [[ nodeModal.showAdvanced ? '▲ ' : '▼ ' + (i18n "pages.nodes.advanced") ]]
+      [[ nodeModal.showAdvanced ? '▲' : '▼' ]] {{ i18n "pages.nodes.advanced" }}
     </a-button>
 
     <template v-if="nodeModal.showAdvanced">

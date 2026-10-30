@@ -7,10 +7,10 @@ set -euo pipefail
 # download here — and the in-panel updater in web/service/panelupdate.go — resolves
 # to this same owner/name pair.
 #
-# The UniQue2 repo is the primary deploy target: the curl one-liner in the README
-# and install.sh both fetch from UniQue2/main, so deploy.sh must download the
-# binary from UniQue2 releases too, not from the upstream UniQue repo.
-REPO="${VPNUI_REPO:-Miladizadpanah/UniQue2}"
+# The UniQue repo is the primary deploy target: the curl one-liner in the README
+# and install.sh both fetch from UniQue/main, so deploy.sh must download the
+# binary from UniQue releases.
+REPO="${VPNUI_REPO:-Miladizadpanah/UniQue}"
 ASSET="vpn-ui-amd64"
 DEST_DIR="/opt/vpn-ui"
 DEST="$DEST_DIR/$ASSET"

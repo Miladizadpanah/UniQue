@@ -509,7 +509,7 @@
                     <!-- Add from the client rows this page is showing -->
                     <div style="margin-top: 8px; display: flex; gap: 6px">
                       <a-select size="small" v-model="g._addIds" mode="multiple" show-search
-                        :placeholder="i18n 'pages.clients.groupAdd'"
+                        :placeholder="'{{ i18n "pages.clients.groupAdd" }}'"
                         :filter-option="cgFilterOption"
                         style="width: 320px; flex: 1"
                         :dropdownClassName="themeSwitcher.currentTheme">

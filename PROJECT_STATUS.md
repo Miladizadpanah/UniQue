@@ -1,7 +1,7 @@
-# VPN-UI (UniQue2) — گزارش کامل وضعیت پروژه
+# VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
 > آخرین به‌روزرسانی: ۳۰ اکتبر ۲۰۲۶ · نسخه‌ی جاری: **v2.9.7**
-> ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue2` · تگ: `v2.9.7`
+> ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue` · تگ: `v2.9.7`
 
 ---
 
@@ -13,7 +13,7 @@
 - وقتی نود حذف می‌شود، اکانت‌های پروویژن‌شده روی سرور مقصد **خودکار پاک** شوند.
 - پریست‌های اینباند واقعاً اینباند کارفرما بسازند (تنظیمات بهینه، ساب‌دامن/CDN، پورت رندوم آزاد).
 - گروه‌بندی کلاینت‌ها: انتخاب چند کاربر + افزودن همه به گروه با یک کلیک.
-- نصب یک‌خطی: `curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash`
+- نصب یک‌خطی: `curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue/main/install.sh | sudo bash`
 
 ---
 
@@ -72,10 +72,10 @@
 
 - **کد**: همه‌چیز روی `unique2/main` (آخرین commit: `140ecf7`)
 - **تگ**: `v2.9.7`
-- **Release**: `https://github.com/Miladizadpanah/UniQue2/releases/tag/v2.9.7` با binary `vpn-ui-amd64` (341MB)
+- **Release**: `https://github.com/Miladizadpanah/UniQue/releases/tag/v2.9.7` با binary `vpn-ui-amd64` (341MB)
 - **نصب یک‌خطی**:
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue2/main/install.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/Miladizadpanah/UniQue/main/install.sh | sudo bash
   ```
 
 ---

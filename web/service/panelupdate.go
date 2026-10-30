@@ -52,7 +52,7 @@ var (
 // syscall.Exec's os.Args back into itself. That is harmless for the panel, but from
 // a CLI process it would re-exec the CLI with its own `update` arguments, in a loop.
 // The in-panel updater resolves the release asset at BUILD time. A fork deploys
-// from its OWN repo (UniQue2 in this tree), so the default follows the repo the
+// from its OWN repo (UniQue in this tree), so the default follows the repo the
 // binary was actually installed from; an operator can override both from the
 // overview without recompiling.
 var (

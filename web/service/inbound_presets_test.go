@@ -20,7 +20,7 @@ import (
 // newPresetService returns a service whose preset builders can run without
 // a database connection: the builders in this file touch no table.
 func newPresetService() *InboundService {
-	return newPresetService()
+	return new(InboundService)
 }
 
 func TestPresetVlessTlsIsTlsNotReality(t *testing.T) {

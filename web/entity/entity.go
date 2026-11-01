@@ -60,6 +60,9 @@ type AllSetting struct {
 	SubSupportUrl               string `json:"subSupportUrl" form:"subSupportUrl"`                             // Subscription support URL
 	SubProfileUrl               string `json:"subProfileUrl" form:"subProfileUrl"`                             // Subscription profile URL
 	SubAnnounce                 string `json:"subAnnounce" form:"subAnnounce"`                                 // Subscription announce
+	// SubPageTemplate is the operator's custom subscriber-page HTML, or "" for
+	// the built-in page. Served with the panel's placeholders expanded.
+	SubPageTemplate             string `json:"subPageTemplate" form:"subPageTemplate"`                         // Custom subscriber page template
 	SubEnableRouting            bool   `json:"subEnableRouting" form:"subEnableRouting"`                       // Enable routing for subscription
 	SubRoutingRules             string `json:"subRoutingRules" form:"subRoutingRules"`                         // Subscription global routing rules (Only for Happ)
 	SubListen                   string `json:"subListen" form:"subListen"`                                     // Subscription server listen IP

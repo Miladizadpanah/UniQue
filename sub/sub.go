@@ -177,6 +177,12 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 		SubAnnounce = ""
 	}
 
+	// The operator's custom subscriber-page HTML, or "" for the built-in page.
+	SubPageTemplate, err := s.settingService.GetSubPageTemplate()
+	if err != nil {
+		SubPageTemplate = ""
+	}
+
 	SubEnableRouting, err := s.settingService.GetSubEnableRouting()
 	if err != nil {
 		return nil, err
@@ -266,7 +272,7 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.sub = NewSUBController(
 		g, LinksPath, JsonPath, ClashPath, subJsonEnable, subClashEnable, Encrypt, ShowInfo, RemarkModel, SubUpdates,
 		SubJsonFragment, SubJsonNoises, SubJsonMux, SubJsonRules, SubTitle, SubSupportUrl,
-		SubProfileUrl, SubAnnounce, SubEnableRouting, SubRoutingRules)
+		SubProfileUrl, SubAnnounce, SubEnableRouting, SubRoutingRules, SubPageTemplate)
 
 	return engine, nil
 }

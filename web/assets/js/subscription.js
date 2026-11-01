@@ -185,6 +185,38 @@
       if (this._onResize) window.removeEventListener('resize', this._onResize);
     },
     computed: {
+      // ------------------------------------------------------------------
+      // App-install cards: the 3X-UI-style grid — one card per app, each with
+      // its real deep link, split by platform (Android/iOS) detected from the
+      // visitor's user agent. The old page had two dropdowns; the grid is what
+      // an end customer actually taps.
+      // ------------------------------------------------------------------
+      appGrid() {
+        const encSub = encodeURIComponent(this.app.subUrl);
+        const name = encodeURIComponent(this.app.sId || 'Subscription');
+        const profile = encodeURIComponent(this.app.sId || 'Subscription');
+        const all = {
+          V2Box: { android: `v2box://install-sub?url=${encSub}&name=${name}`, ios: `v2box://install-sub?url=${encSub}&name=${name}` },
+          'V2RayNG': { android: `v2rayng://install-config?url=${encSub}`, ios: null },
+          'Sing-box': { android: `sing-box://import-remote-profile?url=${encSub}#${profile}`, ios: `sing-box://import-remote-profile?url=${encSub}#${profile}` },
+          V2RayTun: { android: `v2raytun://import/${this.app.subUrl}`, ios: `v2raytun://import/${this.app.subUrl}` },
+          Happ: { android: `happ://add/${this.app.subUrl}`, ios: `happ://add/${this.app.subUrl}` },
+          Incy: { android: `incy://add/${this.app.subUrl}`, ios: `incy://add/${this.app.subUrl}` },
+          Shadowrocket: { android: null, ios: this.shadowrocketUrl() },
+          Streisand: { android: null, ios: this.streisandUrl() },
+        };
+        const plat = this.isIOS ? 'ios' : 'android';
+        // Every app with a link for THIS platform; the deep link opens the
+        // app's install/import screen directly, no copy needed.
+        const out = [];
+        for (const [k, v] of Object.entries(all)) {
+          if (v[plat]) out.push({ name: k, url: v[plat] });
+        }
+        return out;
+      },
+      isIOS() {
+        return /iphone|ipad|ipod|macintosh/i.test(navigator.userAgent);
+      },
       isMobile() {
         return this.viewportWidth < 576;
       },
@@ -238,6 +270,27 @@
       open,
       linkName,
       formatDate,
+      openApp(url) {
+        // A deep link the OS cannot handle (app not installed) must not crash
+        // the page: open it in a new tab, where the store or the app handles it.
+        window.open(url, '_blank');
+      },
+      // One antd icon per app, so the grid card reads as an app icon without
+      // shipping a sprite sheet. The icons are generic-but-recognizable
+      // (android/apple/globe/...); a future phase can swap in real logos.
+      appIcon(name) {
+        switch (name) {
+          case 'V2Box': return 'appstore';
+          case 'V2RayNG': return 'android';
+          case 'Sing-box': return 'global';
+          case 'V2RayTun': return 'mobile';
+          case 'Happ': return 'mobile';
+          case 'Incy': return 'mobile';
+          case 'Shadowrocket': return 'apple';
+          case 'Streisand': return 'apple';
+          default: return 'link';
+        }
+      },
       i18nLabel(key) {
         return '{{ i18n "' + key + '" }}';
       },

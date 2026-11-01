@@ -125,6 +125,15 @@
                 <a-textarea v-model="allSetting.subAnnounce"></a-textarea>
             </template>
         </a-setting-list-item>
+        <a-setting-list-item paddings="small">
+            <template #title>{{ i18n "pages.settings.subPageTemplate"}}</template>
+            <template #description>{{ i18n
+                "pages.settings.subPageTemplateDesc"}}</template>
+            <template #control>
+                <a-textarea :rows="6" v-model="allSetting.subPageTemplate"
+                    placeholder="<div class='sub-card'><b>{USER}</b> — {REMAINING} left</div>"></a-textarea>
+            </template>
+        </a-setting-list-item>
         <a-divider>{{ i18n "pages.xray.advancedTemplate"}} (Happ)</a-divider>
         <a-setting-list-item paddings="small">
             <template #title>{{ i18n

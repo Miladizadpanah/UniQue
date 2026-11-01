@@ -820,6 +820,8 @@
 "subProfileUrlDesc" = "لینک وب‌سایت شما که در کلاینت VPN نمایش داده می‌شود"
 "subAnnounce" = "اعلان"
 "subAnnounceDesc" = "متن اعلانی که در کلاینت VPN نمایش داده می‌شود"
+"subPageTemplate" = "صفحه‌ی سفارشی اشتراک"
+"subPageTemplateDesc" = "کد HTML صفحه‌ی اشتراکی که وقتی لینک در مرورگر باز می‌شود نمایش داده می‌شود. متغیرها: {USER} {REMAINING} {TOTAL} {USED} {UPLOAD} {DOWNLOAD} {EXPIRE} {SUB_URL} {SUB_JSON} {SUB_CLASH} {BASE_URL} {LINKS}. برای استفاده از صفحه‌ی پیش‌فرض خالی بگذارید."
 "subEnableRouting" = "فعال‌سازی مسیریابی"
 "subEnableRoutingDesc" = "تنظیمات سراسری برای فعال‌سازی مسیریابی در کلاینت VPN. (فقط برای Happ)"
 "subRoutingRules" = "قوانین مسیریابی"

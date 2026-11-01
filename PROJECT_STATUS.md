@@ -1,6 +1,6 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲)
+> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲ + ۲b + فاز ۳)
 > ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
@@ -38,11 +38,63 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 ### وضعیت فازها
 - ✅ فاز ۱ — نود قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]
 - ✅ فاز ۲ — تونل بومی سبک [کامیت c6055af]
-- ⏭ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import)
+- ✅ فاز ۲b — ری‌لای ترافیک واقعی کاربر روی کانال control تونل [کامیت 0578c83]
+- ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import)
 - ⏭ فاز ۴ — inbound clone + mTLS + tunnel health monitor + CPU/mem history
 - ⏭ فاز ۵ — control-plane NX-style (roles/limits، 2FA TOTP، session mgmt،
   webhooks outbox، backup encryption، Ctrl-K palette، PWA)
 - ⏭ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
+
+## ۰b. فاز ۲b — ری‌لای ترافیک واقعی کاربر روی تونل [کامیت 0578c83]
+
+موتور تونل در فاز ۲ کانال control را دستیابی و keepalive می‌کرد، ولی
+forwarded-port mapها در عمل بی‌اثر بودند: listener محلی وجود نداشت و بایتی
+کاربر روی سیم نمی‌رفت. فاز ۲b مسیر واقعی ترافیک کاربر را ساخت:
+
+- **`web/service/tunnel/relay.go`** (جدید):
+  - `streamReg` — وضعیت stream‌های یک کانال control: جدول remote (stream‌هایی
+    که همتا باز کرده و این انتها backendشان را dial کرده) + جدول local
+    (اتصال listener محلی که زیر source port خودش park شده)
+  - `writeFrame / readFrame` — فریم مولتیپلکس `[type][stream][len][payload]`
+  - `pumpFrames` — ریپر کانال control: فریم‌های open/data/close را به طرف
+    محلی fan-out می‌کند؛ روی open، backendی که source port مشخص کرده را dial
+    می‌کند و دوطرفه pipe می‌کند
+  - `startLocalListeners` — باind پورت‌های map روی 0.0.0.0 (TCP + UDP)
+  - `relayLocalTCP / relayLocalUDP` — نصف ارسال: بایت‌های اتصال محلی را به‌عنوان
+    فریم data با id = source port به تونل می‌فرستد
+  - `resolveBackend / sortPorts` — lookupهای map که relay برایشان key می‌گیرد
+- **`manager.go`**: `handle` گیج‌های `bytesUp/bytesDown` گرفت (ترافیک کاربر،
+  keepalive را نمی‌شمارد)؛ `runRole` حالا `streamReg` می‌سازد و روی کانال
+  control، هم `startLocalListeners` و هم `pumpFrames` را راه می‌اندازد.
+  Accessorهای `BytesUp/BytesDown` برای داشبورد.
+- **`core.go`**: stubهای قدیمی `pumpStream/relayBackend/pumpUDP` حذف شد؛
+  `pumpFrames` تنها ریدر کانال control است.
+
+توپولو (موقعیت معکوس ایران ⇄ خارج): هر انتها listener محلی‌اش را روی پورت‌های
+map‌اش بایند می‌کند؛ اتصال پذیرفته‌شده یک stream روی کانال control می‌شود که
+idاش source port است؛ همتا آن port را با map خودش resolve و backend را dial
+می‌کند. مکانیزم در جهت معکوس با تعویض نقش‌ها همین است — یک تونل دوطرفه.
+
+**Build**: `GOOS=linux go build ./...` + `go vet` سبز.
+
+
+## ۰c. فاز ۳ — ارتقای صفحه‌ی اشتراک به سبک 3X-UI
+
+صفحه‌ی اشتراک (subpage) به سبک 3X-UI ارتقا یافت:
+
+- **App install grid**: به‌جای دو dropdown (Android/iOS)، یک گرید کارت
+  (V2Box, V2RayNG, Sing-box, V2RayTun, Happ, Incy, Shadowrocket, Streisand)
+  که با تشخیص user-agent پلتفرم، کارت‌های مناسب را نشان می‌دهد. هر کارت یک
+  deep link واقعی به صفحه‌ی import/install آن اپ است — بدون کپی-پیست.
+- **صفحه‌ی سفارشی اشتراک**: اپراتور می‌تواند HTML دلخواهش را در تنظیمات
+  (Settings → Panel → Subscription → Custom Subscriber Page) بچسباند. پلوس‌هولدرها:
+  `{USER} {REMAINING} {TOTAL} {USED} {UPLOAD} {DOWNLOAD} {EXPIRE} {SUB_URL}`
+  `{SUB_JSON} {SUB_CLASH} {BASE_URL} {LINKS}`. اگر HTML خالی باشد، صفحه‌ی
+  پیش‌فرض پنل render می‌شود. کد HTML اپراتور از html/template نمی‌گذرد
+  (اجرای `c.String(200, ...)` مستقیم) تا `{{...}}` داخلش 500 ندهد.
+- **i18n**: کلیدهای `subPageTemplate` / `subPageTemplateDesc` در en_US + fa_IR.
+- **Build**: `GOOS=linux go build ./...` + `go vet` سبز.
 
 
 ## ۰. فاز ۱ — نودِ قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]

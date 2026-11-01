@@ -969,6 +969,8 @@
 "subProfileUrlDesc" = "A link to your website displayed in the VPN client"
 "subAnnounce" = "Announce"
 "subAnnounceDesc" = "The text of the announce displayed in the VPN client"
+"subPageTemplate" = "Custom Subscriber Page"
+"subPageTemplateDesc" = "HTML for the subscriber page shown when a link is opened in a browser. Placeholders: {USER} {REMAINING} {TOTAL} {USED} {UPLOAD} {DOWNLOAD} {EXPIRE} {SUB_URL} {SUB_JSON} {SUB_CLASH} {BASE_URL} {LINKS}. Leave blank to use the built-in page."
 "subEnableRouting" = "Enable routing"
 "subEnableRoutingDesc" = "Global setting to enable routing in the VPN client. (Only for Happ)"
 "subRoutingRules" = "Routing rules"

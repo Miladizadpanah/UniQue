@@ -273,12 +273,61 @@
 .sub-page .sub-config-btn:hover { border-color: var(--accent); color: var(--accent); }
 .sub-page .sub-config-btn .anticon { color: var(--accent); }
 
-/* --- app install -------------------------------------------------------------- */
-.sub-page .sub-apps {
-  display: flex;
+/* --- app install grid ---------------------------------------------------------- */
+.sub-page .sub-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: var(--sp-2);
 }
-.sub-page .sub-apps > * { flex: 1; }
+.sub-page .sub-app-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.sub-page .sub-app-card:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+.sub-page .sub-app-card:active { transform: translateY(0); }
+.sub-page .sub-app-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-weak);
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.sub-page .sub-app-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub-page .sub-app-go {
+  color: var(--text-3);
+  transition: color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.sub-page .sub-app-card:hover .sub-app-go {
+  color: var(--accent);
+  transform: translateX(2px);
+}
 
 /* mobile: two-column stats only under 400px keeps a single column everywhere */
 @media (max-width: 400px) {
@@ -432,29 +481,15 @@
       <div class="sub-card-head">
         <span class="sub-card-title">{{ i18n "subscription.installApps" }}</span>
       </div>
-      <div class="sub-apps">
-        <a-dropdown :trigger="['click']" style="width: 100%">
-          <a-button icon="android" size="large" block>Android <a-icon type="down"></a-icon></a-button>
-          <a-menu slot="overlay" :class="themeSwitcher.currentTheme">
-            <a-menu-item @click="open('v2box://install-sub?url=' + encodeURIComponent(app.subUrl) + '&name=' + encodeURIComponent(app.sId))">V2Box</a-menu-item>
-            <a-menu-item @click="open('v2rayng://install-config?url=' + encodeURIComponent(app.subUrl))">V2RayNG</a-menu-item>
-            <a-menu-item @click="copy(app.subUrl)">Sing-box</a-menu-item>
-            <a-menu-item @click="copy(app.subUrl)">V2RayTun</a-menu-item>
-            <a-menu-item @click="copy(app.subUrl)">NPV Tunnel</a-menu-item>
-            <a-menu-item @click="open('happ://add/' + app.subUrl)">Happ</a-menu-item>
-          </a-menu>
-        </a-dropdown>
-        <a-dropdown :trigger="['click']" style="width: 100%">
-          <a-button icon="apple" size="large" block>iOS <a-icon type="down"></a-icon></a-button>
-          <a-menu slot="overlay" :class="themeSwitcher.currentTheme">
-            <a-menu-item @click="open(shadowrocketUrl)">Shadowrocket</a-menu-item>
-            <a-menu-item @click="open(v2boxUrl)">V2Box</a-menu-item>
-            <a-menu-item @click="open(streisandUrl)">Streisand</a-menu-item>
-            <a-menu-item @click="copy(v2raytunUrl)">V2RayTun</a-menu-item>
-            <a-menu-item @click="copy(npvtunUrl)">NPV Tunnel</a-menu-item>
-            <a-menu-item @click="open(happUrl)">Happ</a-menu-item>
-          </a-menu>
-        </a-dropdown>
+      <div class="sub-app-grid">
+        <a class="sub-app-card" v-for="a in appGrid" :key="a.name" :href="a.url"
+          @click.prevent="openApp(a.url)">
+          <span class="sub-app-icon">
+            <a-icon :type="appIcon(a.name)"></a-icon>
+          </span>
+          <span class="sub-app-name">[[ a.name ]]</span>
+          <a-icon class="sub-app-go" type="right"></a-icon>
+        </a>
       </div>
     </div>
 

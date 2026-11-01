@@ -65,6 +65,7 @@ var defaultValueMap = map[string]string{
 	"subSupportUrl":               "",
 	"subProfileUrl":               "",
 	"subAnnounce":                 "",
+	"subPageTemplate":             "",
 	"subEnableRouting":            "true",
 	"subRoutingRules":             "",
 	"subListen":                   "",
@@ -744,6 +745,20 @@ func (s *SettingService) GetSubProfileUrl() (string, error) {
 
 func (s *SettingService) GetSubAnnounce() (string, error) {
 	return s.getString("subAnnounce")
+}
+
+// GetSubPageTemplate returns the operator's custom subscriber-page HTML. A blank
+// value means "use the built-in subpage.html"; a non-blank value is served
+// verbatim with the panel's placeholders ({USER}, {REMAINING}, {TOTAL}, ...)
+// expanded. This is the 3X-UI "custom sub page" feature: an operator with a
+// branded storefront pastes their own HTML in once, and every subscription
+// link serves it instead of the panel's own page.
+func (s *SettingService) GetSubPageTemplate() (string, error) {
+	return s.getString("subPageTemplate")
+}
+
+func (s *SettingService) SetSubPageTemplate(value string) error {
+	return s.setString("subPageTemplate", value)
 }
 
 func (s *SettingService) GetSubEnableRouting() (bool, error) {

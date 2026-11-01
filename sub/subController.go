@@ -11,6 +11,85 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// expandSubPagePlaceholders renders the operator's custom sub-page template:
+// the panel's placeholders ({USER}, {REMAINING}, {TOTAL}, ...) are expanded
+// against the page data and the link list, and the result is wrapped in a
+// minimal document so a fragment the operator pasted (no <html>) still renders
+// as a full page. The built-in subpage.html's design tokens are inlined so a
+// custom page that references var(--bg) and friends still looks like the
+// panel.
+func expandSubPagePlaceholders(tmpl string, page PageData, subs []string) string {
+	remaining := page.Remained
+	if remaining == "" {
+		remaining = "∞"
+	}
+	repl := map[string]string{
+		"{USER}":       page.SId,
+		"{REMAINING}":  remaining,
+		"{TOTAL}":      page.Total,
+		"{USED}":       page.Used,
+		"{UPLOAD}":     page.Upload,
+		"{DOWNLOAD}":   page.Download,
+		"{EXPIRE}":     fmt.Sprintf("%d", page.Expire),
+		"{SUB_URL}":    page.SubUrl,
+		"{SUB_JSON}":   page.SubJsonUrl,
+		"{SUB_CLASH}":  page.SubClashUrl,
+		"{BASE_URL}":   page.Host,
+	}
+	out := tmpl
+	for k, v := range repl {
+		out = strings.ReplaceAll(out, k, v)
+	}
+	// The individual links, one per line, as a preformatted block: the
+	// operator's template can drop {{LINKS}} anywhere and get the full list.
+	linksBlock := ""
+	for _, s := range subs {
+		linksBlock += s + "\n"
+	}
+	out = strings.ReplaceAll(out, "{LINKS}", linksBlock)
+	// A bare fragment (no <html>) is wrapped in the panel's own skeleton so
+	// the design tokens and the subpage's asset bootstrapping still load. A
+	// full document the operator wrote is served as-is.
+	if !strings.Contains(strings.ToLower(out), "<html") {
+		out = subPageSkeleton(out, page.BasePath)
+	}
+	return out
+}
+
+// subPageSkeleton wraps a custom fragment in the panel's sub-page shell: the
+// design-token CSS and the subscription.js bootstrap, so the fragment's
+// var(--*) references and Vue bindings still work. The operator's content is
+// the <main> body; everything around it is the panel's.
+func subPageSkeleton(body, basePath string) string {
+	return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscription</title>
+<style>
+:root{--bg:#0b0f17;--surface:#121826;--surface-2:#0f1420;--border:#1f2a3d;
+--text:#e6edf7;--text-2:#9aa7bd;--text-3:#5f6d84;--accent:#4f8cff;
+--accent-weak:rgba(79,140,255,.16);--ok:#2fbf71;--error:#e5484d;
+--radius-lg:14px;--radius-md:10px;--radius-sm:7px;--sp-1:4px;--sp-2:8px;
+--sp-3:12px;--sp-4:16px;--sp-5:24px;--fs-sm:13px;--fs-md:15px;--shadow-sm:0 1px 2px rgba(0,0,0,.4)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
+font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+.sub-wrap{max-width:560px;margin:0 auto;padding:24px 16px}
+.sub-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+padding:16px;margin-bottom:12px}
+.sub-card pre{white-space:pre-wrap;word-break:break-all;font:12px/1.5 ui-monospace,monospace;
+color:var(--text-2);margin:0}
+.sub-hero{background:linear-gradient(135deg,var(--accent),#7a5cff);color:#fff;
+border-radius:var(--radius-lg);padding:20px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="sub-wrap">` + body + `</div>
+</body>
+</html>`
+}
+
 // SUBController handles HTTP requests for subscription links and JSON configurations.
 type SUBController struct {
 	subTitle         string
@@ -26,6 +105,9 @@ type SUBController struct {
 	clashEnabled     bool
 	subEncrypt       bool
 	updateInterval   string
+	// subPageTemplate is the operator's custom subscriber-page HTML ("" = the
+	// built-in subpage.html). Served with the panel's placeholders expanded.
+	subPageTemplate string
 
 	subService      *SubService
 	subJsonService  *SubJsonService
@@ -54,6 +136,10 @@ func NewSUBController(
 	subAnnounce string,
 	subEnableRouting bool,
 	subRoutingRules string,
+	// The operator's custom subscriber-page HTML, or "" for the built-in page.
+	// Served per-request (a setting change shows up on the next link open, no
+	// restart), with the panel's placeholders expanded.
+	subPageTemplate string,
 ) *SUBController {
 	sub := NewSubService(showInfo, rModel)
 	a := &SUBController{
@@ -70,6 +156,7 @@ func NewSUBController(
 		clashEnabled:     clashEnabled,
 		subEncrypt:       encrypt,
 		updateInterval:   update,
+		subPageTemplate:  subPageTemplate,
 
 		subService:      sub,
 		subJsonService:  NewSubJsonService(jsonFragment, jsonNoise, jsonMux, jsonRules, sub),
@@ -155,6 +242,17 @@ func (a *SUBController) subs(c *gin.Context) {
 			// config files as downloads. Rendered only for the browser view, since a
 			// subscription client has no use for them.
 			page.Configs = a.subService.ConfigLinks(subId, host, scheme, hostWithPort, a.subPath)
+			// The operator's custom subscriber page, when set: it is served verbatim
+			// with the panel's placeholders expanded, instead of the built-in page.
+			// A blank template falls through to the built-in c.HTML render below.
+			// The custom HTML is NOT parsed as a Go template: it is the operator's
+			// own document, and running it through html/template would turn any
+			// unescaped {{...}} in it into a 500. Placeholders are plain strings.
+			if strings.TrimSpace(a.subPageTemplate) != "" {
+				c.Header("Content-Type", "text/html; charset=utf-8")
+				c.String(200, expandSubPagePlaceholders(a.subPageTemplate, page, subs))
+				return
+			}
 			c.HTML(200, "subpage.html", gin.H{
 				"title":           "subscription.title",
 				"cur_ver":         config.GetVersion(),

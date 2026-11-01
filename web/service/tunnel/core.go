@@ -5,14 +5,12 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -291,106 +289,11 @@ func listenTransport(ln net.Listener, t *model.TunnelPair) (net.Listener, func()
 }
 
 // ---------------------------------------------------------------------------
-// Frame pump
+// Frame pump: see relay.go's pumpFrames — the relay landed in its own file
+// so the stream-state tables sit beside the frame primitives they use. The
+// legacy pumpStream / relayBackend / pumpUDP stubs are removed; pumpFrames is
+// the single reader of the control channel now.
 // ---------------------------------------------------------------------------
-
-// pumpStream is the TCP/WS data channel: both ends run it over the control
-// connection, reading frames and relaying to the destinations they name. The
-// same routine serves both roles; the frame layout is symmetric.
-func pumpStream(ctx context.Context, c net.Conn, t *model.TunnelPair, h *handle) {
-	defer c.Close()
-	buf := make([]byte, 64*1024)
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		// A data frame: [1 type][2 src][16 dst][2 dstport][payload]
-		hdr := make([]byte, 1+2+16+2)
-		if _, err := io.ReadFull(c, hdr); err != nil {
-			return
-		}
-		typ := hdr[0]
-		srcPort := binary.BigEndian.Uint16(hdr[1:3])
-		dstIP := hdr[3:19]
-		dstPort := binary.BigEndian.Uint16(hdr[19:21])
-		_ = dstIP
-		_ = dstPort
-		switch typ {
-		case frameKeepalive:
-			atomic.StoreInt64(&h.lastByte, time.Now().UnixNano())
-		case frameTCPOpen, frameTCPData:
-			// The destination is resolved per-tunnel by the role's port map:
-			// the frame carries the LOCAL source port (what the client's app
-			// connected to), and this end looks up which BACKEND that port
-			// maps to. dstIP/dstPort above are the backend's own address.
-			n, _ := c.Read(buf)
-			if n > 0 {
-				atomic.StoreInt64(&h.lastByte, time.Now().UnixNano())
-				relayBackend(c, buf[:n], srcPort, dstPort, t)
-			}
-		case frameTCPClose:
-			return
-		}
-	}
-}
-
-// relayBackend answers "which local backend does this source port reach":
-// the role's own port-map lookup. A server role receiving a client's stream
-// connects to the backend named by the client's LOCAL port; a client role
-// receiving the server's answer connects back to the client's own local
-// listener. The map is read off the row, so a live edit of the map takes
-// effect on the next open (in-flight streams keep their target).
-func relayBackend(c net.Conn, payload []byte, srcPort, dstPort uint16, t *model.TunnelPair) {
-	maps, _ := t.ForwardedPortsJSON()
-	for _, m := range maps {
-		// srcPort is the port the connecting side used; match it against the
-		// map's Local. dstPort is the backend's own port for reference.
-		if uint16(m.Local) != srcPort {
-			continue
-		}
-		go func(m model.TunnelPortMap) {
-			backend := m.Backend
-			if backend == "" {
-				backend = "127.0.0.1"
-			}
-			_ = backend
-			// The actual dial + bidirectional copy is phase 2b; this phase
-			// wires the frame path so a link-test can prove reachability,
-			// and the watchdog can watch byte movement. The user-traffic
-			// relay lands with the watchdog in the same commit.
-		}(m)
-		return
-	}
-	// No map matched: drop the frame quietly. A tunnel that has no forwarded
-	// ports yet (operator has not filled the list) is a valid state — it just
-	// carries keepalive until the map is set.
-}
-
-// ---------------------------------------------------------------------------
-// UDP relay
-// ---------------------------------------------------------------------------
-
-// pumpUDP is the datagram half: one datagram = one frame, no stream state.
-// The UDP map's "Local" is the port this panel listens on locally and whose
-// datagrams ride the tunnel; the backend target is resolved exactly like the
-// TCP case.
-func pumpUDP(ctx context.Context, conn net.Conn, t *model.TunnelPair, h *handle) {
-	buf := make([]byte, 64*1024)
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		n, err := conn.Read(buf)
-		if err != nil {
-			return
-		}
-		atomic.StoreInt64(&h.lastByte, time.Now().UnixNano())
-		// A raw datagram IS the payload; the UDP map is resolved by the
-		// source port the packet came from (the local listener's port).
-		// The user-traffic relay lands with the TCP relay (phase 2b).
-		_ = buf[:n]
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Token generation

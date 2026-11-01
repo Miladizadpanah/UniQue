@@ -60,6 +60,12 @@ type handle struct {
 	// with no user traffic still moves keepalive bytes every 15s, so a quiet
 	// tunnel does not look stalled.
 	lastByte int64 // UnixNano
+	// bytesUp/bytesDown are the cumulative user-traffic byte gauges, pushed
+	// into the row by the watchdog so the dashboard shows live rates without
+	// a separate poll. The relay pipes increment them; keepalive does not
+	// (it is a control beat, not user traffic).
+	bytesUp   int64
+	bytesDown int64
 }
 
 // NewManager makes an idle manager. StartTunnels is what actually brings the
@@ -235,6 +241,27 @@ func (m *Manager) LastByteNano(id int) int64 {
 	return atomic.LoadInt64(&h.lastByte)
 }
 
+// BytesUp returns one running tunnel's cumulative user-traffic bytes sent
+// over it, for the dashboard's live "out" gauge. A stopped tunnel reads 0.
+func (m *Manager) BytesUp(id int) int64 {
+	h, ok := m.isRunning(id)
+	if !ok {
+		return 0
+	}
+	return atomic.LoadInt64(&h.bytesUp)
+}
+
+// BytesDown returns one running tunnel's cumulative user-traffic bytes
+// received over it. The keepalive pump does not count: it is a control beat,
+// not user traffic.
+func (m *Manager) BytesDown(id int) int64 {
+	h, ok := m.isRunning(id)
+	if !ok {
+		return 0
+	}
+	return atomic.LoadInt64(&h.bytesDown)
+}
+
 // start brings one tunnel up on this panel's side: the role's listener or
 // dialer, the control handshake, and the data pump. It is the one place the
 // role × transport matrix is walked; everything it hands off is a goroutine
@@ -310,6 +337,7 @@ func (m *Manager) runRole(ctx context.Context, t *model.TunnelPair, h *handle, t
 	if t.Transport == model.TunnelTransportUDP {
 		return m.runUDP(ctx, t, h, token)
 	}
+	reg := newStreamReg()
 	if t.Role == model.TunnelRoleServer {
 		ln, err := net.Listen("tcp", t.ServerAddr.String())
 		if err != nil {
@@ -321,28 +349,30 @@ func (m *Manager) runRole(ctx context.Context, t *model.TunnelPair, h *handle, t
 			return err
 		}
 		defer cleanup()
-		// The role byte a server writes: it is the server.
+		// The server accepts until a control connection completes the
+		// handshake; the FIRST valid one becomes the stream channel, the
+		// rest are closed. The local listeners start on that one.
 		for {
 			c, err := ln.Accept()
 			if err != nil {
 				return err
 			}
-			go func(c net.Conn) {
-				if err := performControl(c, true, token, roleServer); err != nil {
-					c.Close()
-					return
-				}
-				go keepalivePump(ctx, c)
-				pumpStream(ctx, c, t, h)
-			}(c)
+			if err := performControl(c, true, token, roleServer); err != nil {
+				c.Close()
+				continue
+			}
+			go keepalivePump(ctx, c)
+			go startLocalListeners(ctx, t, c, reg, h)
+			pumpFrames(ctx, c, t, reg, h)
+			return nil
 		}
 	}
-	// Client role: dial the server, then the same pump. A dial failure is
-	// retried every 10s until the peer comes up or the context cancels.
+	// Client role: dial the server, then the same pump + listeners. A dial
+	// failure is retried every 10s until the peer comes up or the context
+	// cancels.
 	for {
 		c, err := openTransport(ctx, t, false)
 		if err != nil {
-			logger.Debug("tunnel", t.Name, "dial failed, retrying in 10s:", err)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -355,7 +385,8 @@ func (m *Manager) runRole(ctx context.Context, t *model.TunnelPair, h *handle, t
 			return err
 		}
 		go keepalivePump(ctx, c)
-		pumpStream(ctx, c, t, h)
+		go startLocalListeners(ctx, t, c, reg, h)
+		pumpFrames(ctx, c, t, reg, h)
 		return nil
 	}
 }

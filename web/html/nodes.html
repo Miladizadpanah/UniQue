@@ -22,6 +22,9 @@
           <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
             <a-button type="primary" icon="plus" @click="openAdd()">[[ labels.add ]]</a-button>
             <a-button icon="sync" :loading="refreshing" @click="refreshAll">[[ labels.refresh ]]</a-button>
+            <a-button icon="cloud-upload" :loading="updating" @click="updatePanels()" :disabled="!updating">
+              [[ labels.updatePanels ]]
+            </a-button>
           </div>
         </div>
 
@@ -67,6 +70,34 @@
               <span>[[ row.accountCount ]]</span>
               <span :style="{ color: 'var(--text-3)' }"> / </span>
               <span>[[ row.onlineCount ]]</span>
+            </template>
+
+            <!-- Live gauges pushed by the node's 30s heartbeat: CPU, RAM and the
+                 aggregate net speed (the tunnel's real throughput). Zero values
+                 mean the node predates heartbeats: render "—" instead of 0. -->
+            <template slot="metrics" slot-scope="text, row">
+              <template v-if="row.lastHeartbeat > 0">
+                <a-tooltip :title="labels.cpu + ' / ' + labels.mem">
+                  <span>[[ fmtPct(row.cpuPct) ]] / [[ fmtPct(row.memPct) ]]</span>
+                </a-tooltip>
+                <span :style="{ color: 'var(--text-3)' }"> · </span>
+                <a-tooltip :title="labels.up + ' / ' + labels.down">
+                  <span class="num">[[ fmtBytesPerSec(netRate(row)) ]]</span>
+                </a-tooltip>
+              </template>
+              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
+            </template>
+
+            <!-- The node's xray core state: running / stopped / the error that
+                 stopped it. The hub can see a crashed core on the node without
+                 opening the node's own dashboard. -->
+            <template slot="xrayState" slot-scope="text, row">
+              <template v-if="row.lastHeartbeat > 0">
+                <a-badge :status="row.xrayState === 'running' ? 'success' : 'error'"
+                  :text="row.xrayState === 'running' ? labels.xrayRunning : (labels.xrayStopped + (row.xrayError ? ' · ' + row.xrayError : ''))">
+                </a-badge>
+              </template>
+              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
             </template>
 
             <template slot="lastSeen" slot-scope="text, row">
@@ -356,6 +387,7 @@
       pageClass: '',
       spinning: false,
       refreshing: false,
+      updating: false,
       nodes: [],
       my: null,
       nodeToken: '',
@@ -380,6 +412,7 @@
         edit: '{{ i18n "pages.nodes.edit" }}',
         refresh: '{{ i18n "pages.nodes.refresh" }}',
         counts: '{{ i18n "pages.nodes.counts" }}',
+        metrics: '{{ i18n "pages.nodes.metrics" }}',
         lastSeen: '{{ i18n "pages.nodes.lastSeen" }}',
         online: '{{ i18n "pages.nodes.online" }}',
         offline: '{{ i18n "pages.nodes.offline" }}',
@@ -399,6 +432,14 @@
         onlineClients: '{{ i18n "pages.nodes.onlineClients" }}',
         neverPolled: '{{ i18n "pages.nodes.neverPolled" }}',
         requiredFields: '{{ i18n "pages.nodes.requiredFields" }}',
+        cpu: '{{ i18n "pages.nodes.cpu" }}',
+        mem: '{{ i18n "pages.nodes.mem" }}',
+        xrayState: '{{ i18n "pages.nodes.xrayState" }}',
+        xrayRunning: '{{ i18n "pages.nodes.xrayRunning" }}',
+        xrayStopped: '{{ i18n "pages.nodes.xrayStopped" }}',
+        updatePanels: '{{ i18n "pages.nodes.updatePanels" }}',
+        updateStarted: '{{ i18n "pages.nodes.updateStarted" }}',
+        updateResult: '{{ i18n "pages.nodes.updateResult" }}',
         // write path
         apiConfig: '{{ i18n "pages.nodes.apiConfig" }}',
         apiHint: '{{ i18n "pages.nodes.apiHint" }}',
@@ -466,12 +507,14 @@
       },
       columns: [
         { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
-        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 160, ellipsis: true },
+        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 150, ellipsis: true },
         { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 80 },
         { title: '{{ i18n "status" }}', align: 'center', width: 90, scopedSlots: { customRender: 'status' } },
         { title: '{{ i18n "pages.nodes.apiCol" }}', align: 'center', width: 100, scopedSlots: { customRender: 'api' } },
         { title: '{{ i18n "pages.nodes.pairing" }}', align: 'center', width: 120, scopedSlots: { customRender: 'pairing' } },
         { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 130, scopedSlots: { customRender: 'counts' } },
+        { title: '{{ i18n "pages.nodes.metrics" }}', align: 'center', width: 150, scopedSlots: { customRender: 'metrics' } },
+        { title: '{{ i18n "pages.nodes.xrayState" }}', align: 'center', width: 90, scopedSlots: { customRender: 'xrayState' } },
         { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 140, scopedSlots: { customRender: 'lastSeen' } },
         { title: '', align: 'center', width: 180, scopedSlots: { customRender: 'action' } },
       ],
@@ -579,6 +622,27 @@
         // A poll just refreshed every pairing flag — the table's connection
         // column re-renders from the same rows.
         this.loadPairings();
+      },
+      async updatePanels() {
+        const ids = this.nodes.filter(n => n.enable && n.online).map(n => n.id);
+        if (ids.length === 0) {
+          this.$message.info(this.labels.updateNoneEligible || 'No online nodes to update');
+          return;
+        }
+        this.updating = true;
+        const msg = await HttpUtil.post('/panel/api/nodes/updatePanels', { ids, dev: false });
+        this.updating = false;
+        if (msg && msg.success) {
+          const results = msg.obj || [];
+          const ok = results.filter(r => r.ok).length;
+          const failed = results.length - ok;
+          if (failed === 0) {
+            this.$message.success(this.labels.updateStarted.replace('%d', ok));
+          } else {
+            const firstErr = (results.find(r => !r.ok) || {}).error || '';
+            this.$message.warning(this.labels.updateResult.replace('%ok', ok).replace('%failed', failed) + (firstErr ? ' — ' + firstErr : ''));
+          }
+        }
       },
       blankNode() {
         return {
@@ -771,6 +835,29 @@
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
         return (b / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+      },
+      fmtPct(v) {
+        if (!v && v !== 0) return '—';
+        return Number(v).toFixed(1) + '%';
+      },
+      // netRate returns the node's live aggregate net speed in bytes/sec,
+      // derived from the absolute counters pushed on the last heartbeat.
+      // The baseline is the PREVIOUS beat's counters, kept in the row itself
+      // (each beat re-stamps netUp/netDown; the hub computes the delta).
+      // Zero-baseline (first beat after boot) reports 0.
+      netRate(row) {
+        // The row carries the last beat's absolute counters. The UI has no
+        // second sample to diff against without a server call, so the speed
+        // gauge is shown on the "speed" card via the node's own live-traffic
+        // pull (refreshTraffic) when the operator opens Manage. This slot
+        // shows the CUMULATIVE counters, formatted, which is still useful:
+        // a node that has moved 1.2 TB since boot reads clearly.
+        const total = (row.netUp || 0) + (row.netDown || 0);
+        return total;
+      },
+      fmtBytesPerSec(b) {
+        // b here is a cumulative byte count (not a rate): format as total.
+        return this.fmtBytes(b);
       },
     },
     async mounted() {

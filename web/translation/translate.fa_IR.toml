@@ -1502,5 +1502,18 @@
 "exitIp" = "آی‌پی خروجی"
 "latency" = "تأخیر"
 
+"metrics" = "سی‌پی‌یو / رم · ترافیک"
+"cpu" = "سی‌پی‌یو"
+"mem" = "رم"
+"xrayState" = "کِر Xray"
+"xrayRunning" = "در حال اجرا"
+"xrayStopped" = "متوقف"
+"updatePanels" = "آپدیت پنل‌ها"
+"updateStarted" = "آپدیت %d نود شروع شد"
+"updateResult" = "%ok موفق، %failed ناموفق"
+"updateNoneEligible" = "هیچ نود آنلاینی برای آپدیت وجود ندارد"
+"lastHeartbeat" = "آخرین هارت‌بیت"
+"heartbeat" = "هارت‌بیت"
+
 "pairingHub" = "پنل درخواست‌کننده"
 "pairingWhen" = "زمان"

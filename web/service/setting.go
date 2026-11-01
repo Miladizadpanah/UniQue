@@ -56,6 +56,8 @@ var defaultValueMap = map[string]string{
 	// into that panel's Node row here, and the hub can poll its health. Empty =
 	// the endpoint refuses everyone, so the default is safe-closed.
 	"nodeApiToken":                "",
+	"nodeHubUrl":                  "",
+	"nodeHubToken":                "",
 	"systemdServiceName":          "vpn-ui",
 	"subEnable":                   "false",
 	"subJsonEnable":               "false",
@@ -428,6 +430,34 @@ func (s *SettingService) GetNodeApiToken() string {
 // SetNodeApiToken sets (or clears, when empty) the node status token.
 func (s *SettingService) SetNodeApiToken(value string) error {
 	return s.setString("nodeApiToken", value)
+}
+
+// GetNodeHubUrl returns the hub base URL this panel pushes heartbeats to, or
+// "" when the panel is not configured as a reporting node. Set together with
+// the hub token the hub handed the operator at registration; both are blank by
+// default so a freshly installed panel phones home to nobody.
+func (s *SettingService) GetNodeHubUrl() (string, error) {
+	return s.getString("nodeHubUrl")
+}
+
+// SetNodeHubUrl sets (or clears, when empty) the hub URL this panel reports
+// to. The heartbeat job reads it every beat, so pointing a panel at a new hub
+// is a save, not a restart.
+func (s *SettingService) SetNodeHubUrl(value string) error {
+	return s.setString("nodeHubUrl", value)
+}
+
+// GetNodeHubToken returns the token this panel sends to the hub on heartbeat
+// pushes: it is the node API token the HUB shared with this panel's operator,
+// and it gates the hub's /panel/node/heartbeat the same way the hub's own
+// status poll is gated.
+func (s *SettingService) GetNodeHubToken() (string, error) {
+	return s.getString("nodeHubToken")
+}
+
+// SetNodeHubToken sets (or clears, when empty) the hub report token.
+func (s *SettingService) SetNodeHubToken(value string) error {
+	return s.setString("nodeHubToken", value)
 }
 
 // GetVpnProvisioned reports whether the VPN backend has been provisioned via the

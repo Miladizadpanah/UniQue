@@ -1785,5 +1785,18 @@
 "exitIp" = "Exit IP"
 "latency" = "Latency"
 
+"metrics" = "CPU / RAM · Traffic"
+"cpu" = "CPU"
+"mem" = "RAM"
+"xrayState" = "Xray"
+"xrayRunning" = "core running"
+"xrayStopped" = "core stopped"
+"updatePanels" = "Update panels"
+"updateStarted" = "%d node(s) update started"
+"updateResult" = "%ok ok, %failed failed"
+"updateNoneEligible" = "No online nodes to update"
+"lastHeartbeat" = "Last heartbeat"
+"heartbeat" = "Heartbeat"
+
 "pairingHub" = "Hub"
 "pairingWhen" = "Time"

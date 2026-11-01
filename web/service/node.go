@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/mem"
 	"gorm.io/gorm"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
@@ -274,6 +276,155 @@ func (s *NodeService) PollAll() error {
 	return nil
 }
 
+// RecordHeartbeat is the HUB's receiving side of a node's push telemetry: the
+// node's 30s job POSTs its NodeStatus here, and the hub stamps it onto the
+// row the token belongs to. A token with no row yet (a node registered after
+// the first beat) is queued as LastSeen-only so the next poll merges the
+// full snapshot; nothing is dropped. The gauges (CPU/RAM/uptime/net/xray)
+// land immediately, which is the whole point of the push path.
+//
+// The hub keeps polling regardless: a push gap (node reboot, network blip)
+// is a latency issue, and the poll's offline-detection (3 consecutive
+// failures) is still the source of truth for the online flag. A beat only
+// ever makes a row fresher; it never flips a node back online by itself, so
+// an operator cannot trick the dashboard into showing a dead node live.
+func (s *NodeService) RecordHeartbeat(token string, st *model.NodeStatus) error {
+	db := database.GetDB()
+	var node model.Node
+	if err := db.Where("token = ?", token).First(&node).Error; err != nil {
+		// Unknown token: this beat belongs to a hub this panel does not
+		// track. Drop it rather than 404-log every 30s from a stale
+		// registration on the other end.
+		logger.Debug("node heartbeat for unknown token; ignoring")
+		return nil
+	}
+	updates := map[string]any{
+		"last_heartbeat": time.Now().UnixNano(),
+	}
+	if st != nil {
+		updates["cpu_pct"] = st.CpuPct
+		updates["mem_pct"] = st.MemPct
+		updates["uptime_secs"] = st.UptimeSecs
+		updates["net_up"] = st.NetUp
+		updates["net_down"] = st.NetDown
+		updates["xray_state"] = st.XrayState
+		updates["xray_error"] = st.XrayError
+		// The beat is a live signal from the node: it just proved reachable.
+		// The poll's consecutive-failure counter is reset by the next
+		// successful poll, so marking online here cannot flap against it.
+		updates["online"] = true
+		updates["last_seen"] = time.Now().UnixNano()
+		if st.Version != "" {
+			updates["version"] = st.Version
+		}
+		if st.InboundCount > 0 || st.AccountCount > 0 || st.OnlineCount > 0 {
+			updates["inbound_count"] = st.InboundCount
+			updates["account_count"] = st.AccountCount
+			updates["online_count"] = st.OnlineCount
+		}
+	}
+	return db.Model(&model.Node{}).Where("id = ?", node.Id).Updates(updates).Error
+}
+
+// MarkNodeOfflineAfterStaleHeartbeat is the hub's offline detector: a node
+// that has been pushing heartbeats stops being online once its LAST heartbeat
+// is older than the threshold (default 90s = three missed 30s beats). The
+// legacy pull-poll path handles hubs that are not pushing; this runs after it
+// and only tightens the "stale push" case: a node whose last push was 2
+// minutes ago is down, even if its poll endpoint still answers (a half-dead
+// node can serve HTTP while its service stack is wedged).
+func (s *NodeService) MarkNodeOfflineAfterStaleHeartbeat(staleAfter time.Duration) {
+	cutoff := time.Now().Add(-staleAfter).UnixNano()
+	nodes, err := s.List()
+	if err != nil {
+		return
+	}
+	db := database.GetDB()
+	for i := range nodes {
+		n := &nodes[i]
+		if !n.Enable {
+			continue
+		}
+		// Only tighten when a heartbeat was ever seen: a legacy node that
+		// never pushes is still judged by the poll alone, as before.
+		if n.LastHeartbeat == 0 {
+			continue
+		}
+		if n.LastHeartbeat < cutoff && n.Online {
+			if uerr := db.Model(&model.Node{}).Where("id = ?", n.Id).
+				Updates(map[string]any{"online": false}).Error; uerr != nil {
+				logger.Warning("stale-heartbeat offline mark for node", n.Name, ":", uerr)
+				continue
+			}
+			s.fireNodeStatusWebhook(n, "node.offline")
+			logger.Warning("node", n.Name, "marked offline: last heartbeat",
+				time.Since(time.Unix(0, n.LastHeartbeat)).Round(time.Second), "old")
+		}
+	}
+}
+
+// UpdateNodePanels asks a set of nodes to run their own panel self-update.
+// The hub issues the request through each node's token-gated API (the same
+// gate as the federation writes); the node's endpoint kicks off its own
+// ServerService.UpdatePanel in the background and answers straight away, so a
+// slow download on one node does not hold the whole batch.
+//
+// dev selects the channel: stable pulls the release asset, dev pulls the
+// latest pre-release. The choice is reported per node so the UI can show
+// "3 of 5 started, 1 busy, 1 read-only" in one line.
+type NodeUpdateResult struct {
+	NodeId int    `json:"nodeId"`
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (s *NodeService) UpdateNodePanels(ids []int, dev bool) []NodeUpdateResult {
+	out := make([]NodeUpdateResult, 0, len(ids))
+	for _, id := range ids {
+		node, err := s.Get(id)
+		if err != nil {
+			out = append(out, NodeUpdateResult{NodeId: id, Error: "node not found"})
+			continue
+		}
+		res, uerr := s.RemoteUpdatePanel(node, dev)
+		out = append(out, res)
+		if uerr != nil {
+			out[len(out)-1].Error = uerr.Error()
+		}
+	}
+	return out
+}
+
+// RemoteUpdatePanel is one node's half of UpdateNodePanels: POST its
+// token-gated update endpoint and report whether the node accepted the job.
+// The actual download + swap + restart runs THERE, unwatched; the hub's
+// dashboard shows the node's version column flipping on the next beat/poll.
+func (s *NodeService) RemoteUpdatePanel(n *model.Node, dev bool) (NodeUpdateResult, error) {
+	res := NodeUpdateResult{NodeId: n.Id, Name: n.Name}
+	var out struct {
+		Accepted bool   `json:"accepted"`
+		Error    string `json:"error"`
+	}
+	err := nodeAPIRoundTrip(n, http.MethodPost, "/panel/node/updatePanel", ginUpdateReq{Dev: dev}, &out)
+	if err != nil {
+		res.Error = err.Error()
+		return res, err
+	}
+	res.OK = out.Accepted
+	if out.Error != "" {
+		res.Error = out.Error
+	}
+	return res, nil
+}
+
+// ginUpdateReq is the request body for a node's update-panel endpoint. Named
+// without the "gin" prefix (the transport is JSON, not gin bindings) so the
+// type is reusable by a future CLI.
+type ginUpdateReq struct {
+	Dev bool `json:"dev"`
+}
+
 // DiscoverNodeBaseUrl asks a node to report its own public base URL, so a
 // hub that knows only the node's token does not have to type the URL. The
 // node's /panel/node/status endpoint already returns the URL the panel
@@ -296,7 +447,10 @@ func (s *NodeService) DiscoverNodeBaseUrl(n *model.Node) (string, error) {
 }
 
 // LocalStatus is this panel's own snapshot, shaped like a remote one so the
-// dashboard can render "this node" with the same row as the remotes.
+// dashboard can render "this node" with the same row as the remotes. The
+// heartbeat fields (CPU/RAM/Uptime/NetIO/Xray state) are filled in so that a
+// hub polling this panel sees the SAME gauges the node's own dashboard does,
+// and the node's periodic SelfHeartbeat push uses them verbatim.
 func (s *NodeService) LocalStatus() *model.NodeStatus {
 	st := &model.NodeStatus{Version: config.GetVersion()}
 	db := database.GetDB()
@@ -306,7 +460,72 @@ func (s *NodeService) LocalStatus() *model.NodeStatus {
 	cutoff := time.Now().Add(-nodeOnlineWindow).UnixMilli()
 	db.Model(&xray.ClientTraffic{}).Where("last_online > ? AND enable = ?", cutoff, true).Count(&online)
 	st.InboundCount, st.AccountCount, st.OnlineCount = int(inbounds), int(accounts), int(online)
+	fillHeartbeatMetrics(st)
 	return st
+}
+
+// fillHeartbeatMetrics fills the NodeStatus's system gauges from the live
+// process/host. A read failure leaves the field at zero, which the hub
+// renders as "no data" — a stale gauge is worse than no gauge.
+func fillHeartbeatMetrics(st *model.NodeStatus) {
+	// CPU. The panel's own 1s-sampled figure: it already knows the kernel's
+	// quirks, so reuse it instead of a fresh gopsutil call. sampleCPUUtilization
+	// is unexported, so the sample is re-read here through a fresh ServerService.
+	if util, err := sampleCpuOnce(); err == nil {
+		st.CpuPct = util
+	}
+	// Memory: percent of used over total, the hub's one-number-at-a-glance view.
+	if info, err := mem.VirtualMemory(); err == nil && info.Total > 0 {
+		st.MemPct = float64(info.Used) / float64(info.Total) * 100
+	}
+	// Host uptime: the machine's, not the panel process's — a restarted panel
+	// does not read as a rebooted node.
+	if up, err := host.Uptime(); err == nil {
+		st.UptimeSecs = up
+	}
+	// Network: the ABSOLUTE counters so the hub (or a fresh restart) can
+	// recompute rates against its own stored baseline. A first-ever beat
+	// carries the full lifetime counters, which the hub treats as a
+	// non-zero-baseline read and only starts reporting rates from the
+	// second beat onwards — a one-tick silence, not a wrong number.
+	if stats, err := netIOCountersAggregate(); err == nil {
+		st.NetUp = stats.Sent
+		st.NetDown = stats.Recv
+	}
+	// Xray core state: running / stopped / the error string that stopped it.
+	// A hub watching a node's XrayState can see "the core crashed 2 minutes
+	// ago" without opening the node's own dashboard.
+	var xs XrayService
+	if xs.IsXrayRunning() {
+		st.XrayState = "running"
+	} else {
+		st.XrayState = "stopped"
+		if err := xs.GetXrayErr(); err != nil {
+			st.XrayError = err.Error()
+		}
+	}
+}
+
+// GetLastNodeHeartbeat is the node's own previous heartbeat payload. The push
+// job keeps one in memory (the last SUCCESSFUL push) so the next beat's net
+// rates have a baseline; it survives a panel restart as a zero value, which
+// only costs the first beat's rates.
+var lastNodeHeartbeat *model.NodeStatus
+var lastNodeHeartbeatMu sync.Mutex
+
+// GetLastNodeHeartbeat returns the node's own previous successful heartbeat,
+// or nil when no beat has been pushed since the panel started.
+func GetLastNodeHeartbeat() *model.NodeStatus {
+	lastNodeHeartbeatMu.Lock()
+	defer lastNodeHeartbeatMu.Unlock()
+	return lastNodeHeartbeat
+}
+
+// SetLastNodeHeartbeat stores one successful beat as the next beat's baseline.
+func SetLastNodeHeartbeat(st *model.NodeStatus) {
+	lastNodeHeartbeatMu.Lock()
+	defer lastNodeHeartbeatMu.Unlock()
+	lastNodeHeartbeat = st
 }
 
 // fetchNodeStatus does the HTTP round trip. It authenticates with the node's

@@ -997,6 +997,19 @@ type Node struct {
 	// THIS hub's connection request. Poll flips it on/off as the remote pairing
 	// status changes. Unapproved nodes stay read-only (status polling only).
 	PairingApproved bool `json:"pairingApproved" gorm:"default:0"`
+
+	// --- Heartbeat metrics (push-based). The node PANEL pushes these to the hub
+	// every 30s so the hub's dashboard shows live CPU/RAM/Xray state.
+	// Zero value means "no data yet" (first poll or legacy node without heartbeat).
+	LastHeartbeat    int64   `json:"lastHeartbeat" gorm:"default:0"`
+	CpuPct           float64 `json:"cpuPct" gorm:"default:0"`
+	MemPct           float64 `json:"memPct" gorm:"default:0"`
+	UptimeSecs       uint64  `json:"uptimeSecs" gorm:"default:0"`
+	NetUp            uint64  `json:"netUp" gorm:"default:0"`
+	NetDown          uint64  `json:"netDown" gorm:"default:0"`
+	XrayState        string  `json:"xrayState" gorm:"default:''"`
+	XrayError        string  `json:"xrayError" gorm:"default:''"`
+	LastError        string  `json:"lastError" gorm:"default:''"`
 }
 
 // TableName pins the table name.
@@ -1031,6 +1044,16 @@ type NodeStatus struct {
 	AccountCount int    `json:"accountCount"`
 	OnlineCount  int    `json:"onlineCount"`
 	BaseUrl      string `json:"baseUrl"`
+	// The node's live system gauges (push-based metrics). Legacy nodes that
+	// predate heartbeats answer with zero values, and the hub treats zero as
+	// "no data" in the UI, so the fields are additive and safe on both sides.
+	CpuPct     float64 `json:"cpuPct"`
+	MemPct     float64 `json:"memPct"`
+	UptimeSecs uint64  `json:"uptimeSecs"`
+	NetUp      uint64  `json:"netUp"`
+	NetDown    uint64  `json:"netDown"`
+	XrayState  string  `json:"xrayState"`
+	XrayError  string  `json:"xrayError"`
 }
 
 // NodeAccount is a hub-owned account hosted on a REMOTE node's inbound: the hub

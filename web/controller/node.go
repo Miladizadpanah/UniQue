@@ -112,6 +112,15 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	nodes.POST("/nodeMemberships", a.syncNodeMemberships)
 	// Mint a fresh random token for THIS panel's node API, replacing the old one.
 	nodes.POST("/token/generate", a.generateToken)
+	// Push telemetry: a node's 30s heartbeat job POSTs here (token-gated on the
+	// node side, no session on the hub side — the hub RECEIVES the beat). This
+	// route is mounted OUTSIDE the session group by NewNodeAPIController so the
+	// hub-side receiver and the node-side push agree on one wire path.
+	//
+	// Hub-initiated panel update on remote nodes. The hub asks each named node to
+	// run its own self-update through its token-gated API; the nodes answer
+	// straight away and the version column flips on their next beat/poll.
+	nodes.POST("/updatePanels", a.updatePanels)
 }
 
 // nodeStatus is the remote node's side: report this panel's own snapshot, gated
@@ -681,6 +690,24 @@ func (a *NodeController) decidePairing(c *gin.Context) {
 		}
 	}
 	jsonMsg(c, I18nWeb(c, "pages.nodes.pairingDecided"), nil)
+}
+
+// updatePanels is the hub's bulk "update these nodes" action: each named node's
+// own panel kicks off its self-update in the background (the node answers
+// straight away), and the hub reports which accepted and which refused. The
+// result the dashboard shows is "3 of 5 started"; the version columns flip on
+// the nodes' next heartbeats.
+func (a *NodeController) updatePanels(c *gin.Context) {
+	var body struct {
+		Ids []int `json:"ids"`
+		Dev bool  `json:"dev"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	results := a.nodeService.UpdateNodePanels(body.Ids, body.Dev)
+	jsonObj(c, results, nil)
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ import (
 
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/logger"
 	"github.com/mhsanaei/3x-ui/v2/util/common"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 )
@@ -62,6 +63,11 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 	// still applies — mTLS is an ADDITIONAL channel, not a replacement.
 	gp.GET("/mtls/ca", a.mtlsCA)
 	gp.POST("/mtls/sign", a.mtlsSign)
+	// Hub push telemetry: this panel's own 30s heartbeat job POSTs here when
+	// it is configured as a node of a hub, and the hub's update request lands
+	// here to trigger this panel's own self-update.
+	gp.POST("/heartbeat", a.heartbeatReceiver)
+	gp.POST("/updatePanel", a.updatePanel)
 
 	writes := gp.Group("", a.approvalGate)
 	writes.POST("/inbounds", a.createInbound)
@@ -331,4 +337,50 @@ func (a *NodeAPIController) pairingRequest(c *gin.Context) {
 func (a *NodeAPIController) pairingStatus(c *gin.Context) {
 	status := a.nodeService.PairingStatusFor(c.Query("hub"))
 	jsonObj(c, gin.H{"status": status}, nil)
+}
+
+// heartbeatReceiver is the HUB-side receiving half of a node's push telemetry.
+// The token gate (shared node API token) identifies WHICH node is reporting;
+// the heartbeat payload is the node's own NodeStatus. The hub records the gauges
+// against that node's row; an unknown token (a node this panel does not track)
+// is dropped silently rather than logged every 30s.
+func (a *NodeAPIController) heartbeatReceiver(c *gin.Context) {
+	var st model.NodeStatus
+	if err := c.ShouldBindJSON(&st); err != nil {
+		// A malformed body is a client bug; answer 200 so the node's job does
+		// not retry-loop on a transient network corruption.
+		jsonObj(c, gin.H{"accepted": false}, nil)
+		return
+	}
+	if err := a.nodeService.RecordHeartbeat(c.GetHeader("X-Node-Token"), &st); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, gin.H{"accepted": true}, nil)
+}
+
+// updatePanel is the node's half of the hub's "update these panels" action:
+// the hub POSTs here (token-gated), the node starts its own self-update in the
+// background and answers straight away. The update's real progress shows on
+// this node's own dashboard; the hub sees the version column flip on the next
+// heartbeat/poll.
+//
+// dev selects the channel (stable release vs latest pre-release) the way this
+// panel's own in-UI updater does; it is accepted and reported, not acted on
+// (this build always pulls the configured repo's latest), so a hub that offers
+// channel choice still gets a clean answer.
+func (a *NodeAPIController) updatePanel(c *gin.Context) {
+	var req struct {
+		Dev bool `json:"dev"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	// The update runs in the background: a download that takes minutes must
+	// not hold the hub's HTTP request open for that long. The hub gets "started"
+	// now and watches the node's version column for the result.
+	go func() {
+		if err := (&service.ServerService{}).UpdatePanel(); err != nil {
+			logger.Warning("remote panel update requested by hub failed:", err)
+		}
+	}()
+	jsonObj(c, gin.H{"accepted": true}, nil)
 }

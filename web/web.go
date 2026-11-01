@@ -458,6 +458,20 @@ func (s *Server) startTask() {
 	// pay nothing for it.
 	s.cron.AddJob("@every 60s", job.NewCheckNodesJob())
 
+	// Node heartbeat: the PUSH side of the same telemetry. This panel, when
+	// configured as a node of a hub, reports its gauges every 30s instead of
+	// waiting for the hub's 60s poll; and on the hub side, a node that stops
+	// pushing goes stale-offline even while its poll endpoint still answers.
+	// Both halves are no-ops without configuration, so single-node installs pay
+	// nothing for them either.
+	s.cron.AddJob("@every 30s", job.NewNodeHeartbeatJob())
+	s.cron.AddFunc("@every 30s", func() {
+		var ns service.NodeService
+		// Three missed 30s beats (90s) is the "the node is down" call: the poll
+		// already covers the non-pushing case, this tightens the pushing case.
+		ns.MarkNodeOfflineAfterStaleHeartbeat(90 * time.Second)
+	})
+
 	// Prometheus exporter: refresh the hub's own gauges on the same cadence.
 	// Reads live counters from the database (total traffic + cores up) and
 	// pushes them to the /panel/metrics endpoint. Cheap, read-only.

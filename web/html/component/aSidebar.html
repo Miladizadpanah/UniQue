@@ -99,6 +99,13 @@
                         title: '{{ i18n "menu.nodes"}}'
                     },
                     {{ end }}
+                    {{ if .perms.accessXraySettings }}
+                    {
+                        key: '{{ .base_path }}panel/tunnels',
+                        icon: 'fork',
+                        title: '{{ i18n "menu.tunnels"}}'
+                    },
+                    {{ end }}
                     {{ if .perms.superAdmin }}
                     {
                         key: '{{ .base_path }}panel/admins',

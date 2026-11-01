@@ -1,0 +1,391 @@
+{{ template "page/head_start" .}}
+{{ template "page/head_end" .}}
+
+{{ template "page/body_start" .}}
+{{ template "page/shell_start" . }}
+<a-spin :spinning="spinning" :delay="300" tip='{{ i18n "loading"}}' size="large">
+  <transition name="list" appear>
+    <a-row :gutter="[16, 16]" :style="{ margin: 0 }">
+
+      <!-- Header -->
+      <a-col :span="24">
+        <a-card hoverable>
+          <a-row type="flex" justify="space-between" align="middle" :gutter="[8,8]">
+            <a-col>
+              <h2 :style="{ margin: 0 }">{{ i18n "pages.tunnels.title" }}</h2>
+              <span :style="{ opacity: 0.65 }">{{ i18n "pages.tunnels.subtitle" }}</span>
+            </a-col>
+            <a-col>
+              <a-space>
+                <a-button type="primary" icon="plus" @click="openAdd()">{{ i18n "pages.tunnels.add" }}</a-button>
+                <a-button icon="sync" :loading="refreshing" @click="load">{{ i18n "pages.tunnels.refresh" }}</a-button>
+              </a-space>
+            </a-col>
+          </a-row>
+        </a-card>
+      </a-col>
+
+      <!-- Tunnel table -->
+      <a-col :span="24">
+        <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden' }">
+          <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
+            :scroll="isMobile ? {} : { x: 980 }" :pagination="false" bordered
+            :locale='{ emptyText: `{{ i18n "noData"}}` }'>
+
+            <template slot="status" slot-scope="text, row">
+              <a-badge :status="statusBadge(row)" :text="statusLabel(row)"></a-badge>
+            </template>
+
+            <template slot="transport" slot-scope="text, row">
+              <a-tag :color="row.enable ? 'blue' : 'default'">[[ row.transport ]]</a-tag>
+              <span :style="{ color: 'var(--text-3)' }">·</span>
+              [[ row.role ]]
+            </template>
+
+            <template slot="ports" slot-scope="text, row">
+              [[ portSummary(row) ]]
+            </template>
+
+            <template slot="peer" slot-scope="text, row">
+              <span :style="{ fontFamily: 'monospace', fontSize: '11px' }">[[ row.serverAddr ? row.serverAddr.host + ':' + row.serverAddr.port : '—' ]]</span>
+            </template>
+
+            <template slot="speed" slot-scope="text, row">
+              <span class="num">[[ fmtBytes(row.bytesUp) ]] ↑ / [[ fmtBytes(row.bytesDown) ]] ↓</span>
+            </template>
+
+            <template slot="action" slot-scope="text, row">
+              <a @click="openEdit(row)">{{ i18n "edit" }}</a>
+              <a-divider type="vertical"></a-divider>
+              <a @click="runLinkTest(row)" :style="{ color: 'var(--accent)' }">{{ i18n "pages.tunnels.linkTest" }}</a>
+              <a-divider type="vertical"></a-divider>
+              <a @click="toggleEnable(row)" :style="{ color: row.enable ? 'var(--error)' : 'var(--ok)' }">
+                [[ row.enable ? i18n "pages.tunnels.disable" : i18n "pages.tunnels.enable" ]]
+              </a>
+              <a-divider type="vertical"></a-divider>
+              <a-popconfirm title="{{ i18n "pages.tunnels.delConfirm" }}"
+                ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
+                @confirm="del(row)">
+                <a style="color: var(--error)">{{ i18n "delete" }}</a>
+              </a-popconfirm>
+            </template>
+          </a-table>
+        </div>
+      </a-col>
+    </a-row>
+  </transition>
+</a-spin>
+
+<!-- Add / edit tunnel. The wizard's common case is: name + role + transport +
+     the peer's address + the shared token + the forwarded ports. The token
+     generator is one click; the link-test fills the "which carrier?" answer. -->
+<a-modal v-model="modal.visible" :title="modal.id ? labels.edit : labels.add"
+  :width="640" :class="themeSwitcher.currentTheme" :footer="null">
+  <a-form layout="vertical">
+    <a-row :gutter="[16, 12]">
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.name">
+          <a-input v-model="modal.name" :placeholder="labels.namePlaceholder"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.role">
+          <a-select v-model="modal.role">
+            <a-select-option value="server">{{ i18n "pages.tunnels.roleServer" }}</a-select-option>
+            <a-select-option value="client">{{ i18n "pages.tunnels.roleClient" }}</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.transport">
+          <a-select v-model="modal.transport">
+            <a-select-option value="tcp">TCP</a-select-option>
+            <a-select-option value="tcp-tls">TCP + TLS</a-select-option>
+            <a-select-option value="ws">WebSocket</a-select-option>
+            <a-select-option value="wss">WSS (TLS)</a-select-option>
+            <a-select-option value="udp">UDP</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.tuning">
+          <a-select v-model="modal.tuning">
+            <a-select-option value="balance">Balance</a-select-option>
+            <a-select-option value="turbo">Turbo</a-select-option>
+            <a-select-option value="throughput">Throughput</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-form-item :label="labels.peer">
+          <a-row :gutter="[8,8]" type="flex">
+            <a-col :flex="1">
+              <a-input v-model="modal.host" :placeholder="labels.hostPlaceholder"></a-input>
+            </a-col>
+            <a-col :style="{ width: 120 }">
+              <a-input-number v-model="modal.port" :min="1" :max="65535"
+                :placeholder="labels.portPlaceholder" style="width: 100%"></a-input-number>
+            </a-col>
+          </a-row>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-form-item :label="labels.token">
+          <a-row :gutter="[8,8]" type="flex">
+            <a-col :flex="1">
+              <a-input v-model="modal.token" :placeholder="labels.tokenPlaceholder"></a-input>
+            </a-col>
+            <a-col :style="{ whiteSpace: 'nowrap' }">
+              <a-button icon="key" :loading="genTok" @click="genToken">{{ i18n "pages.tunnels.genToken" }}</a-button>
+            </a-col>
+          </a-row>
+          <div :style="{ color: 'var(--text-3)', fontSize: '11px', marginTop: '4px' }">
+            [[ labels.tokenHint ]]
+          </div>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-form-item :label="labels.ports">
+          <a-input v-model="modal.ports" :placeholder="labels.portsPlaceholder"></a-input>
+          <div :style="{ color: 'var(--text-3)', fontSize: '11px', marginTop: '4px' }">
+            [[ labels.portsHint ]]
+          </div>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24" v-if="modal.transport === 'tcp-tls' || modal.transport === 'wss'">
+        <a-form-item :label="labels.fingerprint">
+          <a-input v-model="modal.fingerprint" :placeholder="labels.fingerprintPlaceholder"></a-input>
+        </a-form-item>
+      </a-col>
+      <a-col :span="24">
+        <a-checkbox v-model="modal.proxyV2">[[ labels.proxyV2 ]]</checkbox>
+      </a-col>
+    </a-row>
+
+    <a-space style="width: 100%; justifyContent: 'flex-end'; marginTop: '16px'">
+      <a-button @click="modal.visible = false">{{ i18n "cancel" }}</a-button>
+      <a-button type="primary" :loading="modal.saving" @click="save">{{ i18n "save" }}</a-button>
+    </a-space>
+  </a-form>
+</a-modal>
+
+<!-- Link-test result: what the path measured and which carrier it recommends. -->
+<a-modal v-model="ltModal.visible" :title="labels.linkTest" :footer="null" :width="420">
+  <div v-if="ltModal.result">
+    <a-descriptions :column="1" size="small">
+      <a-descriptions-item :label="labels.reachable">
+        <a-badge :status="ltModal.result.reachable ? 'success' : 'error'"
+          :text="ltModal.result.reachable ? 'yes' : 'no'"></a-badge>
+      </a-descriptions-item>
+      <a-descriptions-item :label="labels.latency" v-if="ltModal.result.reachable">
+        <b class="num">[[ ltModal.result.latencyMs ]] ms</b>
+      </a-descriptions-item>
+      <a-descriptions-item :label="labels.error" v-if="ltModal.result.error">
+        <span :style="{ color: 'var(--error)' }">[[ ltModal.result.error ]]</span>
+      </a-descriptions-item>
+      <a-descriptions-item :label="labels.recommended">
+        <a-tag color="blue">[[ ltModal.result.recommended ]]</a-tag>
+      </a-descriptions-item>
+    </a-descriptions>
+  </div>
+  <div v-else :style="{ color: 'var(--text-3)' }">[[ labels.linkHint ]]</div>
+</a-modal>
+
+{{ template "page/shell_end" . }}
+{{template "component/aSidebar" .}}
+{{template "component/aThemeSwitch" .}}
+<script>
+  const app = new Vue({
+    delimiters: ['[[', ']]'],
+    mixins: [MediaQueryMixin],
+    el: '#app',
+    data: {
+      themeSwitcher,
+      pageTitle: '{{ i18n "pages.tunnels.title" }}',
+      spinning: false,
+      refreshing: false,
+      genTok: false,
+      rows: [],
+      modal: blankModal(),
+      ltModal: { visible: false, result: null },
+      labels: {
+        add: '{{ i18n "pages.tunnels.add" }}',
+        edit: '{{ i18n "pages.tunnels.edit" }}',
+        refresh: '{{ i18n "pages.tunnels.refresh" }}',
+        linkTest: '{{ i18n "pages.tunnels.linkTest" }}',
+        enable: '{{ i18n "pages.tunnels.enable" }}',
+        disable: '{{ i18n "pages.tunnels.disable" }}',
+        name: '{{ i18n "pages.tunnels.name" }}',
+        namePlaceholder: '{{ i18n "pages.tunnels.namePlaceholder" }}',
+        role: '{{ i18n "pages.tunnels.role" }}',
+        transport: '{{ i18n "pages.tunnels.transport" }}',
+        tuning: '{{ i18n "pages.tunnels.tuning" }}',
+        peer: '{{ i18n "pages.tunnels.peer" }}',
+        hostPlaceholder: '{{ i18n "pages.tunnels.hostPlaceholder" }}',
+        portPlaceholder: '{{ i18n "pages.tunnels.portPlaceholder" }}',
+        token: '{{ i18n "pages.tunnels.token" }}',
+        tokenPlaceholder: '{{ i18n "pages.tunnels.tokenPlaceholder" }}',
+        tokenHint: '{{ i18n "pages.tunnels.tokenHint" }}',
+        genToken: '{{ i18n "pages.tunnels.genToken" }}',
+        ports: '{{ i18n "pages.tunnels.ports" }}',
+        portsPlaceholder: '{{ i18n "pages.tunnels.portsPlaceholder" }}',
+        portsHint: '{{ i18n "pages.tunnels.portsHint" }}',
+        fingerprint: '{{ i18n "pages.tunnels.fingerprint" }}',
+        fingerprintPlaceholder: '{{ i18n "pages.tunnels.fingerprintPlaceholder" }}',
+        proxyV2: '{{ i18n "pages.tunnels.proxyV2" }}',
+        reachable: '{{ i18n "pages.tunnels.reachable" }}',
+        latency: '{{ i18n "pages.tunnels.latency" }}',
+        error: '{{ i18n "pages.tunnels.error" }}',
+        recommended: '{{ i18n "pages.tunnels.recommended" }}',
+        linkHint: '{{ i18n "pages.tunnels.linkHint" }}',
+        required: '{{ i18n "pages.tunnels.required" }}',
+      },
+      columns: [
+        { title: '{{ i18n "pages.tunnels.name" }}', dataIndex: 'name', align: 'left', width: 150 },
+        { title: '{{ i18n "pages.tunnels.transport" }}', align: 'center', width: 150, scopedSlots: { customRender: 'transport' } },
+        { title: '{{ i18n "pages.tunnels.peer" }}', align: 'left', width: 170, scopedSlots: { customRender: 'peer' } },
+        { title: '{{ i18n "pages.tunnels.ports" }}', align: 'left', width: 140, scopedSlots: { customRender: 'ports' } },
+        { title: '{{ i18n "status" }}', align: 'center', width: 110, scopedSlots: { customRender: 'status' } },
+        { title: '{{ i18n "pages.tunnels.speed" }}', align: 'left', width: 180, scopedSlots: { customRender: 'speed' } },
+        { title: '', align: 'center', width: 220, scopedSlots: { customRender: 'action' } },
+      ],
+    },
+    methods: {
+      blankModal() {
+        return {
+          visible: false, id: 0, name: '', role: 'client', transport: 'tcp', tuning: 'balance',
+          host: '', port: null, token: '', ports: '', fingerprint: '', proxyV2: false,
+          saving: false,
+        };
+      },
+      async load() {
+        this.spinning = true;
+        const msg = await HttpUtil.get('/panel/api/tunnels/list');
+        if (msg && msg.success) this.rows = msg.obj || [];
+        this.spinning = false;
+      },
+      openAdd() {
+        this.modal = this.blankModal();
+        this.modal.visible = true;
+      },
+      openEdit(row) {
+        this.modal = {
+          visible: true, id: row.id, name: row.name, role: row.role || 'client',
+          transport: row.transport || 'tcp', tuning: row.tuning || 'balance',
+          host: row.serverAddr ? row.serverAddr.host : '', port: row.serverAddr ? row.serverAddr.port : null,
+          token: row.token || '', ports: this.portsFromRow(row), fingerprint: row.tlsFingerprint || '',
+          proxyV2: !!row.proxyProtoV2, saving: false,
+        };
+      },
+      // The port list is stored as a JSON array on the row; the form edits it
+      // as the human-readable "443 / 53/udp / 443=127.0.0.1:2096" text the
+      // wizard shows, then re-marshals it on save.
+      portsFromRow(row) {
+        let maps = [];
+        if (row.forwardedPorts) {
+          try { maps = JSON.parse(row.forwardedPorts); } catch (e) { maps = []; }
+        }
+        return maps.map(m => m.local + (m.backend ? '=' + m.backend : '') + (m.udp ? '/udp' : '')).join(' , ');
+      },
+      portsToRow(text) {
+        if (!text || !text.trim()) return '[]';
+        const maps = text.split(',').map(s => {
+          s = s.trim();
+          if (!s) return null;
+          const m = { local: 0, backend: '', udp: false };
+          let spec = s;
+          if (spec.endsWith('/udp')) { m.udp = true; spec = spec.slice(0, -4); }
+          if (spec.includes('=')) {
+            const [l, b] = spec.split('=');
+            m.local = parseInt(l, 10) || 0;
+            m.backend = b;
+          } else {
+            m.local = parseInt(spec, 10) || 0;
+          }
+          return m;
+        }).filter(Boolean);
+        return JSON.stringify(maps);
+      },
+      async save() {
+        const m = this.modal;
+        if (!m.name.trim()) {
+          this.$message.error(this.labels.required);
+          return;
+        }
+        m.saving = true;
+        const payload = {
+          name: m.name, role: m.role, transport: m.transport, tuning: m.tuning,
+          serverAddr: { host: m.host || '', port: m.port || 0 },
+          forwardedPorts: this.portsToRow(m.ports),
+          token: m.token, tlsFingerprint: m.fingerprint, proxyProtoV2: m.proxyV2,
+        };
+        const url = m.id ? `/panel/api/tunnels/update/${m.id}` : '/panel/api/tunnels/add';
+        const msg = await HttpUtil.post(url, payload);
+        m.saving = false;
+        if (msg && msg.success) {
+          m.visible = false;
+          await this.load();
+        }
+      },
+      async del(row) {
+        const msg = await HttpUtil.post(`/panel/api/tunnels/del/${row.id}`);
+        if (msg && msg.success) await this.load();
+      },
+      async toggleEnable(row) {
+        const msg = await HttpUtil.post(`/panel/api/tunnels/enable/${row.id}`, { enable: !row.enable });
+        if (msg && msg.success) await this.load();
+      },
+      async runLinkTest(row) {
+        this.ltModal.visible = true;
+        this.ltModal.result = null;
+        const host = row.serverAddr ? row.serverAddr.host : '';
+        const port = row.serverAddr ? row.serverAddr.port : 0;
+        const msg = await HttpUtil.post('/panel/api/tunnels/linkTest', { host, port });
+        if (msg && msg.success && msg.obj) this.ltModal.result = msg.obj;
+      },
+      async genToken() {
+        this.genTok = true;
+        const msg = await HttpUtil.post('/panel/api/tunnels/token/generate');
+        this.genTok = false;
+        if (msg && msg.success && msg.obj) this.modal.token = msg.obj.token || '';
+      },
+      statusBadge(row) {
+        if (!row.enable) return 'default';
+        switch (row.status) {
+          case 'up': return 'success';
+          case 'stalled': return 'warning';
+          case 'error': return 'error';
+          default: return 'processing';
+        }
+      },
+      statusLabel(row) {
+        if (!row.enable) return '{{ i18n "pages.tunnels.disabled" }}';
+        switch (row.status) {
+          case 'up': return '{{ i18n "pages.tunnels.up" }}';
+          case 'stalled': return '{{ i18n "pages.tunnels.stalled" }}';
+          case 'error': return '{{ i18n "pages.tunnels.error" }}';
+          case 'down': return '{{ i18n "pages.tunnels.down" }}';
+          default: return '{{ i18n "pages.tunnels.pending" }}';
+        }
+      },
+      fmtBytes(b) {
+        if (!b) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+      },
+      portSummary(row) {
+        let maps = [];
+        if (row.forwardedPorts) {
+          try { maps = JSON.parse(row.forwardedPorts); } catch (e) { maps = []; }
+        }
+        if (!maps.length) return '—';
+        return maps.map(m => m.local + (m.udp ? '/udp' : '')).join(', ');
+      },
+    },
+    async mounted() {
+      await this.load();
+    },
+  });
+</script>
+{{ template "page/body_end" .}}

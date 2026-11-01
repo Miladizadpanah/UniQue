@@ -54,6 +54,9 @@ func initModels() error {
 		// The multi-node registry: remote panels this dashboard polls and displays.
 		// Purely additive, read-only monitoring; an old binary ignores the table.
 		&model.Node{},
+		// The native tunnel engine's table: the operator's point-to-point tunnels
+		// between two panel instances. Purely additive; an old binary ignores it.
+		&model.TunnelPair{},
 		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
 		&model.NodeAccount{},
 		// Incoming pairing requests from remote hubs, awaiting this operator's

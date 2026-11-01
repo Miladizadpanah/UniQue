@@ -29,6 +29,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v2/web/middleware"
 	"github.com/mhsanaei/3x-ui/v2/web/network"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
+	"github.com/mhsanaei/3x-ui/v2/web/service/tunnel"
 	"github.com/mhsanaei/3x-ui/v2/web/websocket"
 
 	"github.com/gin-contrib/gzip"
@@ -105,6 +106,7 @@ type Server struct {
 	api     *controller.APIController
 	node    *controller.NodeController
 	nodeAPI *controller.NodeAPIController
+	tunnel  *controller.TunnelController
 	ws      *controller.WebSocketController
 
 	xrayService        service.XrayService
@@ -309,6 +311,9 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, s.customGeoService)
 	s.node = controller.NewNodeController(g)
+	// The native tunnel engine's UI: the wizard page + the /panel/api/tunnels
+	// routes. Mounted on the same basePath group as the rest of the panel.
+	s.tunnel = controller.NewTunnelController(g)
 	// Node-side federation API: the public token-gated surface a hub calls to
 	// list inbounds and provision accounts on THIS panel (off by default).
 	s.nodeAPI = controller.NewNodeAPIController(g)
@@ -457,6 +462,14 @@ func (s *Server) startTask() {
 	// snapshots. A no-op when no node is registered, so single-node installs
 	// pay nothing for it.
 	s.cron.AddJob("@every 60s", job.NewCheckNodesJob())
+
+	// Native tunnel engine: bring up every ENABLED tunnel this panel owns,
+	// then run the watchdog that marks a wedged link "stalled". Both are no-ops
+	// when no tunnel row exists, so single-node installs pay nothing for them.
+	if err := tunnel.DefaultManager().StartAll(); err != nil {
+		logger.Warning("tunnel engine start:", err)
+	}
+	s.cron.AddJob("@every 30s", job.NewTunnelWatchdogJob())
 
 	// Node heartbeat: the PUSH side of the same telemetry. This panel, when
 	// configured as a node of a hub, reports its gauges every 30s instead of

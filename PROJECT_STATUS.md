@@ -1,9 +1,40 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۳۰ اکتبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.0**
-> ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue` · تگ: `v3.0.0`
+> آخرین به‌روزرسانی: ۱ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (نخستین کامیت فاز ۱)
+> ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
+
+## ۰. فاز ۱ — نودِ قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]
+
+مطابق نقشه‌راه در `PANEL_COMPETITION_ANALYSIS.md` (گزارش مقایسه‌ای با ۳ پنل رقیب:
+3X-UI، BackPack و NX Panel)؛ نخستین فاز اجرا شده:
+
+- **Heartbeat push-based نود**: پنل «نود» هر ۳۰ ثانیه گِیج‌های سیستمی خودش
+  (CPU، RAM، uptime، counterهای شبکه، state/core xray) را به پنل «هاب» POST می‌کند
+  (`POST /panel/node/heartbeat`). هاب این را روی ردیف نود ثبت می‌کند؛ polling ۶۰ثانیه‌ای
+  فعلی هم همچنان می‌ماند (legacy + offline-detect).
+- **Node model**: فیلدهای `LastHeartbeat / CpuPct / MemPct / UptimeSecs / NetUp /
+  NetDown / XrayState / XrayError / LastError` (افزودنی، صفر = بدون داده).
+- **NodeStatus**: همان فیلدها روی wire format؛ حالت poll و push یک شکل دارند.
+- **صفحه‌ی Nodes**: ستون‌های جدید «CPU/RAM · ترافیک» و «وضعیت Xray» (legacy = "—")
+  + دکمه‌ی **«Update panels»** (bulk `POST /panel/api/nodes/updatePanels`).
+- **آپدیت پنل از هاب**: `POST /panel/node/updatePanel` (token-gated روی نود) که آپدیت
+  خودکار همان پنل را در background اجرا می‌کند؛ هاب نتیجه‌ی «۳ از ۵ شروع شد» می‌بیند.
+- **Stale-heartbeat offline-detect**: نودی که ۳ هارت‌بیت پیاپی (۹۰ثانیه) را گم کرده
+  آفلاین محسوب می‌شود حتی اگر poll endpoint هنوز جواب بدهد.
+- **i18n**: کلیدهای جدید در `en_US` و `fa_IR`.
+- **Build**: `GOOS=linux go build ./...` سبز.
+
+### فازهای پیشِ‌رو (در نقشه‌راه)
+- فاز ۲: ادغام کامل کد **BackPack** (تونل زنی ۱۲ ترنسپورت + L3 + link-test +
+  failover + watchdog)
+- فاز ۳: صفحه‌ی **3X-UI subpage** (app icons، balancers، template سفارشی، external import)
+- فاز ۴: inbound clone + mTLS + tunnel health monitor + CPU/mem history
+- فاز ۵: control-plane سبک NX (roles/limits، 2FA TOTP، session mgmt، webhooks outbox،
+  backup encryption، Ctrl-K palette، PWA)
+- فاز ۶: fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
 
 ## ۱. هدف کلی
 

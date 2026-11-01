@@ -1,9 +1,49 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۱ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (نخستین کامیت فاز ۱)
+> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲)
 > ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
+
+## ۰. فاز ۲ — تونل بومی سبک (BackPack-style) [کامیت c6055af]
+
+مطابق نقشه‌راه؛ به‌جای ادغام مستقیم کد ۵۰هزارسطری BackPack (با وابستگی‌های
+quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی سبک** با همان
+قابلیت‌ها در پنل ساخته شد:
+
+- **مدل `TunnelPair`** روی جدول `tunnel_pairs` (جدا از `TunnelMesh` قدیمی
+  که روی جدول `tunnels` است). فیلدها: Role (server/client)، Transport
+  (`tcp|tcp-tls|ws|wss|udp`)، FallbackTransports، ServerAddr، ForwardedPorts،
+  Token (۶۴-هگز)، TLSFingerprint، Tuning، ProxyProtoV2 + گیج‌های زنده
+  (Status/LastError/Connections/UpSince/BytesUp/Down).
+- **موتور** (`web/service/tunnel`): ۵ کالر سبک stdlib — TCP، TLS 1.3/TCP،
+  WebSocket، WSS، UDP-datelgram. کانال control با header نسخه‌دار + توکن
+  (مقایسه constant-time + چک نقش مخالف). keepalive هر ۱۵ ثانیه تا تونل بی‌صدا
+  «stalled» قلمداد نشود. کالرهای سنگین KCP/QUIC/Noise/ICMP و L3-GRE فاز
+  بعد.
+- **Service**: CRUD + **link-test** (دایل + latency + ترنسپورت پیشنهادی برای
+  مسیر سنجش‌شده). Save روی ردیف جدید token می‌سازد؛ روی ویرایش token زنده را
+  دست نمی‌زند (باگ «تونلم بعد از save مرده» دقیقاً همین است).
+- **Controller + UI**: `/panel/tunnels` + `/panel/api/tunnels` + صفحه‌ی
+  `tunnels.html` با wizard (نقش + ترنسپورت + tuning + peer + token + پورت‌ها +
+  fingerprint + PROXY-v2) + دایالوگ نتیجه‌ی link-test. ورودی در سایدبار. i18n
+  en_US + fa_IR.
+- **Watchdog** (`web/job/tunnel_watchdog_job.go`): هر ۳۰ ثانیه، تونلی که آخرین
+  بایتش از دو keepalive (۳۰ ثانیه ساکتی روی لینکی که هر ۱۵ث پینگ می‌کند)
+  گذسته → `stalled`. یک بلپ گذرا تونل را **نمی‌کشد**؛ دکمه‌ی disable اپراتور
+  teardown صریح است.
+- **Boot**: `StartAll` + watchdog در `web/web.go`.
+- **Build**: `GOOS=linux go build ./...` + `go vet` سبز.
+
+### وضعیت فازها
+- ✅ فاز ۱ — نود قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]
+- ✅ فاز ۲ — تونل بومی سبک [کامیت c6055af]
+- ⏭ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import)
+- ⏭ فاز ۴ — inbound clone + mTLS + tunnel health monitor + CPU/mem history
+- ⏭ فاز ۵ — control-plane NX-style (roles/limits، 2FA TOTP، session mgmt،
+  webhooks outbox، backup encryption، Ctrl-K palette، PWA)
+- ⏭ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
 
 ## ۰. فاز ۱ — نودِ قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]
 

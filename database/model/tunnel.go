@@ -5,6 +5,62 @@ import (
 	"strconv"
 )
 
+// NodeMetrics is one sampled gauge reading the hub records against a node's row
+// when it learns the gauges: push beats, pull polls, and its own local
+// heartbeat. The table is purely additive — an old binary ignores it — and the
+// retention policy (drop readings older than the retention window) keeps it
+// bounded: a 30s beat pruned at 24h is 288 rows per node, a 60s poll at 24h
+// is 144; both are trivial next to the inbounds table they summarize.
+type NodeMetrics struct {
+	Id      int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	NodeId  int    `json:"nodeId" gorm:"index"`
+	Source  string `json:"source" gorm:"index"` // "heartbeat" | "poll" | "local"
+	CpuPct  float64 `json:"cpuPct"`
+	MemPct  float64 `json:"memPct"`
+	NetUp   uint64 `json:"netUp"`
+	NetDown uint64 `json:"netDown"`
+	Ts      int64  `json:"ts" gorm:"index"` // UnixMilli
+}
+
+// TableName pins the table name: "node_metrics".
+func (NodeMetrics) TableName() string { return "node_metrics" }
+
+// TunnelHealthEvent is one health transition of a tunnel row: the moment a
+// tunnel moved between states (up -> stalled, stalled -> up, ...) or failed
+// a link-test, the watchdog records a row here. The table is a bounded log
+// (pruned to the most recent N per tunnel by the retention job), not a
+// history table — it answers "when did this tunnel last stall, and what did
+// the engine say" rather than "show me every transition since January".
+//
+// The event's State is the NEW state (the one the row now carries); the
+// detail field is the engine's own reason (the LastError the watchdog copied
+// into the row on the transition, or a link-test latency measurement). An
+// empty detail means "no reason recorded" (a clean up, say), which the UI
+// renders as just the state flip.
+type TunnelHealthEvent struct {
+	Id       int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	TunnelId int    `json:"tunnelId" gorm:"index"`
+	// State is the NEW state the tunnel row carries after the event.
+	State string `json:"state"`
+	// Detail is the engine's reason for the transition: the LastError text on
+	// a failure, a latency measurement on a link-test, or "" on a clean flip.
+	Detail string `json:"detail" gorm:"type:text;default:''"`
+	// Ts is the UnixMilli of the transition itself.
+	Ts int64 `json:"ts" gorm:"index"`
+}
+
+// TableName pins the table name: "tunnel_health_events".
+func (TunnelHealthEvent) TableName() string { return "tunnel_health_events" }
+
+// TunnelHealthRetention is how many health events per tunnel the retention
+// job keeps. 200 events covers a full week of 30s watchdog beats (7 * 24 *
+// 120 = 20,160 beats, but the retention is PER TUNNEL, so a 200-row cap means
+// a 200-row window, roughly 16h of stalls at the 30s cadence). A shorter
+// cap still covers the operator's "what just happened" question; a longer cap
+// costs nothing until the operator actually runs hundreds of tunnels, which
+// is not the case yet.
+const TunnelHealthRetention = 200
+
 // ---------------------------------------------------------------------------
 // Native tunnel engine (BackPack-style): a panel-owned point-to-point tunnel
 // between two panel instances. The server ROLE listens on a port and exposes

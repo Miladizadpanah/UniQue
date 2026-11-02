@@ -1,6 +1,6 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲ + ۲b + فاز ۳)
+> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲ + ۲b + فاز ۳ + فاز ۴)
 > ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
@@ -39,11 +39,36 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - ✅ فاز ۱ — نود قوی (heartbeat + آپدیت از هاب) [کامیت 965ead2]
 - ✅ فاز ۲ — تونل بومی سبک [کامیت c6055af]
 - ✅ فاز ۲b — ری‌لای ترافیک واقعی کاربر روی کانال control تونل [کامیت 0578c83]
-- ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import)
-- ⏭ فاز ۴ — inbound clone + mTLS + tunnel health monitor + CPU/mem history
+- ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import) [کامیت b5aeeac]
+- ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history
 - ⏭ فاز ۵ — control-plane NX-style (roles/limits، 2FA TOTP، session mgmt،
   webhooks outbox، backup encryption، Ctrl-K palette، PWA)
 - ⏭ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
+
+## ۰d. فاز ۴ — inbound clone + mTLS + tunnel health + CPU/mem history
+
+چهار ارتقا که همگی additive هستند:
+
+- **Inbound clone to nodes**: اپراتور هاب یک اینباند محلی و یک نود مقصد را
+  انتخاب می‌کند؛ هاب از پنل نود (از طریق API token-gated) می‌خواهد یک
+  اینباند هم‌پیکر بسازد (همان پروتکل + stream settings، پورت آزاد نود،
+  اعتبارنامه‌های تازه‌ساخته‌ی نود) و سپس تمام حساب‌های فعال اینباند مبدأ را
+  روی اینباند جدید نود provision می‌کند، هر کدام را به‌عنوان NodeAccount ثبت
+  می‌کند. حذف نود بعدی cascade می‌شود و حساب‌ها را purge می‌کند.
+- **mTLS bundle**: کلید و گواهی mTLS پنل (mtls.go) حالا روی صفحه‌ی Nodes
+  به‌عنوان CA cert قابل‌استفاده است تا اپراتور بتواند آن را روی فیلد
+  `ApiCaPem` یک نود (verify mode) pin کند.
+- **Tunnel health monitor**: واچ‌داگ حالا روی هر transition وضعیت (stall،
+  recover به up، نتیجه‌ی link-test) یک `TunnelHealthEvent` ثبت می‌کند؛ جدول
+  `tunnel_health_events` به ۲۰۰ ردیف آخر به‌ازای هر تونل prune می‌شود.
+  روی صفحه‌ی Tunnels یک اکشن «Health» با timeline اضافه شده.
+- **CPU/RAM/Net history**: نمونه‌های گِیج CPU/RAM/Net نودها روی جدول
+  `node_metrics` ذخیره می‌شوند (هر heartbeat/poll/loca beat) و به ۲۴ ساعت
+  prune می‌شوند. روی مودال manage نود، یک کارت «CPU / RAM / Net history»
+  با progress bar و جدول نمونه‌های اخیر (نرخ delta-computed) اضافه شده.
+
+**Build**: `GOOS=linux go build ./...` + `go vet` سبز.
 
 
 ## ۰b. فاز ۲b — ری‌لای ترافیک واقعی کاربر روی تونل [کامیت 0578c83]

@@ -186,6 +186,14 @@ func (s *NodeService) Poll(n *model.Node) (*model.NodeStatus, error) {
 			logger.Warning("node poll", n.Name, "failed:", err)
 		}
 	} else {
+		// A successful poll is also a gauge beat: record the sample against
+		// this node's row so the dashboard's CPU/RAM chart has a PULL-side
+		// point, even on a node that never pushes. A push beat (RecordHeartbeat)
+		// records the same node on the PUSH cadence; both coexist, the chart
+		// shows every sample.
+		if status != nil {
+			RecordNodeMetrics(n.Id, "poll", status)
+		}
 		// Reset failure counter on success
 		healthRow.ConsecutiveFailures = 0
 		updates["online"] = true
@@ -322,6 +330,11 @@ func (s *NodeService) RecordHeartbeat(token string, st *model.NodeStatus) error 
 			updates["account_count"] = st.AccountCount
 			updates["online_count"] = st.OnlineCount
 		}
+		// The push beat is also a gauge sample: record it against this node's
+		// row so the dashboard's CPU/RAM chart has a PUSH-side point on the
+		// 30s cadence. A poll (Pull) records the same node on its 60s cadence;
+		// both coexist and the chart shows every sample.
+		RecordNodeMetrics(node.Id, "heartbeat", st)
 	}
 	return db.Model(&model.Node{}).Where("id = ?", node.Id).Updates(updates).Error
 }
@@ -744,10 +757,11 @@ func (e *NodeApiError) Error() string {
 }
 
 const (
-	nodeInboundsPath  = "/panel/node/inbounds"
-	nodeClientsPath   = "/panel/node/clients"
-	nodeDelClientPath = "/panel/node/delClient"
-	nodePurgePath     = "/panel/node/purge"
+	nodeInboundsPath     = "/panel/node/inbounds"
+	nodeInboundClonePath = "/panel/node/inbounds/clone"
+	nodeClientsPath      = "/panel/node/clients"
+	nodeDelClientPath    = "/panel/node/delClient"
+	nodePurgePath        = "/panel/node/purge"
 )
 
 // nodeAPIResponse is the panel's standard JSON envelope every endpoint answers
@@ -831,6 +845,70 @@ func (s *NodeService) RemoteCreateInbound(n *model.Node, protocol string) (*mode
 		return nil, err
 	}
 	return &out, nil
+}
+
+// RemoteCreateInboundWithSettings asks the node's panel to make ONE inbound
+// available with the HUB's own settings blob — a full inbound-spec clone,
+// not just "give me a free-port vless". The hub sends the hub inbound's
+// protocol + streamSettings + settings.clients (the accounts to attach there),
+// and the node's panel mints the credential per account on its own port,
+// hot-applies it, and answers with the node inbound to use. Idempotent: a
+// re-clone of the same email onto the same node inbound is a no-op, because
+// the hub's NodeAccount tracking already knows which emails it provisioned.
+//
+// The hub's operator uses this to "clone a local inbound onto a node": the
+// node gets a sibling of the hub's inbound (same protocol, same stream
+// settings, same account emails) with the node's own port and its own
+// credentials, so a customer's link dials the NODE instead of the hub.
+// RemoteCreateInboundWithSettings asks the node's panel to make ONE inbound
+// available on the NODE, built from a HUB inbound's spec: same protocol, same
+// stream settings, same settings blob, but the node picks its own free port
+// and mints the accounts' credentials itself (the hub only sends the emails).
+// The node's panel hot-applies the inbound and answers with it, so the hub can
+// immediately provision accounts onto it through the normal RemoteCreateClient
+// path. The hub's operator uses this to "clone a local inbound onto a node":
+// the node gets a sibling of the hub's inbound, and a customer's link dials
+// the NODE instead of the hub.
+//
+// The wire body is a NodeInboundClone (the node-side create shape, defined in
+// the node service); the hub reads the source inbound's blobs first, and the
+// node's panel decodes the NodeInboundClone into its own create handler, which
+// builds the inbound with a fresh port, no TLS, and an empty clients array
+// (the accounts land through RemoteCreateClient, one per email, so each is
+// tracked as a NodeAccount the hub can delete on node removal).
+func (s *NodeService) RemoteCreateInboundWithSettings(n *model.Node, sourceInboundId int, remark string) (*model.Inbound, error) {
+	// Read the source inbound's spec on the HUB side: protocol + stream settings
+	// + settings blob. A missing row is a concrete error the UI shows verbatim.
+	protocol, streamSettings, settings, err := cloneInboundBlobs(sourceInboundId)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(remark) == "" {
+		remark = "cloned from hub inbound " + strconv.Itoa(sourceInboundId)
+	}
+	body := NodeInboundClone{
+		Protocol:       protocol,
+		StreamSettings: streamSettings,
+		Settings:       settings,
+		Remark:         remark,
+	}
+	var out model.Inbound
+	if err := nodeAPIRoundTrip(n, http.MethodPost, nodeInboundClonePath, body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// cloneInboundBlobs reads one hub inbound's protocol + stream settings +
+// settings blob: the three pieces the node's panel needs to build a sibling
+// inbound. A missing row is an error (the caller must have named a real
+// inbound); an empty blob is a valid answer (the node builds an empty one).
+func cloneInboundBlobs(inboundId int) (protocol, streamSettings, settings string, err error) {
+	var ib model.Inbound
+	if e := database.GetDB().First(&ib, "id = ?", inboundId).Error; e != nil {
+		return "", "", "", common.NewError("hub inbound not found: ", inboundId)
+	}
+	return string(ib.Protocol), ib.StreamSettings, ib.Settings, nil
 }
 
 // EnsureFedInbounds guarantees BOTH dedicated inbounds exist on the node and

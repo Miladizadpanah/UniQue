@@ -121,6 +121,13 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	// run its own self-update through its token-gated API; the nodes answer
 	// straight away and the version column flips on their next beat/poll.
 	nodes.POST("/updatePanels", a.updatePanels)
+	// CPU/RAM/network HISTORY of one node: the last N hours of gauge samples
+	// the hub recorded from its beats and polls. The picker is in hours; 0
+	// (or omitted) asks for the retention window.
+	nodes.GET("/:id/metrics", a.nodeMetrics)
+	// Prune stale gauge samples. The retention window keeps the table bounded;
+	// the 60s node poll already walks the table, so this is a cheap extra tick.
+	nodes.POST("/metrics/prune", a.pruneNodeMetrics)
 }
 
 // nodeStatus is the remote node's side: report this panel's own snapshot, gated
@@ -708,6 +715,33 @@ func (a *NodeController) updatePanels(c *gin.Context) {
 	}
 	results := a.nodeService.UpdateNodePanels(body.Ids, body.Dev)
 	jsonObj(c, results, nil)
+}
+
+// nodeMetrics returns one node's CPU/RAM/network gauge samples in the last
+// `hours` hours (0 = the retention window), oldest first. An empty list is a
+// valid answer: a node that has not pushed or been polled since the window
+// opened has no samples to show, and the chart renders empty rather than
+// erroring.
+func (a *NodeController) nodeMetrics(c *gin.Context) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil || id <= 0 {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("node id must be a positive integer"))
+		return
+	}
+	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "0"))
+	out, err := service.ListNodeMetricsHistory(id, hours)
+	jsonObj(c, out, err)
+}
+
+// pruneNodeMetrics drops every gauge sample older than the retention window,
+// across every node. The 60s node poll already walks the table; this route is
+// the explicit operator trigger when they want to prune NOW rather than wait
+// for the next tick.
+func (a *NodeController) pruneNodeMetrics(c *gin.Context) {
+	var body struct{}
+	_ = c.ShouldBindJSON(&body)
+	pruned := service.PruneNodeMetrics()
+	jsonObj(c, gin.H{"pruned": pruned}, nil)
 }
 
 // ---------------------------------------------------------------------------

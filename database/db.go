@@ -57,6 +57,13 @@ func initModels() error {
 		// The native tunnel engine's table: the operator's point-to-point tunnels
 		// between two panel instances. Purely additive; an old binary ignores it.
 		&model.TunnelPair{},
+		// Per-node CPU/RAM/Net gauge samples: one row per beat (push or poll),
+		// pruned by the retention job. Purely additive; an old binary ignores it.
+		&model.NodeMetrics{},
+		// Per-tunnel health events: one row per state transition the watchdog
+		// records (up -> stalled, link-test result, ...), pruned to the most
+		// recent N per tunnel. Purely additive; an old binary ignores it.
+		&model.TunnelHealthEvent{},
 		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
 		&model.NodeAccount{},
 		// Incoming pairing requests from remote hubs, awaiting this operator's

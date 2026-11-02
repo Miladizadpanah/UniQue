@@ -152,6 +152,14 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.POST("/:id/generate-ikev2-cert", requirePerm(model.PermEditInbound), owns, a.generateIkev2Cert)
 	g.POST("/generate-ikev2-cert", requirePerm(model.PermCreateInbound), a.generateIkev2Cert)
 	g.POST("/check-ikev2-cert", requirePerm(model.PermCreateInbound), a.checkIkev2Cert)
+	// Clone one local inbound onto an approved node: the hub asks the node's
+	// panel to create a sibling inbound there (same protocol + stream settings,
+	// the node's own free port and node-minted credentials) and then
+	// provisions every account on the source inbound onto the node's new
+	// inbound, tracking each as a NodeAccount the hub owns. Gated on createInbound
+	// + xraySettings: this writes to a remote panel through the node API, which
+	// is fleet-configuration-class work.
+	g.POST("/cloneToNode", requirePerm(model.PermCreateInbound), requirePerm(model.PermXraySettings), a.cloneInboundToNode)
 	// WireGuard (C): render a client's per-device .conf(s) (keys are server-minted).
 	g.GET("/:id/wgc-configs", read, owns, a.getWgcConfigs)
 	g.GET("/:id/wgxray-configs", read, owns, a.getWireguardXrayConfigs)
@@ -3053,6 +3061,28 @@ func (a *InboundController) checkIkev2Cert(c *gin.Context) {
 		return
 	}
 	jsonObj(c, map[string]string{"keyType": keyType, "warning": warning}, nil)
+}
+
+// cloneInboundToNode is the hub's "clone this local inbound onto that node"
+// action. The operator picks a local inbound and a target node; the hub asks
+// the node's panel (through its token-gated node API) to create a SIBLING
+// inbound there — same protocol, same stream settings, the node's own free
+// port and node-minted credentials — and then provisions every account on the
+// source inbound onto the node's new inbound, recording each as a NodeAccount
+// the hub owns. A later node delete cascades: the hub's delete path purges
+// every account it tracked on that node.
+//
+// Body: {inboundId, nodeId, remark}. The per-account report says which emails
+// landed and which did not (a node offline mid-clone leaves a partial result,
+// and the operator can retry the missing ones).
+func (a *InboundController) cloneInboundToNode(c *gin.Context) {
+	var req service.NodeInboundCloneRequest
+	if err := c.ShouldBind(&req); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	res, err := a.inboundService.CloneInboundToNode(req)
+	jsonObj(c, res, err)
 }
 
 // delInboundClientByEmail deletes a client from an inbound by email address.

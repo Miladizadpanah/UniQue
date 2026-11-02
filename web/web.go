@@ -484,6 +484,28 @@ func (s *Server) startTask() {
 		// already covers the non-pushing case, this tightens the pushing case.
 		ns.MarkNodeOfflineAfterStaleHeartbeat(90 * time.Second)
 	})
+	// CPU/RAM/Net history: record this panel's OWN gauge sample against its
+	// node row (when one exists), so the "this panel" row on the dashboard has
+	// a chart even on a single-node install where no other panel watches it.
+	// The 60s node poll also prunes the retention window on its cadence: a
+	// 30s beat kept for 24h is 288 rows/node, and the pruner drops the stale
+	// tail so the table stays bounded. Both are no-ops without configuration.
+	s.cron.AddFunc("@every 30s", func() {
+		service.RecordLocalMetrics()
+	})
+	s.cron.AddFunc("@every 60s", func() {
+		service.PruneNodeMetrics()
+	})
+
+	// Tunnel health events: prune the per-tunnel transition log to its
+	// retention window on the watchdog's own 30s cadence. A tunnel that has
+	// never transitioned has no events, and a tunnel that has is bounded to
+	// the most recent N, so the table stays small no matter how long the
+	// panel runs. No-op without configuration: a panel with no tunnels pays
+	// nothing for it.
+	s.cron.AddFunc("@every 30s", func() {
+		job.PruneTunnelHealthEvents()
+	})
 
 	// Prometheus exporter: refresh the hub's own gauges on the same cadence.
 	// Reads live counters from the database (total traffic + cores up) and

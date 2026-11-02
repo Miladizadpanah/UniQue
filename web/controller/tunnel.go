@@ -1,15 +1,15 @@
-﻿package controller
+package controller
 
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/util/common"
+	"github.com/mhsanaei/3x-ui/v2/web/job"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 )
 
@@ -44,6 +44,10 @@ func (a *TunnelController) initRouter(g *gin.RouterGroup) {
 	api.POST("/enable/:id", a.enable)
 	api.POST("/linkTest", a.linkTest)
 	api.POST("/token/generate", a.generateToken)
+	// Tunnel health: one tunnel's recent state transitions (up / stalled /
+	// error, with the engine's reason), pruned to the most recent N by the
+	// retention job. The operator's "when did this tunnel last stall" view.
+	api.GET("/:id/health", a.health)
 }
 
 // page renders the tunnel dashboard.
@@ -147,8 +151,18 @@ func (a *TunnelController) generateToken(c *gin.Context) {
 	jsonObj(c, gin.H{"token": token}, nil)
 }
 
-// ensure the http import is live for a future 404 answer; keep the build
-// green when the route set shrinks in a later phase.
-var _ = http.StatusOK
-var _ = fmt.Sprintf
-
+// health returns one tunnel's recent state transitions, newest first: the
+// "when did this tunnel last stall" view the operator opens without the log.
+// The limit is in the query (?limit=, default the retention window's cap);
+// an empty list is a valid answer (a tunnel that has never transitioned
+// since boot has no events to show).
+func (a *TunnelController) health(c *gin.Context) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil || id <= 0 {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("tunnel id must be a positive integer"))
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	out, err := job.ListTunnelHealthEvents(id, limit)
+	jsonObj(c, out, err)
+}

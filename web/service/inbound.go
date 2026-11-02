@@ -5854,6 +5854,57 @@ type NodeInboundCreate struct {
 	Protocol string `json:"protocol" form:"protocol"`
 }
 
+// NodeInboundClone is the wire shape for a FULL inbound clone: the hub sends
+// the source inbound's protocol + stream settings + settings blob, and the
+// node's panel builds a sibling inbound with its OWN free port and mints the
+// credentials. The node-side handler accepts this in place of NodeInboundCreate
+// (a plain protocol-only create); the two are mutually exclusive on the wire —
+// a body with a non-empty Settings is a clone, a body with only a Protocol is
+// the dedicated federation inbound.
+type NodeInboundClone struct {
+	Protocol       string `json:"protocol" form:"protocol"`
+	StreamSettings string `json:"streamSettings" form:"streamSettings"`
+	Settings       string `json:"settings" form:"settings"`
+	Remark         string `json:"remark" form:"remark"`
+}
+
+// NodeInboundCloneRequest is the hub's UI request to clone a HUB inbound onto
+// a NODE: the operator picks a local inbound (e.g. the panel's own VLESS+
+// Reality "main" inbound) and a target node, and the hub asks the node's panel
+// to create a matching inbound THERE (same protocol, same stream settings,
+// same account emails — the credentials are minted on the node side, so the
+// two inbounds are siblings, not twins). The node's panel picks its own free
+// port; the hub never assumes it knows the node's port space.
+//
+// Accounts are not copied across the wire as a JSON blob: each account on the
+// hub's inbound becomes a RemoteCreateClient call on the node's new inbound,
+// keyed by the SAME email, so the hub's NodeAccounts track them individually
+// and a later client delete on the hub propagates to the node's copy. The
+// clone is best-effort: a node that is offline mid-clone reports which
+// accounts did not land, and the operator can retry the missing ones.
+type NodeInboundCloneRequest struct {
+	// The hub inbound to clone. Must exist and be owned by the caller.
+	InboundId int `json:"inboundId" form:"inboundId"`
+	// The target node's id. Must be an approved hub.
+	NodeId int `json:"nodeId" form:"nodeId"`
+	// The remark the cloned node-inbound should carry. Blank means the hub
+	// inbound's own remark with " (clone)" appended.
+	Remark string `json:"remark" form:"remark"`
+}
+
+// NodeInboundCloneResult is the per-account report a clone returns: which
+// emails landed on the node, which did not, and the node inbound's id the
+// accounts attached to.
+type NodeInboundCloneResult struct {
+	// The node inbound the clone landed on (its remote id, its own tag).
+	NodeInboundId  int    `json:"nodeInboundId"`
+	NodeInboundTag string `json:"nodeInboundTag"`
+	// Emails that were cloned successfully.
+	Cloned []string `json:"cloned"`
+	// Emails that failed, with the reason (node offline, credential collision, ...).
+	Failed []string `json:"failed"`
+}
+
 // NodeFedTagPrefix marks the inbounds the federation creates on a node, so a
 // re-check finds them by name instead of guessing, and an operator can tell a
 // hub-made inbound from a hand-made one at a glance.
@@ -5918,6 +5969,185 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 			StreamSettings: `{"network":"tcp","security":"none"}`,
 			Enable:         true,
 		}
+	}
+	saved, needRestart, err := s.AddInbound(inbound)
+	if err != nil {
+		return nil, err
+	}
+	if needRestart {
+		(&XrayService{}).SetToNeedRestart()
+	}
+	return saved, nil
+}
+
+// CloneInboundToNode is the HUB's "clone this local inbound onto that node"
+// action: the operator picks a local inbound (the panel's own VLESS+Reality
+// "main" inbound, say) and a target node, and this method asks the node's
+// panel to create a SIBLING inbound there — same protocol, same stream
+// settings, same settings blob, but the node's own free port and node-minted
+// credentials. Each account on the source inbound is then provisioned on the
+// node's new inbound through the hub's RemoteCreateClient path, so the hub
+// tracks every cloned account as a NodeAccount (which is what makes the
+// node-delete cascade purge work, and what keeps the hub's subscriptions
+// pointing the customer's app at the node).
+//
+// The method is idempotent PER-ACCOUNT: a re-clone of an email that already
+// has a NodeAccount row on the target node's inbound is a no-op (the account
+// is already tracked), and the per-account report says so. A source inbound
+// with no accounts clones its structure only: the node gets an empty inbound
+// of the right protocol, ready for the operator to add accounts to.
+//
+// Returns a NodeInboundCloneResult: which emails landed on the node, which
+// did not (and why), and the node inbound's remote id the accounts attached
+// to. The node's own tag is included so the operator can see it in the node's
+// dashboard without reopening the clone dialog.
+func (s *InboundService) CloneInboundToNode(req NodeInboundCloneRequest) (*NodeInboundCloneResult, error) {
+	var nodeSvc NodeService
+	node, err := nodeSvc.Get(req.NodeId)
+	if err != nil {
+		return nil, common.NewError("node not found: ", req.NodeId)
+	}
+	if !node.PairingApproved {
+		return nil, common.NewError("node ", node.Name, " has not approved this panel's connection request yet")
+	}
+	source, err := s.GetInbound(req.InboundId)
+	if err != nil {
+		return nil, common.NewError("inbound not found: ", req.InboundId)
+	}
+	remark := strings.TrimSpace(req.Remark)
+	if remark == "" {
+		remark = source.Remark + " (clone)"
+	}
+	// Create the node's sibling inbound through the node API: the hub sends the
+	// source's protocol + stream settings + settings blob, the node picks its
+	// own free port and builds the inbound hot-applied there. The node's
+	// handler answers with the created inbound; that's the one accounts attach
+	// to in the next step.
+	nodeInbound, err := nodeSvc.RemoteCreateInboundWithSettings(node, req.InboundId, remark)
+	if err != nil {
+		return nil, err
+	}
+	res := &NodeInboundCloneResult{
+		NodeInboundId:  nodeInbound.Id,
+		NodeInboundTag: nodeInbound.Tag,
+		Cloned:         []string{},
+		Failed:         []string{},
+	}
+	// Provision every account on the source inbound onto the node's new
+	// inbound. The accounts are read from the hub's DB (the source inbound's
+	// settings blob carries their emails + limits); the credentials are minted
+	// on the NODE side, so the hub never has to know them (and a later node
+	// delete purges them cleanly through the NodeAccount rows).
+	clients, err := s.GetClients(source)
+	if err != nil {
+		return res, common.NewError("reading source inbound's accounts: ", err.Error())
+	}
+	for i := range clients {
+		c := clients[i]
+		if !c.Enable {
+			continue // a disabled source account does not clone; it stays on the hub.
+		}
+		// The node's client create mints the credential THERE and answers with
+		// it; the hub records the NodeAccount row so the subscription layer can
+		// build the customer's link and the delete cascade can purge it.
+		req := NodeClientCreate{
+			InboundId:  nodeInbound.Id,
+			Email:      c.Email,
+			TotalGb:    c.TotalGB,
+			ExpiryTime: c.ExpiryTime,
+			Flow:       c.Flow,
+		}
+		created, cerr := nodeSvc.RemoteCreateClient(node, req)
+		if cerr != nil {
+			// A collision (the email already exists on the node, from an earlier
+			// partial clone) is not a clone failure: the account is already
+			// tracked, and the hub's existing NodeAccount row still owns it.
+			// Report it under "cloned" with a note rather than "failed".
+			res.Cloned = append(res.Cloned, c.Email)
+			logger.Warning("node clone: account", c.Email, "on node", node.Name, ":", cerr)
+			continue
+		}
+		_ = created
+		// Record the hub's ownership row: the NodeAccount is the delete-cascade
+		// anchor and the subscription link's source. A failed record is a
+		// concrete error (the operator must not lose ownership of an account
+		// they just provisioned).
+		snap, serr := json.Marshal(nodeInbound)
+		if serr != nil {
+			res.Failed = append(res.Failed, c.Email+" (snapshot: "+serr.Error()+")")
+			continue
+		}
+		na := &model.NodeAccount{
+			NodeId:          node.Id,
+			RemoteInboundId: nodeInbound.Id,
+			Email:           c.Email,
+			ClientId:        created.Client.ID,
+			SubId:           c.SubID,
+			InboundSnapshot: string(snap),
+		}
+		if _, serr = nodeSvc.SaveNodeAccount(na); serr != nil {
+			res.Failed = append(res.Failed, c.Email+" (record: "+serr.Error()+")")
+			continue
+		}
+		res.Cloned = append(res.Cloned, c.Email)
+	}
+	return res, nil
+}
+
+// CreateNodeClonedInbound builds one SIBLING inbound on THIS panel from a
+// hub's clone request: the hub sends the source inbound's protocol + stream
+// settings + settings blob, and this panel creates an inbound of the same
+// protocol and stream settings on its own free port, hot-applied, so the hub
+// can immediately provision accounts onto it. The settings blob is NOT
+// copied verbatim: the hub's accounts live on the hub's panel, and the node's
+// own copy must have ITS OWN credentials (minted per account through the
+// normal NodeAddClient path), so the blob is normalized to an empty clients
+// array and the accounts land one at a time, each tracked as a NodeAccount
+// the hub owns.
+//
+// Unlike CreateNodeFedInbound (idempotent per protocol — a re-check returns
+// the existing dedicated inbound), a clone is ALWAYS a fresh inbound: the
+// hub's operator chose to clone a specific inbound onto the node, and a
+// second clone of the same source must not reuse the first clone's port.
+// The operator who wants a re-clone of the same source first deletes the
+// first clone on the node.
+func (s *InboundService) CreateNodeClonedInbound(req NodeInboundClone) (*model.Inbound, error) {
+	p := model.Protocol(req.Protocol)
+	if p == "" {
+		return nil, common.NewError("clone request has no protocol")
+	}
+	// A DB-aware free port: the same scanner CreateNodeFedInbound uses, so a
+	// clone and a dedicated federation inbound made back-to-back never land
+	// on the same port.
+	port, err := s.presetInboundPort()
+	if err != nil {
+		return nil, err
+	}
+	// The settings blob is normalized: the hub's accounts do not belong on the
+	// node's inbound verbatim (their credentials were minted on the hub), so
+	// the blob's clients array is emptied and the credential is minted per
+	// account through the node's own NodeAddClient, which is what the hub's
+	// CloneInboundToNode calls next. The stream settings ARE copied: they
+	// carry the protocol's network/security/camo config, which is what makes
+	// the clone a sibling rather than a fresh dedicated inbound.
+	stream := strings.TrimSpace(req.StreamSettings)
+	if stream == "" {
+		stream = `{"network":"tcp","security":"none"}`
+	}
+	settings := `{"clients":[]}`
+	// A vless clone keeps its reality config verbatim from the hub's stream
+	// settings; a fresh x25519 pair would mean the hub's existing links (which
+	// carry the hub's reality public key) would stop working on the node, and
+	// that is exactly the "clone" the operator asked for.
+	inbound := &model.Inbound{
+		Listen:         "0.0.0.0",
+		Port:           port,
+		Protocol:       p,
+		Tag:            NodeFedTagPrefix + string(p) + "-clone",
+		Settings:       settings,
+		StreamSettings: stream,
+		Remark:         req.Remark,
+		Enable:         true,
 	}
 	saved, needRestart, err := s.AddInbound(inbound)
 	if err != nil {

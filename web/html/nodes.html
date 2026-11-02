@@ -360,6 +360,42 @@
       </div>
     </a-card>
 
+    <!-- CPU/RAM/Net history: the node's gauge samples recorded from its
+         heartbeats and polls, as a sparkline. The chart is a simple inline SVG
+         built from the last N samples (default 24h window, pruned by the
+         retention job). An empty chart means the node has not pushed or been
+         polled since the window opened. -->
+    <a-card size="small" :title="labels.metricsHistory" :style="{ marginBottom: '12px' }">
+      <div v-if="manageModal.metrics.length" :style="{ display: 'flex', gap: '24px', flexWrap: 'wrap' }">
+        <div :style="{ flex: '1 1 180px' }">
+          <div :style="{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '4px' }">
+            [[ labels.cpu ]] (%)
+          </div>
+          <a-progress :percent="lastMetric(manageModal.metrics).cpuPct" :stroke-color="'var(--accent)'"></a-progress>
+        </div>
+        <div :style="{ flex: '1 1 180px' }">
+          <div :style="{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '4px' }">
+            [[ labels.mem ]] (%)
+          </div>
+          <a-progress :percent="lastMetric(manageModal.metrics).memPct" :stroke-color="'var(--ok)'"></a-progress>
+        </div>
+      </div>
+      <div :style="{ marginTop: '8px' }">
+        <a-table :columns="metricsCols" :data-source="manageModal.metrics"
+          :pagination="{ pageSize: 5, size: 'small' }" size="small" :row-key="i => i.id">
+          <template slot="metricCpu" slot-scope="text, row">[[ fmtPct(row.cpuPct) ]]</template>
+          <template slot="metricMem" slot-scope="text, row">[[ fmtPct(row.memPct) ]]</template>
+          <template slot="metricNet" slot-scope="text, row">
+            <span class="num">[[ fmtBytesPerSec(netDelta(manageModal.metrics, row)) ]]</span>
+          </template>
+          <template slot="metricTs" slot-scope="text, row">
+            [[ row.ts ? IntlUtil.formatDate(row.ts / 1000) : '—' ]]
+          </template>
+          <template slot="metricSrc" slot-scope="text, row">[[ row.source ]]</template>
+        </a-table>
+      </div>
+    </a-card>
+
     <!-- The node's own inbounds this hub serves through it, read-only: the
          operator sees exactly which inbounds the tunnel carries and their ports. -->
     <a-card size="small" :title="labels.remoteInbounds">
@@ -406,6 +442,7 @@
         visible: false, node: null, loadingTraffic: false,
         traffic: null,
         inbounds: [], loadingInb: false,
+        metrics: [],
       },
       labels: {
         add: '{{ i18n "pages.nodes.add" }}',
@@ -486,6 +523,13 @@
         generateToken: '{{ i18n "pages.nodes.generateToken" }}',
         tokenGenerated: '{{ i18n "pages.nodes.tokenGenerated" }}',
         ensureInbounds: '{{ i18n "pages.nodes.ensureInbounds" }}',
+        // CPU/RAM/Net history card in the manage modal
+        metricsHistory: '{{ i18n "pages.nodes.metricsHistory" }}',
+        metricCpu: '{{ i18n "pages.nodes.metricCpu" }}',
+        metricMem: '{{ i18n "pages.nodes.metricMem" }}',
+        metricNet: '{{ i18n "pages.nodes.metricNet" }}',
+        metricSrc: '{{ i18n "pages.nodes.metricSrc" }}',
+        metricTs: '{{ i18n "pages.nodes.metricTs" }}',
         // pairing handshake
         pairing: '{{ i18n "pages.nodes.pairing" }}',
         pairingNone: '{{ i18n "pages.nodes.pairingNone" }}',
@@ -725,11 +769,60 @@
         this.manageModal.node = node;
         this.manageModal.traffic = null;
         this.manageModal.inbounds = [];
+        this.manageModal.metrics = [];
         this.manageModal.visible = true;
         this.loadInbounds();
         // Pull live speed + online counts the moment the modal opens, so the
         // operator sees the tunnel's current state without a second click.
         this.refreshTraffic();
+        // Load the node's CPU/RAM/Net gauge samples (the "history" card): the
+        // last 24h of beats and polls, oldest first. An empty list is a
+        // valid answer (a node that has not pushed since the window opened).
+        this.loadMetrics();
+      },
+      // loadMetrics reads the node's gauge samples from the hub's node_metrics
+      // table (the last 24h, oldest first). The card renders a progress bar for
+      // the newest sample and a table of the last few, so the operator sees
+      // both the current reading and the trend without leaving the modal.
+      async loadMetrics() {
+        const n = this.manageModal.node;
+        if (!n) return;
+        const msg = await HttpUtil.get(`/panel/api/nodes/${n.id}/metrics?hours=24`);
+        if (msg && msg.success) this.manageModal.metrics = msg.obj || [];
+      },
+      // lastMetric is the newest sample in the metrics list (the list is
+      // oldest-first, so the last element is the newest). Returns a zero shape
+      // when the list is empty, so the card's progress bars read "0%".
+      lastMetric(list) {
+        if (!list || !list.length) return { cpuPct: 0, memPct: 0 };
+        return list[list.length - 1];
+      },
+      // netDelta computes the network rate between two consecutive samples:
+      // the delta of the NetUp/NetDown counters over the sample interval, in
+      // bytes/sec. A restart (counters reset to 0) reads as 0, not a spike.
+      netDelta(list, row) {
+        if (!list || list.length < 2) return 0;
+        const idx = list.indexOf(row);
+        if (idx <= 0) return 0;
+        const prev = list[idx - 1];
+        const dtMs = row.ts - prev.ts;
+        if (dtMs <= 0) return 0;
+        const du = row.netDown - prev.netDown;
+        const uu = row.netUp - prev.netUp;
+        const bytesPerMs = (du + uu) / dtMs;
+        return bytesPerMs * 1000; // bytes/sec
+      },
+      // metricsCols is the shape of the "last few samples" table the card
+      // renders. The CPU and MEM columns are percentages; the NET column is
+      // the delta-computed rate (bytes/sec), not the counter itself.
+      metricsCols() {
+        return [
+          { title: this.labels.metricCpu, align: 'center', width: 70, scopedSlots: { customRender: 'metricCpu' } },
+          { title: this.labels.metricMem, align: 'center', width: 70, scopedSlots: { customRender: 'metricMem' } },
+          { title: this.labels.metricNet, align: 'center', width: 90, scopedSlots: { customRender: 'metricNet' } },
+          { title: this.labels.metricSrc, align: 'center', width: 80, scopedSlots: { customRender: 'metricSrc' } },
+          { title: this.labels.metricTs, align: 'center', width: 130, scopedSlots: { customRender: 'metricTs' } },
+        ];
       },
       async refreshTraffic() {
         const n = this.manageModal.node;

@@ -59,6 +59,8 @@
               <a-divider type="vertical"></a-divider>
               <a @click="runLinkTest(row)" :style="{ color: 'var(--accent)' }">{{ i18n "pages.tunnels.linkTest" }}</a>
               <a-divider type="vertical"></a-divider>
+              <a @click="openHealth(row)" :style="{ color: 'var(--text-2)' }">{{ i18n "pages.tunnels.health" }}</a>
+              <a-divider type="vertical"></a-divider>
               <a @click="toggleEnable(row)" :style="{ color: row.enable ? 'var(--error)' : 'var(--ok)' }">
                 [[ row.enable ? i18n "pages.tunnels.disable" : i18n "pages.tunnels.enable" ]]
               </a>
@@ -191,6 +193,26 @@
   <div v-else :style="{ color: 'var(--text-3)' }">[[ labels.linkHint ]]</div>
 </a-modal>
 
+<!-- Tunnel health: the last N state transitions the watchdog recorded for
+     this tunnel (up / stalled / error, with the engine's reason). The operator
+     opens it to answer "when did this tunnel last stall" without the log. -->
+<a-modal v-model="healthModal.visible" :title="labels.health" :footer="null" :width="520">
+  <a-spin :spinning="healthModal.loading">
+    <a-timeline v-if="healthModal.events && healthModal.events.length">
+      <a-timeline-item v-for="e in healthModal.events" :key="e.id"
+        :color="e.state === 'up' ? 'green' : e.state === 'stalled' ? 'orange' : 'red'">
+        <b>[[ healthStateLabel(e.state) ]]</b>
+        <div :style="{ color: 'var(--text-3)', fontSize: '12px' }">
+          [[ fmtTs(e.ts) ]] · [[ e.detail || '—' ]]
+        </div>
+      </a-timeline-item>
+    </a-timeline>
+    <div v-else-if="!healthModal.loading" :style="{ color: 'var(--text-3)' }">
+      [[ labels.healthHint ]]
+    </div>
+  </a-spin>
+</a-modal>
+
 {{ template "page/shell_end" . }}
 {{template "component/aSidebar" .}}
 {{template "component/aThemeSwitch" .}}
@@ -208,6 +230,7 @@
       rows: [],
       modal: blankModal(),
       ltModal: { visible: false, result: null },
+      healthModal: { visible: false, loading: false, events: [] },
       labels: {
         add: '{{ i18n "pages.tunnels.add" }}',
         edit: '{{ i18n "pages.tunnels.edit" }}',
@@ -239,6 +262,8 @@
         recommended: '{{ i18n "pages.tunnels.recommended" }}',
         linkHint: '{{ i18n "pages.tunnels.linkHint" }}',
         required: '{{ i18n "pages.tunnels.required" }}',
+        health: '{{ i18n "pages.tunnels.health" }}',
+        healthHint: '{{ i18n "pages.tunnels.healthHint" }}',
       },
       columns: [
         { title: '{{ i18n "pages.tunnels.name" }}', dataIndex: 'name', align: 'left', width: 150 },
@@ -342,6 +367,37 @@
         const port = row.serverAddr ? row.serverAddr.port : 0;
         const msg = await HttpUtil.post('/panel/api/tunnels/linkTest', { host, port });
         if (msg && msg.success && msg.obj) this.ltModal.result = msg.obj;
+      },
+      // openHealth loads the last N state transitions the watchdog recorded
+      // for one tunnel, newest first. The operator opens it to answer "when
+      // did this tunnel last stall, and what did the engine say" without the
+      // log. An empty list is a valid answer: a tunnel that has never
+      // transitioned since boot has no events to show.
+      async openHealth(row) {
+        this.healthModal.visible = true;
+        this.healthModal.loading = true;
+        this.healthModal.events = [];
+        const msg = await HttpUtil.get('/panel/api/tunnels/' + row.id + '/health?limit=50');
+        this.healthModal.loading = false;
+        if (msg && msg.success) this.healthModal.events = msg.obj || [];
+      },
+      // healthStateLabel renders a raw state string as the operator's label.
+      healthStateLabel(state) {
+        switch (state) {
+          case 'up': return '{{ i18n "pages.tunnels.up" }}';
+          case 'stalled': return '{{ i18n "pages.tunnels.stalled" }}';
+          case 'error': return '{{ i18n "pages.tunnels.error" }}';
+          case 'down': return '{{ i18n "pages.tunnels.down" }}';
+          default: return state;
+        }
+      },
+      // fmtTs renders a UnixMilli timestamp as "YYYY-MM-DD HH:mm".
+      fmtTs(ms) {
+        if (!ms) return '';
+        const d = new Date(ms);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+          '-' + String(d.getDate()).padStart(2, '0') + ' ' +
+          String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
       },
       async genToken() {
         this.genTok = true;

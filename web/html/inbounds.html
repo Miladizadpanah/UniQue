@@ -376,6 +376,10 @@
                               <a-icon type="block"></a-icon> {{ i18n
                               "pages.inbounds.clone"}}
                             </a-menu-item>
+                            <a-menu-item key="cloneToNode">
+                              <a-icon type="cluster"></a-icon> {{ i18n
+                              "pages.inbounds.cloneToNode"}}
+                            </a-menu-item>
                             <a-menu-item key="delete">
                               <span :style="{ color: 'var(--error)' }">
                                 <a-icon type="delete"></a-icon> {{ i18n "delete"}}
@@ -784,6 +788,43 @@
 {{template "modals/qrcodeModal"}}
 {{template "modals/textModal"}}
 {{template "modals/inboundInfoModal"}}
+
+<!-- Clone-to-node: the operator picks a target node and a remark; the hub
+     asks the node's panel to create a sibling inbound there (same protocol +
+     stream settings, the node's own free port and node-minted credentials)
+     and provisions every account on this inbound onto the node's new
+     inbound, tracking each as a NodeAccount the hub owns. A node whose
+     operator has not approved this panel's connection request answers with
+     the pairing hint; the operator requests pairing from the Nodes page. -->
+<a-modal v-model="cloneNode.visible" :title="'{{ i18n "pages.inbounds.cloneToNode" }}'"
+  :width="480" :footer="null" :class="themeSwitcher.currentTheme">
+  <a-form layout="vertical">
+    <a-form-item :label="'{{ i18n "pages.nodes.name" }}'">
+      <a-select v-model="cloneNode.nodeId" :placeholder="'{{ i18n "pages.nodes.namePlaceholder" }}'"
+        allow-clear>
+        <a-select-option v-for="n in cloneNode.nodes" :key="n.id" :value="n.id">
+          [[ n.name ]]
+          <a-tag v-if="n.pairingApproved" color="green" :style="{ marginLeft: '6px' }">
+            {{ i18n "pages.nodes.pairingConnected" }}
+          </a-tag>
+          <a-tag v-else color="orange" :style="{ marginLeft: '6px' }">
+            {{ i18n "pages.nodes.pairingPending" }}
+          </a-tag>
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item :label="'{{ i18n "pages.inbounds.remark" }}'">
+      <a-input v-model="cloneNode.remark" :placeholder="'{{ i18n "pages.inbounds.remarkPlaceholder" }}'">
+      </a-input>
+    </a-form-item>
+  </a-form>
+  <a-space style="width: 100%; justifyContent: 'flex-end'; marginTop: '16px'">
+    <a-button @click="cloneNode.visible = false">{{ i18n "cancel" }}</a-button>
+    <a-button type="primary" :loading="cloneNode.saving" @click="doCloneToNode">
+      {{ i18n "confirm" }}
+    </a-button>
+  </a-space>
+</a-modal>
 <script>
   // Five columns of content, plus the checkbox and the menu.
   //
@@ -890,6 +931,12 @@
       },
       inbounds: [],
       dbInbounds: [],
+      // Clone-to-node: the operator's target-node picker + remark. The clone
+      // request is posted when the modal's confirm is clicked; the per-account
+      // result is reported as a toast (full or partial).
+      cloneNode: {
+        visible: false, inboundId: 0, nodeId: null, remark: '', nodes: [], saving: false,
+      },
       searchKey: '',
       enableFilter: false,
       filterBy: '',
@@ -1487,6 +1534,9 @@
           case "clone":
             this.openCloneInbound(dbInbound);
             break;
+          case "cloneToNode":
+            this.openCloneToNode(dbInbound);
+            break;
           case "delete":
             this.delInbound(dbInbound.id);
             break;
@@ -1646,6 +1696,62 @@
           sniffing: baseInbound.sniffing.toString(),
         };
         await this.submit('/panel/api/inbounds/add', data, inModal);
+      },
+      // openCloneToNode is the "clone this inbound onto an approved node"
+      // action: the operator picks a target node, the hub asks the node's
+      // panel to create a sibling inbound there (same protocol + stream
+      // settings, the node's own free port and node-minted credentials), and
+      // then provisions every account on this inbound onto the node's new
+      // inbound, tracking each as a NodeAccount the hub owns. The per-account
+      // report says which emails landed and which did not.
+      openCloneToNode(dbInbound) {
+        this.cloneNode = {
+          visible: true,
+          inboundId: dbInbound.id,
+          nodeId: null,
+          remark: dbInbound.remark ? (dbInbound.remark + ' (clone)') : '',
+          nodes: [],
+          saving: false,
+        };
+        // Load the registered nodes for the picker. The hub's clone route
+        // refuses a node whose operator has not approved this panel's
+        // connection request, so the picker shows every registered node and
+        // the operator picks; an unapproved node answers with the pairing
+        // hint and the operator requests pairing from the Nodes page.
+        HttpUtil.get('/panel/api/nodes/list').then(msg => {
+          if (msg && msg.success && msg.obj) {
+            this.cloneNode.nodes = (msg.obj || []).filter(n => n.enable);
+          }
+        });
+      },
+      // doCloneToNode posts the clone request and reports the per-account
+      // result. A full clone says "N accounts cloned"; a partial clone (a
+      // node that went offline mid-clone) says "M ok, K failed" so the
+      // operator can retry the missing ones from the node's own panel.
+      async doCloneToNode() {
+        const m = this.cloneNode;
+        if (!m.nodeId) {
+          this.$message.warning('{{ i18n "pages.inbounds.cloneToNodeNoNode" }}');
+          return;
+        }
+        m.saving = true;
+        const msg = await HttpUtil.post('/panel/api/inbounds/cloneToNode', {
+          inboundId: m.inboundId,
+          nodeId: m.nodeId,
+          remark: m.remark,
+        });
+        m.saving = false;
+        if (msg && msg.success && msg.obj) {
+          const res = msg.obj;
+          const ok = (res.cloned || []).length;
+          const failed = (res.failed || []).length;
+          if (failed === 0) {
+            this.$message.success(`{{ i18n "pages.inbounds.cloneToNodeOk" }}: ${ok}`);
+          } else {
+            this.$message.warning(`{{ i18n "pages.inbounds.cloneToNodePartial" }}: ${ok} ✓, ${failed} ✗`);
+          }
+          m.visible = false;
+        }
       },
       openAddInbound() {
         inModal.show({

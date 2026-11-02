@@ -71,6 +71,11 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 
 	writes := gp.Group("", a.approvalGate)
 	writes.POST("/inbounds", a.createInbound)
+	// Explicit clone route: the hub's "clone a local inbound onto this node"
+	// action, on its own path so the hub's RemoteCreateInboundWithSettings can
+	// POST there directly. The shape is the same NodeInboundClone; the route
+	// is the same approval-gated group, so only an approved hub can clone.
+	writes.POST("/inbounds/clone", a.createInboundFromClone)
 	writes.POST("/clients", a.createClient)
 	writes.POST("/delClient", a.deleteClient)
 	// When the hub drops this node from its registry, it must also tear down
@@ -239,17 +244,54 @@ func (a *NodeAPIController) inbounds(c *gin.Context) {
 }
 
 // createInbound makes ONE dedicated federation inbound available on this
-// panel: a free-port tcp vless or vmess, created here when absent (idempotent
-// per protocol), enabled and hot-applied, so the hub can provision accounts on
-// it the moment it returns. The caller (the hub) sends only the protocol; the
-// node decides the port and the settings, and answers with the inbound to use.
+// panel. The body is either a plain NodeInboundCreate (protocol only — the
+// node builds a free-port tcp vless/vmess of that protocol, idempotent per
+// protocol) or a NodeInboundClone (protocol + streamSettings + settings blob
+// + remark — the hub's "clone this local inbound onto me" request: the node
+// builds a SIBLING inbound of the hub's own, on the node's own free port,
+// hot-applied there). A body with a non-empty Settings is a clone, a body with
+// only a Protocol is the dedicated federation inbound.
 func (a *NodeAPIController) createInbound(c *gin.Context) {
+	// First try the clone shape: the hub's "clone a local inbound onto this
+	// node" request. It carries the source inbound's protocol + stream settings
+	// + settings blob; the node builds a sibling on its own free port.
+	var cloneReq service.NodeInboundClone
+	if err := c.ShouldBind(&cloneReq); err == nil && (cloneReq.Settings != "" || cloneReq.StreamSettings != "" || cloneReq.Remark != "") {
+		inbound, cerr := a.inboundService.CreateNodeClonedInbound(cloneReq)
+		if cerr != nil {
+			jsonMsg(c, I18nWeb(c, "somethingWentWrong"), cerr)
+			return
+		}
+		jsonObj(c, inbound, nil)
+		return
+	}
+	// Otherwise the plain protocol-only create: the dedicated federation
+	// inbound of that protocol (idempotent per protocol — a re-check finds it
+	// by name and returns the existing one, nothing is duplicated).
 	var req service.NodeInboundCreate
 	if err := c.ShouldBind(&req); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
 	inbound, err := a.inboundService.CreateNodeFedInbound(req.Protocol)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, inbound, nil)
+}
+
+// createInboundFromClone is the explicit clone route: POST /inbounds/clone with
+// a NodeInboundClone body. It is the same as createInbound's clone branch but
+// on its own path, so the hub's RemoteCreateInboundWithSettings can POST there
+// directly rather than riding the createInbound's shape-detection.
+func (a *NodeAPIController) createInboundFromClone(c *gin.Context) {
+	var cloneReq service.NodeInboundClone
+	if err := c.ShouldBind(&cloneReq); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	inbound, err := a.inboundService.CreateNodeClonedInbound(cloneReq)
 	if err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return

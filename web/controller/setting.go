@@ -2,9 +2,11 @@ package controller
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/util/common"
 	"github.com/mhsanaei/3x-ui/v2/util/crypto"
 	"github.com/mhsanaei/3x-ui/v2/web/entity"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
@@ -105,6 +107,14 @@ func (a *SettingController) initRouter(g *gin.RouterGroup) {
 	g.POST("/ssl/sync", requireSuperAdmin(), a.sslSync)
 	g.POST("/ssl/auto-renew", requireSuperAdmin(), a.sslAutoRenew)
 	g.POST("/ssl/nickname", requireSuperAdmin(), a.sslNickname)
+
+	// Webhook outbox: the delivery log the operator opens to answer "did my
+	// client get this notification, and if not, why". A read of the panel's
+	// own POST attempts, gated on the panel-settings bit (the operator who
+	// configured the webhooks is the one who reads the log); the prune route
+	// takes the super-admin gate because it writes to the table.
+	g.GET("/webhook/deliveries", a.webhookDeliveries)
+	g.POST("/webhook/deliveries/prune", requireSuperAdmin(), a.webhookDeliveriesPrune)
 }
 
 // serviceStatus returns the current systemd unit state for the panel.
@@ -127,6 +137,38 @@ func (a *SettingController) saveService(c *gin.Context) {
 	}
 	err := a.systemdService.SaveService(req)
 	jsonMsg(c, I18nWeb(c, "pages.settings.toasts.modifySettings"), err)
+}
+
+// webhookDeliveries returns one configured webhook URL's delivery attempts,
+// newest first: the operator's "webhook log" view. The URL is a query
+// param (?url=, the operator's own configured endpoint); an empty list is a
+// valid answer (a URL that has never been POSTed to since the outbox
+// shipped), not an error. The limit is in the query (?limit=, default the
+// retention cap).
+func (a *SettingController) webhookDeliveries(c *gin.Context) {
+	url := c.Query("url")
+	if url == "" {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"),
+			common.NewError("webhook url is required"))
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	out, err := service.ListWebhookDeliveries(url, limit)
+	jsonObj(c, out, err)
+}
+
+// webhookDeliveriesPrune drops delivery attempts beyond the retention cap,
+// across every URL. The 60s cron already prunes on its own tick (a stale
+// tail is dropped automatically), so this route is the explicit operator
+// trigger when they want to free space NOW rather than wait for the next
+// tick. Super-admin only: it writes to the table, and the operator who can
+// delete a URL's history is the one who can reconfigure the panel's
+// webhooks.
+func (a *SettingController) webhookDeliveriesPrune(c *gin.Context) {
+	var body struct{}
+	_ = c.ShouldBindJSON(&body)
+	pruned := service.PruneWebhookDeliveries()
+	jsonObj(c, gin.H{"pruned": pruned}, nil)
 }
 
 // getAllSetting retrieves all current settings.

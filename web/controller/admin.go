@@ -82,6 +82,12 @@ func (a *AdminController) initRouter(g *gin.RouterGroup) {
 	g.POST("/update/:id", a.update)
 	g.POST("/del/:id", a.del)
 	g.POST("/reassign/:from/:to", a.reassign)
+	// Active sessions: the shadow log's read half. The Admins page's
+	// "active sessions" tile shows which browsers are logged in for each
+	// admin, and the revoke actions below log them out on the next request.
+	g.GET("/:id/sessions", a.listSessions)
+	g.POST("/:id/sessions/revoke/:fingerprint", a.revokeSession)
+	g.POST("/:id/sessions/revokeAll", a.revokeAllSessions)
 }
 
 func (a *AdminController) list(c *gin.Context) {
@@ -184,4 +190,64 @@ func (a *AdminController) reassign(c *gin.Context) {
 		return
 	}
 	jsonObj(c, gin.H{"moved": moved}, nil)
+}
+
+// listSessions returns one admin's active (unrevoked) session rows, oldest
+// first, for the "active sessions" tile on the Admins page. The tile shows
+// how many browsers are logged in and WHERE (IP + user agent), and offers a
+// "revoke" action per session and a "revoke all" action per admin.
+func (a *AdminController) listSessions(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.admins.sessions"), err)
+		return
+	}
+	sessions, err := service.ListSessions(id)
+	jsonObj(c, sessions, err)
+}
+
+// revokeSession marks one session row (by its fingerprint) revoked. The
+// next request from that browser loads its user row through the session,
+// sees the flag, and logs out. The operator's "revoke this session" button
+// calls this; the per-fingerprint match is what makes it targeted rather
+// than blanket.
+func (a *AdminController) revokeSession(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.admins.sessionsRevoke"), err)
+		return
+	}
+	fingerprint := c.Param("fingerprint")
+	// A revoke of a session that does not belong to the named admin is a
+	// no-op, not an error: the operator may have stale data in their view,
+	// and the row either does not exist or belongs to someone else, and
+	// neither case is worth a 400. The response carries the new active
+	// count so the tile can re-render without a second fetch.
+	if err := service.RevokeSession(fingerprint); err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.admins.sessionsRevoke"), err)
+		return
+	}
+	active, _ := service.ListSessions(id)
+	jsonObj(c, gin.H{"revoked": fingerprint, "active": len(active)}, nil)
+}
+
+// revokeAllSessions marks every active (unrevoked) session row for one admin
+// revoked, so the next request from ANY of their browsers logs them out.
+// The operator's "force logout" button on the Admins page calls this. A
+// session that predates the feature (no fingerprint) is not individually
+// addressable, and the blanket revoke is the only path that catches it: the
+// next request from that browser loads its user row through the session,
+// and the revocation check (which runs even on a blank-fingerprint session,
+// because the check is per-USER not per-fingerprint) logs it out.
+func (a *AdminController) revokeAllSessions(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.admins.sessionsRevokeAll"), err)
+		return
+	}
+	if err := service.RevokeAllSessionsForUser(id); err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.admins.sessionsRevokeAll"), err)
+		return
+	}
+	jsonObj(c, gin.H{"revokedAll": true}, nil)
 }

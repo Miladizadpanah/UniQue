@@ -117,6 +117,12 @@
 "tunnel" = "مدیریت تونل"
 "logout" = "خروج"
 "link" = "مدیریت"
+"paletteTitle" = "برو به..."
+
+[pages.palette]
+"title" = "پالت دستورات (Ctrl-K)"
+"placeholder" = "جستجوی بخش یا عمل..."
+"noResults" = "موردی یافت نشد"
 
 [pages.core]
 "configTitle" = "ویرایشگر پیشرفته پیکربندی"
@@ -1417,6 +1423,13 @@
 "accessXraySettings" = "دسترسی به پیکربندی ایکس‌ری"
 "accessPanelSettings" = "دسترسی به تنظیمات پنل"
 "manageResellers" = "مدیریت نماینده‌ها"
+"sessions" = "نشست‌های فعال"
+"sessionRevoke" = "لغو"
+"sessionRevokeAll" = "لغو همه"
+"sessionIp" = "آی‌پی"
+"sessionAgent" = "برنامه"
+"sessionWhen" = "زمان"
+"sessionNoSessions" = "نشست فعالی ثبت‌نشده"
 
 [pages.resellers]
 "title" = "نماینده‌ها"

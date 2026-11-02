@@ -3,6 +3,9 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/scrypt"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/database"
@@ -1168,6 +1173,101 @@ func (s *ServerService) GetDb() ([]byte, error) {
 	return fileContents, nil
 }
 
+// EncryptBackupAES wraps a .db backup in an AES-GCM envelope so the operator
+// can store or transfer it without the plaintext database (inbound settings,
+// client credentials, admin passwords, the TOTP secrets) sitting on a
+// filesystem or in an S3 bucket in the clear. The envelope is a single
+// self-contained file: a 12-byte random nonce, the AES-256-GCM ciphertext of
+// the .db, and a 16-byte authentication tag, all under one blob. The
+// operator's passphrase is run through a 600k-iteration scrypt KDF (the
+// same strength class the panel uses for its admin password hashes) to
+// derive the 32-byte key, so a stored passphrase cannot be turned into a
+// key by a single SHA-256.
+//
+// The output is a .vpnui (not .db) so a backup tool that globs *.db does
+// not pick it up as a readable SQLite file, and the operator's own restore
+// path knows to unwrap it. A .db the operator downloads without encryption
+// is still a plain SQLite file, exactly as before.
+func (s *ServerService) EncryptBackupAES(db []byte, passphrase string) ([]byte, error) {
+	if len(passphrase) < 8 {
+		return nil, common.NewError("backup passphrase must be at least 8 characters")
+	}
+	salt := make([]byte, 32)
+	if _, err := crand.Read(salt); err != nil {
+		return nil, common.NewError("reading scrypt salt: ", err.Error())
+	}
+	// 600k iterations is the OWASP-recommended floor for scrypt; 32-byte
+	// salt and 32-byte key. The KDF cost is bounded (one backup at a time),
+	// so a slow KDF is not a throughput concern here.
+	key, err := scrypt.Key([]byte(passphrase), salt, 600000, 1, 32, 32)
+	if err != nil {
+		return nil, common.NewError("scrypt key derivation: ", err.Error())
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, common.NewError("AES cipher: ", err.Error())
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, common.NewError("AES-GCM: ", err.Error())
+	}
+	nonce := make([]byte, 12)
+	if _, err := crand.Read(nonce); err != nil {
+		return nil, common.NewError("reading GCM nonce: ", err.Error())
+	}
+	// Seal the plaintext .db under the nonce; the tag is appended by GCM.
+	sealed := gcm.Seal(nil, nonce, db, nil)
+	// Envelope: [1 version][32 salt][12 nonce][ciphertext+tag]. The version
+	// byte is 0x01 so a future change to the KDF parameters (or a move to
+	// XChaCha20-Poly1305) does not silently mis-read a v0 file as a v1.
+	out := make([]byte, 0, 1+32+12+len(sealed))
+	out = append(out, 0x01)
+	out = append(out, salt...)
+	out = append(out, nonce...)
+	out = append(out, sealed...)
+	return out, nil
+}
+
+// DecryptBackupAES unwraps an AES-GCM .vpnui envelope back to its .db
+// plaintext. The passphrase must match the one that encrypted the file; a
+// wrong passphrase fails the GCM authentication tag check, which is the
+// "corrupt or wrong passphrase" answer the operator gets rather than a
+// silently-plaintext file. A file that is not a v0/v1 envelope at all
+// (an operator who pasted a .db with the .vpnui extension on it) fails the
+// version-byte check with a concrete error.
+func (s *ServerService) DecryptBackupAES(envelope []byte, passphrase string) ([]byte, error) {
+	if len(envelope) < 1+32+12+16 {
+		return nil, common.NewError("not a backup envelope (too short)")
+	}
+	if envelope[0] != 0x01 {
+		return nil, common.NewError("unknown backup envelope version ", envelope[0])
+	}
+	salt := envelope[1 : 1+32]
+	nonce := envelope[1+32 : 1+32+12]
+	sealed := envelope[1+32+12:]
+	key, err := scrypt.Key([]byte(passphrase), salt, 600000, 1, 32, 32)
+	if err != nil {
+		return nil, common.NewError("scrypt key derivation: ", err.Error())
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, common.NewError("AES cipher: ", err.Error())
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, common.NewError("AES-GCM: ", err.Error())
+	}
+	plain, err := gcm.Open(nil, nonce, sealed, nil)
+	if err != nil {
+		// A GCM Open failure means either the passphrase is wrong (the
+		// authentication tag does not verify) or the envelope is corrupt.
+		// Both read as "wrong passphrase" to the operator, and that is
+		// the honest answer: a wrong key cannot decrypt the file.
+		return nil, common.NewError("decryption failed (wrong passphrase or corrupt envelope)")
+	}
+	return plain, nil
+}
+
 // BackupNameOptions selects which components a backup filename carries. A struct
 // rather than positional bools because the two callers disagree on the set: the
 // download picker never offers Version, and the pre-update snapshot never wants
@@ -1419,6 +1519,79 @@ func (s *ServerService) ImportDB(file multipart.File) error {
 		return common.NewErrorf("Imported DB but failed to start Xray: %v", err)
 	}
 
+	return nil
+}
+
+// ImportDBBytes is ImportDB's in-memory variant: the encrypted-import path
+// has already unwrapped the AES-GCM envelope and validated the GCM
+// authentication tag (a wrong passphrase fails there, before this method is
+// ever called), so the SQLite-format check and the file read are both
+// skipped and the plaintext is fed straight into the same rename + migrate +
+// restart path a plain .db import uses. The bytes are a verified .db, and
+// the method's only job is to land them.
+func (s *ServerService) ImportDBBytes(db []byte) error {
+	// Save the plaintext to a temporary file, exactly the way ImportDB does
+	// for its multipart upload: a .temp next to the live .db, a fallback of
+	// the live .db, a rename over the top, and a migrate + restart.
+	tempPath := fmt.Sprintf("%s.temp", config.GetDBPath())
+	if _, err := os.Stat(tempPath); err == nil {
+		if rerr := os.Remove(tempPath); rerr != nil {
+			return common.NewErrorf("Error removing existing temporary db file: %v", rerr)
+		}
+	}
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		return common.NewErrorf("Error creating temporary db file: %v", err)
+	}
+	if _, err := tempFile.Write(db); err != nil {
+		tempFile.Close()
+		return common.NewErrorf("Error saving db: %v", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return common.NewErrorf("Error closing temporary db file: %v", err)
+	}
+	// Validate the SQLite header before the rename: a GCM-valid envelope that
+	// unwraps to something that is not a .db (an operator's hand-edited
+	// backup, a .db with the .vpnui extension on it) must not overwrite the
+	// live database.
+	if err := database.ValidateSQLiteDB(tempPath); err != nil {
+		_ = os.Remove(tempPath)
+		return common.NewErrorf("Invalid or corrupt db file: %v", err)
+	}
+	if errStop := s.StopXrayService(); errStop != nil {
+		logger.Warningf("Failed to stop Xray before DB import: %v", errStop)
+	}
+	if errClose := database.CloseDB(); errClose != nil {
+		logger.Warningf("Failed to close existing DB before replacement: %v", errClose)
+	}
+	fallbackPath := fmt.Sprintf("%s.backup", config.GetDBPath())
+	if _, err := os.Stat(fallbackPath); err == nil {
+		_ = os.Remove(fallbackPath)
+	}
+	if err := os.Rename(config.GetDBPath(), fallbackPath); err != nil {
+		_ = os.Remove(tempPath)
+		return common.NewErrorf("Error backing up current db file: %v", err)
+	}
+	database.RemoveSidecars(config.GetDBPath())
+	defer func() {
+		if _, err := os.Stat(fallbackPath); err == nil {
+			_ = os.Remove(fallbackPath)
+		}
+	}()
+	if err := os.Rename(tempPath, config.GetDBPath()); err != nil {
+		_ = os.Rename(fallbackPath, config.GetDBPath())
+		return common.NewErrorf("Error moving db file: %v", err)
+	}
+	if err := database.InitDB(config.GetDBPath()); err != nil {
+		_ = os.Rename(fallbackPath, config.GetDBPath())
+		return common.NewErrorf("Error migrating db: %v", err)
+	}
+	s.inboundService.MigrateDB()
+	s.l2tpService.InitL2tp()
+	s.pptpService.InitPptp()
+	if err := s.RestartXrayService(); err != nil {
+		return common.NewErrorf("Imported DB but failed to start Xray: %v", err)
+	}
 	return nil
 }
 

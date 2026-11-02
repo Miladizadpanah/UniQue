@@ -64,6 +64,14 @@ func initModels() error {
 		// records (up -> stalled, link-test result, ...), pruned to the most
 		// recent N per tunnel. Purely additive; an old binary ignores it.
 		&model.TunnelHealthEvent{},
+		// Webhook delivery attempts: one row per POST to a configured webhook,
+		// pruned to the most recent N per URL. Purely additive; an old binary
+		// ignores it.
+		&model.WebhookDelivery{},
+		// Active login sessions: one row per admin login, revocable by the
+		// operator or by the max-session-age pruner. Purely additive; an old
+		// binary ignores it.
+		&model.UserSession{},
 		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
 		&model.NodeAccount{},
 		// Incoming pairing requests from remote hubs, awaiting this operator's

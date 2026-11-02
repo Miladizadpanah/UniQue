@@ -495,6 +495,16 @@ func (s *Server) startTask() {
 	})
 	s.cron.AddFunc("@every 60s", func() {
 		service.PruneNodeMetrics()
+		// Prune stale user-session rows on the same tick: a session cookie
+		// that has expired leaves a log row that will never be read again,
+		// and one cheap DELETE keeps the shadow log bounded without a
+		// dedicated job.
+		service.PruneStaleSessions()
+		// Prune the webhook outbox's stale tail on the same tick: a chatty
+		// event type (a high-traffic panel firing user.traffic.limit_reached
+		// every 60s) fills the delivery log fast, and one cheap DELETE
+		// keeps it bounded without a dedicated job.
+		service.PruneWebhookDeliveries()
 	})
 
 	// Tunnel health events: prune the per-tunnel transition log to its

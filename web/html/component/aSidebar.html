@@ -26,6 +26,41 @@
                 :title="collapsed ? expandLabel : collapseLabel">
                 <a-icon :type="collapsed ? 'right' : 'left'"></a-icon>
             </button>
+            <!-- The command palette: one keystroke (Ctrl-K / Cmd-K) opens a
+                 searchable list of every section the admin may reach, plus
+                 the quick actions (refresh, theme, logout). The list is built
+                 from the SAME permission-gated tabs the rail shows, so a
+                 section the admin cannot use never appears, and the palette
+                 and the rail can never disagree about what is available. -->
+            <button type="button" class="bo-rail-collapse" @click="paletteOpen = true"
+                :aria-label="paletteLabel" :title="paletteLabel" :style="{ marginTop: '6px' }">
+                <a-icon type="command"></a-icon>
+            </button>
+        </div>
+        <!-- The palette overlay: a search box + the filtered list. Enter jumps
+             to the highlighted entry (the first match by default); Esc closes.
+             The highlight follows the mouse hover as well as the keyboard, so
+             an operator who is a mouse person can just click. -->
+        <div v-if="paletteOpen" class="bo-palette" @click="paletteOpen = false"
+            :style="{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.45)' }">
+            <div class="bo-palette-box" @click.stop
+                :style="{ position: 'absolute', top: '12%', left: '50%', transform: 'translateX(-50%)', width: '480px', maxWidth: '90vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,.45)' }">
+                <input v-model="paletteQuery" :placeholder="palettePlaceholder"
+                    @keydown.enter="jumpToHighlighted()"
+                    @keydown.escape="paletteOpen = false"
+                    :style="{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', fontSize: '14px', outline: 'none' }">
+                <div v-for="(entry, i) in filteredPaletteEntries" :key="entry.title"
+                    @click="jumpTo(entry)" @mouseenter="paletteHighlight = i"
+                    :class="['bo-palette-row', { 'is-active': i === paletteHighlight }]"
+                    :style="{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer', background: i === paletteHighlight ? 'var(--accent-weak)' : 'transparent', transition: 'background .1s' }">
+                    <a-icon :type="entry.icon" :style="{ color: 'var(--accent)' }"></a-icon>
+                    <span>[[ entry.title ]]</span>
+                </div>
+                <div v-if="!filteredPaletteEntries.length"
+                    :style="{ padding: '14px', color: 'var(--text-3)', fontSize: '12px' }">
+                    [[ paletteNoResults ]]
+                </div>
+            </div>
         </div>
     </nav>
 </template>
@@ -130,6 +165,16 @@
                 collapsed: JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)) === true,
                 collapseLabel: '{{ i18n "menu.collapse"}}',
                 expandLabel: '{{ i18n "menu.expand"}}',
+                // Command palette state. The entries list is a computed off the
+                // permission-gated tabs, so the palette and the rail can never
+                // disagree about what is available. The highlight follows both
+                // the keyboard (ArrowUp/Down) and the mouse (hover).
+                paletteOpen: false,
+                paletteQuery: '',
+                paletteHighlight: 0,
+                paletteLabel: '{{ i18n "menu.paletteTitle"}}',
+                palettePlaceholder: '{{ i18n "pages.palette.placeholder"}}',
+                paletteNoResults: '{{ i18n "pages.palette.noResults"}}',
             }
         },
         methods: {
@@ -150,6 +195,102 @@
                 this.collapsed = !this.collapsed;
                 localStorage.setItem(SIDEBAR_COLLAPSED_KEY, this.collapsed);
             },
+            // Command palette: the filtered list is the admin's own permission-gated
+            // tabs (the SAME list the rail shows), plus the quick actions. A
+            // query matches against the entry's title, case-insensitively; an
+            // empty query shows every entry. The highlight follows the keyboard
+            // (ArrowUp/Down) and the mouse (hover), and Enter jumps to the
+            // highlighted entry.
+            filteredPaletteEntries() {
+                const q = (this.paletteQuery || '').trim().toLowerCase();
+                if (!q) return this.paletteEntries;
+                return this.paletteEntries.filter(e =>
+                    e.title.toLowerCase().includes(q)
+                );
+            },
+            jumpTo(entry) {
+                this.paletteOpen = false;
+                this.paletteQuery = '';
+                this.paletteHighlight = 0;
+                // The refresh action is not a navigation: it reloads the page
+                // in place, which is what the operator means by "refresh".
+                // Every other entry is a link the rail would have followed.
+                if (entry.key === 'refresh') {
+                    location.reload();
+                    return;
+                }
+                this.openLink(entry.key);
+            },
+            jumpToHighlighted() {
+                const entry = this.filteredPaletteEntries[this.paletteHighlight];
+                if (entry) this.jumpTo(entry);
+            },
+            onPaletteKeydown(e) {
+                if (!this.paletteOpen) return;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.paletteHighlight = Math.min(
+                        this.filteredPaletteEntries.length - 1,
+                        this.paletteHighlight + 1
+                    );
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.paletteHighlight = Math.max(0, this.paletteHighlight - 1);
+                } else if (e.key === 'Enter') {
+                    this.jumpToHighlighted();
+                } else if (e.key === 'Escape') {
+                    this.paletteOpen = false;
+                }
+            },
+        },
+        computed: {
+            // The palette's entry list: the admin's permission-gated tabs (the
+            // same list the rail shows, so the palette and the rail can never
+            // disagree about what is available) plus the quick actions the
+            // palette adds on top (refresh, logout). Each entry carries its
+            // own icon and a title the search box filters against.
+            paletteEntries() {
+                const entries = this.tabs.map(t => ({ key: t.key, icon: t.icon, title: t.title }));
+                // The refresh action: a no-op key (the palette's jumpTo is a
+                // navigation, and "refresh" is not one), so the entry is
+                // handled in jumpTo before the navigation.
+                entries.unshift({
+                    key: 'refresh',
+                    icon: 'sync',
+                    title: '{{ i18n "pages.nodes.refresh" }}',
+                });
+                return entries;
+            },
+        },
+        mounted() {
+            // Ctrl-K / Cmd-K opens the palette from anywhere on the page. The
+            // handler is on the document, not the sidebar, so it works while
+            // the operator is typing in an input on another page (the panel's
+            // own inputs do not swallow the shortcut: the check is for the
+            // key COMBO, not the key alone).
+            this._paletteKeyHandler = (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    this.paletteOpen = !this.paletteOpen;
+                    this.paletteHighlight = 0;
+                    this.paletteQuery = '';
+                }
+            };
+            document.addEventListener('keydown', this._paletteKeyHandler);
+            // Arrow keys inside the palette: the search box's keydown handles
+            // them when it has focus, and this document-level handler catches
+            // them when the operator has tabbed away from the box but the
+            // palette is still open.
+            this._paletteArrowHandler = (e) => {
+                if (this.paletteOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    this.onPaletteKeydown(e);
+                }
+            };
+            document.addEventListener('keydown', this._paletteArrowHandler);
+        },
+        beforeDestroy() {
+            document.removeEventListener('keydown', this._paletteKeyHandler);
+            document.removeEventListener('keydown', this._paletteArrowHandler);
         },
         template: `{{template "component/sidebar/content" .}}`,
     });

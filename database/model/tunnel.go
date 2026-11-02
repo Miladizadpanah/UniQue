@@ -5,6 +5,64 @@ import (
 	"strconv"
 )
 
+// WebhookDelivery is one webhook POST attempt: what was sent, where it went,
+// and whether the receiving endpoint accepted it. The outbox table is bounded
+// (the retention pruner keeps the most recent N per URL); a failed delivery
+// that the operator has not retried yet still shows up in the log so they can
+// see WHY their client did not get the notification.
+type WebhookDelivery struct {
+	Id       int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Url      string `json:"url" gorm:"index"`
+	EventType string `json:"eventType" gorm:"index"`
+	Source   string `json:"source"`
+	// Status is "ok" when the receiving endpoint answered <400, or the
+	// receiver's own error string otherwise. A retry of the same event gets
+	// a fresh row (the table is an append-only log, not a queue), so the
+	// operator's view is "N attempts, the last one said M".
+	Status    string `json:"status" gorm:"type:text;default:''"`
+	ResponseCode int  `json:"responseCode" gorm:"default:0"`
+	// At is the UnixMilli of the attempt itself.
+	At int64 `json:"at" gorm:"index"`
+}
+
+// TableName pins the table name: "webhook_deliveries".
+func (WebhookDelivery) TableName() string { return "webhook_deliveries" }
+
+// WebhookDeliveryRetention is how many delivery attempts per URL the
+// retention pruner keeps. 500 attempts covers roughly two weeks of 30s
+// cadence (500 * 30s = 4.17h); a longer window costs nothing until the
+// operator actually runs hundreds of webhook URLs, which is not the case
+// yet. The pruner drops the oldest rows beyond the cap per URL.
+const WebhookDeliveryRetention = 500
+
+// UserSession is one active session the panel is aware of: who logged in,
+// where they logged in from, when, and whether they have been revoked. The
+// panel's session store is a cookie (gin-contrib/sessions), which it cannot
+// enumerate server-side, so the active-sessions surface is a SHADOW LOG:
+// the login path records each session here, and the revoke path marks the
+// row revoked. The next request from a revoked session loads its user row,
+// sees the flag, and logs out. The log is bounded (the retention pruner
+// keeps the most recent N per user, and prunes revoked rows older than the
+// max session age).
+type UserSession struct {
+	Id      int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId  int    `json:"userId" gorm:"index"`
+	// Fingerprint is the session's identifying token: a random 32-hex value
+	// minted at login and stored in the session cookie's session store
+	// (a separate key from the user id), so a session the operator revokes
+	// cannot be identified by the cookie alone (which every request from
+	// the same browser carries).
+	Fingerprint string `json:"fingerprint" gorm:"uniqueIndex"`
+	Ip          string `json:"ip" gorm:"index"`
+	UserAgent   string `json:"userAgent" gorm:"type:text;default:''"`
+	// CreatedAt/RevokedAt are UnixMilli; 0 means never revoked.
+	CreatedAt int64 `json:"createdAt" gorm:"default:0"`
+	RevokedAt int64 `json:"revokedAt" gorm:"default:0"`
+}
+
+// TableName pins the table name: "user_sessions".
+func (UserSession) TableName() string { return "user_sessions" }
+
 // NodeMetrics is one sampled gauge reading the hub records against a node's row
 // when it learns the gauges: push beats, pull polls, and its own local
 // heartbeat. The table is purely additive — an old binary ignores it — and the

@@ -6,6 +6,18 @@
   <meta name="renderer" content="webkit">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex,nofollow">
+  <!-- PWA: the panel is installable on a phone (the operator's "the panel
+       on my phone" case), and the service worker caches the static assets
+       so the login page and the CSS/JS bootstrap survive a slow or flaky
+       connection. The manifest is served under the panel's base path, so
+       an install under /subs/ still points at the panel's own start URL. -->
+  <meta name="theme-color" content="#4f8cff">
+  <link rel="manifest" href="{{ .base_path }}assets/manifest.json">
+  <link rel="icon" type="image/png" href="{{ .base_path }}assets/img/logo.png">
+  <link rel="apple-touch-icon" href="{{ .base_path }}assets/img/logo.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="{{ .base_path }}assets/ant-design-vue/antd.min.css">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/tokens.css?{{ .asset_ver }}">
   <link rel="stylesheet" href="{{ .base_path }}assets/css/custom.css?{{ .asset_ver }}">
@@ -236,6 +248,33 @@
   }
 </script>
 <script src="{{ .base_path }}assets/js/websocket.js?{{ .asset_ver }}"></script>
+<!-- PWA service worker: caches the panel's static assets so the login page
+     and the CSS/JS bootstrap survive a slow or flaky connection. The
+     manifest is served under the panel's base path, so an install under
+     /subs/ still points at the panel's own start URL. The worker is
+     registered on every page (the bootstrap script is shared), and its
+     scope is the panel's base path, so an install under /subs/ caches
+     only /subs/assets/... and never the host's other documents. -->
+<script>
+  if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+    // The worker's URL is the base path's own /sw.js, which the panel's
+    // StaticFS route serves under the panel's base path. A base path of
+    // "/" registers /sw.js; a base path of "/subs/" registers /subs/sw.js.
+    var swUrl = '{{ .base_path }}assets/sw.js';
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register(swUrl, {
+        scope: '{{ .base_path }}',
+      }).catch(function (err) {
+        // A registration failure (an older browser, a service-worker
+        // disabled by the operator, a 404 on the sw.js route) is not a
+        // panel failure: the page still loads, and the assets still
+        // fetch over the network. The PWA is a nicety, not a
+        // requirement.
+        console.warn('service worker registration failed:', err);
+      });
+    });
+  }
+</script>
 {{ end }}
   
 {{ define "page/body_end" }}

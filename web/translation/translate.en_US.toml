@@ -116,6 +116,12 @@
 "tunnels" = "Tunnels"
 "logout" = "Log Out"
 "link" = "Manage"
+"paletteTitle" = "Go to..."
+
+[pages.palette]
+"title" = "Command palette (Ctrl-K)"
+"placeholder" = "Search a section or action..."
+"noResults" = "No matches"
 
 [pages.core]
 "title" = "Core Settings"
@@ -1690,6 +1696,13 @@
 "manageResellers" = "Manage Resellers"
 "accessOverview" = "Access Overview"
 "manageOverview" = "Manage Overview"
+"sessions" = "Active Sessions"
+"sessionRevoke" = "Revoke"
+"sessionRevokeAll" = "Revoke All"
+"sessionIp" = "IP"
+"sessionAgent" = "Agent"
+"sessionWhen" = "When"
+"sessionNoSessions" = "No active sessions recorded"
 
 [pages.resellers]
 "title" = "Resellers"

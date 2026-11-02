@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/database/model"
+	"github.com/mhsanaei/3x-ui/v2/util/common"
 	"github.com/mhsanaei/3x-ui/v2/web/global"
 	"github.com/mhsanaei/3x-ui/v2/web/service"
 	"github.com/mhsanaei/3x-ui/v2/web/session"
@@ -76,6 +77,16 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	// requireSuperAdmin. See overviewManage in permission.go.
 	g.GET("/getConfigJson", requireOverviewManage(), a.getConfigJson)
 	g.GET("/getDb", requireOverviewManage(), a.getDb)
+	// The encrypted variant: the same .db, wrapped in an AES-GCM envelope
+	// under the operator's passphrase, so a backup that leaves the host
+	// (S3, a backup script, a phone) does not carry the plaintext
+	// database (inbound settings, client credentials, admin passwords,
+	// the TOTP secrets) in the clear. The passphrase is a query param
+	// (?passphrase=), which is the only channel the browser has without
+	// a form; it is not stored, and the URL itself is what the operator
+	// must keep out of their shell history (a 128-char passphrase in a
+	// URL is a trade the operator makes knowingly).
+	g.GET("/getDbEncrypted", requireOverviewManage(), a.getDbEncrypted)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getNewX25519Cert", a.getNewX25519Cert)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -131,6 +142,13 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.POST("/logs/:count", requireOverviewManage(), a.getLogs)
 	g.POST("/xraylogs/:count", requireOverviewManage(), a.getXrayLogs)
 	g.POST("/importDB", requireOverviewManage(), a.importDB)
+	// The encrypted variant: the operator's .vpnui backup is unwrapped
+	// under their passphrase (the form posts the file + the passphrase
+	// together), and the same import path a plain .db download uses
+	// lands it. A wrong passphrase answers with the decryption error,
+	// which is the "wrong passphrase or corrupt envelope" toast the
+	// operator sees rather than a silent overwrite of the live database.
+	g.POST("/importDBEncrypted", requireOverviewManage(), a.importDBEncrypted)
 	g.POST("/importForeignDB", requireOverviewManage(), a.importForeignDB)
 	g.POST("/getNewEchCert", a.getNewEchCert)
 }
@@ -664,6 +682,37 @@ func (a *ServerController) getDb(c *gin.Context) {
 	c.Writer.Write(db)
 }
 
+// getDbEncrypted downloads the .db wrapped in an AES-GCM envelope under the
+// operator's passphrase (?passphrase=). The envelope is a .vpnui file, not a
+// .db, so a backup tool that globs *.db does not pick it up as a readable
+// SQLite file. The passphrase is read from the query string (the browser's
+// only channel without a form); it is not stored and is not logged. The
+// same filename picker as the plain download decides the stem; the .vpnui
+// extension replaces the .db.
+func (a *ServerController) getDbEncrypted(c *gin.Context) {
+	db, err := a.serverService.GetDb()
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"), err)
+		return
+	}
+	passphrase := c.Query("passphrase")
+	if passphrase == "" {
+		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"),
+			common.NewError("passphrase is required"))
+		return
+	}
+	sealed, err := a.serverService.EncryptBackupAES(db, passphrase)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.getDatabaseError"), err)
+		return
+	}
+	filename := a.serverService.BuildBackupFilename(backupNameOptions(c), browserHost(c))
+	filename = strings.TrimSuffix(filename, ".db") + ".vpnui"
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Writer.Write(sealed)
+}
+
 // backupNameOptions reads the filename picker's four checkboxes off the query
 // string.
 //
@@ -712,6 +761,49 @@ func (a *ServerController) importDB(c *gin.Context) {
 	// Import it
 	err = a.serverService.ImportDB(file)
 	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.importDatabaseError"), err)
+		return
+	}
+	jsonObj(c, I18nWeb(c, "pages.index.importDatabaseSuccess"), nil)
+}
+
+// importDBEncrypted imports an AES-GCM .vpnui backup: the operator's passphrase
+// unwraps the envelope to the .db plaintext, and the rest is the same import
+// path a plain .db download uses. A wrong passphrase fails the GCM
+// authentication tag check and answers with the decryption error, which is the
+// "wrong passphrase or corrupt envelope" toast the operator sees.
+func (a *ServerController) importDBEncrypted(c *gin.Context) {
+	file, _, err := c.Request.FormFile("db")
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.readDatabaseError"), err)
+		return
+	}
+	defer file.Close()
+	passphrase := c.PostForm("passphrase")
+	if passphrase == "" {
+		jsonMsg(c, I18nWeb(c, "pages.index.importDatabaseError"),
+			common.NewError("backup passphrase is required"))
+		return
+	}
+	// Read the envelope (bounded to 1 GiB: a .db backup is never bigger
+	// than the panel's own database, and a 1 GiB cap is generous).
+	envelope, err := io.ReadAll(io.LimitReader(file, 1<<30))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.importDatabaseError"), err)
+		return
+	}
+	// Unwrap the envelope to the .db plaintext. A decrypt failure is a
+	// concrete error (wrong passphrase, corrupt envelope), not a 500.
+	db, err := a.serverService.DecryptBackupAES(envelope, passphrase)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.index.importDatabaseError"), err)
+		return
+	}
+	// Feed the plaintext to the in-memory import path: the envelope has
+	// already been GCM-verified (a wrong passphrase fails before this
+	// point), so the bytes are a valid .db and the method's only job is
+	// to land them, migrate, and restart the core.
+	if err := a.serverService.ImportDBBytes(db); err != nil {
 		jsonMsg(c, I18nWeb(c, "pages.index.importDatabaseError"), err)
 		return
 	}

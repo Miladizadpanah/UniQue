@@ -116,6 +116,12 @@ func (a *IndexController) login(c *gin.Context) {
 	a.tgbot.UserLoginNotify(safeUser, ``, getRemoteIp(c), timeStr, 1)
 
 	session.SetLoginUser(c, user)
+	// Record this login in the session log so the Admins page's "active
+	// sessions" tile can show which browsers are logged in. The fingerprint
+	// is the session's own identifying token (minted by SetLoginUser); the
+	// IP and user agent are the caller's. Best-effort: a failing DB write
+	// here must not block a successful login.
+	session.RecordActiveSession(c, user)
 	if err := sessions.Default(c).Save(); err != nil {
 		logger.Warning("Unable to save session: ", err)
 		return

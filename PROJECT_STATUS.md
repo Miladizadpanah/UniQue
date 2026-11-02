@@ -1,6 +1,6 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + فاز ۲ + ۲b + فاز ۳ + فاز ۴)
+> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + ۲ + ۲b + ۳ + ۴ + ۵)
 > ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
@@ -40,10 +40,52 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - ✅ فاز ۲ — تونل بومی سبک [کامیت c6055af]
 - ✅ فاز ۲b — ری‌لای ترافیک واقعی کاربر روی کانال control تونل [کامیت 0578c83]
 - ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import) [کامیت b5aeeac]
-- ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history
-- ⏭ فاز ۵ — control-plane NX-style (roles/limits، 2FA TOTP، session mgmt،
-  webhooks outbox، backup encryption، Ctrl-K palette، PWA)
+- ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history [کامیت 2d694cb]
+- ✅ فاز ۵ — control-plane NX-style (2FA TOTP، session mgmt، webhooks outbox، backup encryption، Ctrl-K palette، PWA)
 - ⏭ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
+
+## ۰e. فاز ۵ — control-plane سبک NX-style
+
+هفت ارتقای control-plane که پنل را از یک داشبورد به یک سطح مدیریت واقعی
+ارتقا می‌دهد:
+
+- **2FA TOTP (per-admin)**: هر ادمین یک secret TOTP روی ردیف خودش دارد
+  (`web/service/user.go` → `SetTwoFactor`، `verifyTOTP`). log-in دو مرحله‌ای:
+  پس از رمز، اگر `TwoFactorEnable` فعال باشد، کد TOTP لازم است. کلیدهای
+  `twoFactorEnable`/`twoFactorToken` قدیمی panel-global حذف شدند تا secret
+  مشترک به همه‌ی userها نشت نکند. testهای `admin_test.go` روی TOTP skew
+  tolerance + round-trip + migration پوشش دارند.
+- **Session management**: `model.UserSession` (جدول `user_sessions`) یک shadow
+  log از نشست‌های فعال است: هر login یک fingerprint ۳۲-هگز می‌سازد و ردیف
+  می‌سازد؛ admin می‌تواند «لغو همه‌ی نشست‌ها» بزند (blanket revoke) یا یک
+  نشست خاص را revoke کند. `web/service/user_session.go` +
+  `web/controller/admin.go` + `web/html/admins.html` (ستون «نشست‌های فعال»
+  با دکمه‌ی لغو). prune هر ۶۰ ثانیه.
+- **Webhooks outbox**: `model.WebhookDelivery` (جدول `webhook_deliveries`) هر
+  POST webhook را log می‌کند (url, event, status, response code, timestamp).
+  `web/service/webhook.go` → `recordDelivery` + `PruneWebhookDeliveries` (cap
+  ۵۰۰ به‌ازای هر url) + `ListWebhookDeliveries`. مسیر
+  `GET /panel/setting/webhook/deliveries` + prune. prune هر ۶۰ ثانیه.
+- **Backup encryption**: `EncryptBackupAES`/`DecryptBackupAES` (scrypt ۶۰۰k
+  + AES-256-GCM) در `web/service/server.go`. مسیر
+  `GET /panel/getDbEncrypted?passphrase=` و `POST /panel/importDBEncrypted`
+  (فایل .vpnui + passphrase). خروجی یک فایل self-contained با header نسخه‌دار
+  `[0x01][32 salt][12 nonce][ciphertext+tag]`.
+- **Ctrl-K command palette**: `web/html/component/aSidebar.html` — دکمه‌ی
+  `⌘K`/`Ctrl-K` یک جست‌وجوگر از تمام tabs مجاز (permission-gated) + اکشن‌های
+  سریع (refresh, logout). ArrowUp/Down/Enter/Esc. i18n `menu.paletteTitle` +
+  `pages.palette.*` en_US + fa_IR.
+- **PWA manifest + service worker**: `web/assets/manifest.json` (installable
+  روی موبایل، theme color، icon) + `web/assets/sw.js` (cache-first برای assets،
+  network-first برای صفحه، scope = base path). `<link rel="manifest">` +
+  `<script>` SW registration در `page.html`.
+- **Roles/limits (permissions)**: `model.Permission` bitmask +
+  `model.AllPermissions` + `PermAccessInbounds`/`PermCreateInbound`/...
+  موجود است؛ super admin همه را دارد، reseller mask مشتق‌شده. مسیر
+  `GET /panel/admins/permissions` list canonical slugs را می‌دهد.
+
+**Build**: `GOOS=linux go build ./...` + `go vet` سبز.
 
 
 ## ۰d. فاز ۴ — inbound clone + mTLS + tunnel health + CPU/mem history

@@ -42,6 +42,26 @@
                     <span v-else :style="{ color: '#8c8c8c' }">{{ i18n "none" }}</span>
                   </template>
 
+                  <!-- Active sessions: the shadow log's read half. The tile shows
+                       how many browsers are logged in for this admin, with a
+                       "revoke all" action that logs every one of them out on
+                       their next request. A session that predates the feature
+                       (no fingerprint) is caught by the blanket revoke, which
+                       is the only path that catches it. -->
+                  <template slot="sessions" slot-scope="text, admin">
+                    <a-tooltip :title="sessionTooltip(admin)">
+                      <a-badge :number-of-items="sessionCount(admin)" :overflow-count="99"
+                        :status="sessionCount(admin) ? 'success' : 'default'">
+                        <a-icon type="mobile"></a-icon>
+                      </a-badge>
+                    </a-tooltip>
+                    <a-button v-if="sessionCount(admin)" size="mini" type="link"
+                      :style="{ marginLeft: '4px', padding: '0' }"
+                      @click="revokeAllSessions(admin)">
+                      {{ i18n "pages.admins.sessionRevokeAll" }}
+                    </a-button>
+                  </template>
+
                   <template slot="inboundAccess" slot-scope="text, admin">
                     <span v-if="admin.isSuperAdmin" :style="{ color: '#8c8c8c' }">{{ i18n "all" }}</span>
                     <span v-else>[[ admin.inboundIds.length ]]</span>
@@ -101,6 +121,7 @@
     { title: '{{ i18n "pages.admins.nickname" }}', dataIndex: 'nickname', align: 'center', width: 70 },
     { title: '{{ i18n "status" }}', align: 'center', width: 50, scopedSlots: { customRender: 'enable' } },
     { title: '{{ i18n "pages.admins.twoFactor" }}', align: 'center', width: 45, scopedSlots: { customRender: 'twoFactor' } },
+    { title: '{{ i18n "pages.admins.sessions" }}', align: 'center', width: 110, scopedSlots: { customRender: 'sessions' } },
     { title: '{{ i18n "pages.admins.inboundAccess" }}', align: 'center', width: 45, scopedSlots: { customRender: 'inboundAccess' } },
     { title: '{{ i18n "pages.admins.permissions" }}', align: 'left', width: 180, scopedSlots: { customRender: 'permissions' } },
     { title: '', align: 'center', width: 30, scopedSlots: { customRender: 'action' } },
@@ -122,6 +143,11 @@
       allInbounds: [],
       currentAdminId: {{ .me }},
       columns,
+      // Active sessions per admin: the shadow log's read half. The tile shows
+      // how many browsers are logged in for each admin, and the "revoke all"
+      // action logs every one of them out on their next request. The data is
+      // keyed by admin id, so a row with no sessions yet reads 0.
+      sessions: {},
     },
     methods: {
       async loadAdmins(showSpin) {
@@ -215,10 +241,50 @@
         });
       },
     },
+      // How many active (unrevoked) sessions this admin has. The data is
+      // keyed by admin id, so an admin who has not logged in since the
+      // session feature shipped reads 0, not an error.
+      sessionCount(admin) {
+        return (this.sessions[admin.id] || []).length;
+      },
+      // The tooltip text the badge shows on hover: the IP addresses the
+      // admin's active sessions came from, so the operator sees WHERE the
+      // logins happened without opening the access log.
+      sessionTooltip(admin) {
+        const list = this.sessions[admin.id] || [];
+        if (!list.length) return '{{ i18n "pages.admins.sessionNoSessions" }}';
+        return list.map(s => (s.ip || '?') + (s.userAgent ? ' · ' + s.userAgent : '')).join('\n');
+      },
+      // Load every admin's active sessions in one pass. The list is small
+      // (the admin table is bounded by the operator's own choices), and a
+      // single fetch per admin is cheaper than a batch endpoint the panel
+      // does not yet have. An admin who has no sessions yet gets an empty
+      // list, which the tile renders as 0.
+      async loadSessions() {
+        for (const a of this.admins) {
+          const msg = await HttpUtil.get('/panel/admins/' + a.id + '/sessions');
+          if (msg && msg.success) this.sessions[a.id] = msg.obj || [];
+        }
+      },
+      // Revoke every active session for one admin: the operator's "force
+      // log out everywhere" button. The next request from ANY of that
+      // admin's browsers loads its user row through the session, sees the
+      // blanket revocation, and logs out. A session that predates the
+      // feature (no fingerprint) is caught by this path, which is the only
+      // one that catches it.
+      async revokeAllSessions(admin) {
+        const msg = await HttpUtil.post('/panel/admins/' + admin.id + '/sessions/revokeAll');
+        if (msg && msg.success) {
+          this.sessions[admin.id] = [];
+          this.$message.success('{{ i18n "pages.admins.sessionRevokeAll" }}');
+        }
+      },
+    },
     async mounted() {
       await this.loadPermissions();
       await this.loadInbounds();
       await this.loadAdmins(true);
+      await this.loadSessions();
     },
   });
 </script>

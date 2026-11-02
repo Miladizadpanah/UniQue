@@ -6395,6 +6395,7 @@ Inbound.MtprotoSettings.MtprotoUser = class extends XrayCommonClass {
     totalGB = 0,
     limitIp = 0,
     reset = 0,
+    dataQuotaBytes = 0,
     created_at = undefined,
     updated_at = undefined,
   ) {
@@ -6412,6 +6413,12 @@ Inbound.MtprotoSettings.MtprotoUser = class extends XrayCommonClass {
     this.totalGB = totalGB;
     this.limitIp = limitIp;
     this.reset = reset;
+    // The account's own byte cap, in BYTES (0 = unlimited, inherit the
+    // inbound's totalGB). The mtproto backend counts up+down against this
+    // cap in [access.user_data_limit] and the panel's traffic job flips
+    // enable=false on a breach, the same way every other protocol's quota
+    // works.
+    this.dataQuotaBytes = dataQuotaBytes;
     this.created_at = created_at;
     this.updated_at = updated_at;
   }
@@ -6445,6 +6452,7 @@ Inbound.MtprotoSettings.MtprotoUser = class extends XrayCommonClass {
         client.totalGB ?? 0,
         client.limitIp ?? 0,
         client.reset ?? 0,
+        client.dataQuotaBytes ?? 0,
         client.created_at,
         client.updated_at,
       ),
@@ -6534,9 +6542,27 @@ Inbound.MtprotoSettings.MtprotoUser = class extends XrayCommonClass {
       totalGB: this.totalGB,
       limitIp: this.limitIp,
       reset: this.reset,
+      dataQuotaBytes: this.dataQuotaBytes ?? 0,
       created_at: this.created_at,
       updated_at: this.updated_at,
     };
+  }
+
+  // Per-client data quota in GB, the UI-facing form of dataQuotaBytes. The
+  // panel stores BYTES (0 = unlimited, inherit the inbound's totalGB), and
+  // the form writes it back through this setter, which converts GB -> bytes
+  // the same way every other protocol's totalGB form does.
+  get _dataQuotaGB() {
+    if (this.dataQuotaBytes === 0) return null;
+    return NumberFormatter.toFixed(this.dataQuotaBytes / SizeFormatter.ONE_GB, 2);
+  }
+
+  set _dataQuotaGB(gb) {
+    if (gb == null || gb === "" || gb === 0) {
+      this.dataQuotaBytes = 0;
+    } else {
+      this.dataQuotaBytes = NumberFormatter.toFixed(gb * SizeFormatter.ONE_GB, 0);
+    }
   }
 
   get _expiryTime() {

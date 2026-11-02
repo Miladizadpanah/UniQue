@@ -112,6 +112,15 @@ func (a *NodeController) initRouter(g *gin.RouterGroup) {
 	nodes.POST("/nodeMemberships", a.syncNodeMemberships)
 	// Mint a fresh random token for THIS panel's node API, replacing the old one.
 	nodes.POST("/token/generate", a.generateToken)
+	// Scoped API tokens: the operator's granular node-API credentials, one
+	// row per minted token with its own scope bitmask and optional expiry.
+	// The shared node token above remains the full-access credential; these
+	// are the "hand a hub a read-only token" and the "a token that may also
+	// provision" versions, each with the routes its scope opens.
+	nodes.GET("/scopedTokens", a.listScopedTokens)
+	nodes.POST("/scopedTokens", a.createScopedToken)
+	nodes.POST("/scopedTokens/rotate/:id", a.rotateScopedToken)
+	nodes.POST("/scopedTokens/del/:id", a.delScopedToken)
 	// Push telemetry: a node's 30s heartbeat job POSTs here (token-gated on the
 	// node side, no session on the hub side — the hub RECEIVES the beat). This
 	// route is mounted OUTSIDE the session group by NewNodeAPIController so the
@@ -618,6 +627,81 @@ func (a *NodeController) generateToken(c *gin.Context) {
 		return
 	}
 	jsonObj(c, gin.H{"token": token, "baseUrl": a.baseUrl(c)}, nil)
+}
+
+// ---------------------------------------------------------------------------
+// Pairing, hub side
+// listScopedTokens returns every scoped API token this panel's operator has
+// minted, newest first. The secrets are included: the operator who minted
+// them can copy them to a hub, and the table stores them in the clear.
+// An empty list is the "no scoped tokens yet" case, not an error.
+func (a *NodeController) listScopedTokens(c *gin.Context) {
+	var svc service.ApiTokenService
+	out, err := svc.List()
+	jsonObj(c, out, err)
+}
+
+// createScopedToken mints one scoped API token under the operator's chosen
+// scope and optional expiry. The secret is minted HERE, not taken from the
+// caller: the operator names the token and its scope, and the panel decides
+// the credential. The minted secret is returned ONCE in the answer; the
+// table stores it and the UI shows it for copy, so a lost secret is a
+// re-mint, not a recovery.
+func (a *NodeController) createScopedToken(c *gin.Context) {
+	var body struct {
+		Name      string `json:"name" form:"name"`
+		Scope     int64  `json:"scope" form:"scope"`
+		ExpiresAt int64  `json:"expiresAt" form:"expiresAt"`
+		Remark    string `json:"remark" form:"remark"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	var svc service.ApiTokenService
+	row, err := svc.CreateToken(body.Name, body.Scope, body.ExpiresAt, body.Remark)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, row, nil)
+}
+
+// rotateScopedToken re-mints one token's secret: the operator's "rotate this
+// hub's credential" action. The old secret stops working the moment the row
+// is saved, so a hub still holding it is refused on its next request until
+// the operator hands it the new one.
+func (a *NodeController) rotateScopedToken(c *gin.Context) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), perr)
+		return
+	}
+	var svc service.ApiTokenService
+	row, err := svc.Rotate(id)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonObj(c, row, nil)
+}
+
+// delScopedToken removes one token by id: the operator's "revoke this hub's
+// credential" action. A hub still holding the deleted secret is refused on
+// its next request, and the shared node token (if set) is the fallback the
+// operator has always had.
+func (a *NodeController) delScopedToken(c *gin.Context) {
+	id, perr := strconv.Atoi(c.Param("id"))
+	if perr != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), perr)
+		return
+	}
+	var svc service.ApiTokenService
+	if err := svc.Delete(id); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	jsonMsg(c, I18nWeb(c, "pages.nodes.tokenDeleted"), nil)
 }
 
 // ---------------------------------------------------------------------------

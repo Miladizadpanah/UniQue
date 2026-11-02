@@ -72,6 +72,11 @@ func initModels() error {
 		// operator or by the max-session-age pruner. Purely additive; an old
 		// binary ignores it.
 		&model.UserSession{},
+		// Scoped API tokens: the operator's granular node-API credentials,
+		// one row per minted token with its own scope bitmask. Purely
+		// additive; an old binary ignores the table and keeps reading the
+		// shared node token exactly as before.
+		&model.ApiToken{},
 		// Hub-owned accounts hosted on remote nodes' inbounds (federation).
 		&model.NodeAccount{},
 		// Incoming pairing requests from remote hubs, awaiting this operator's

@@ -118,6 +118,17 @@
           </a-select>
         </a-form-item>
       </a-col>
+      <a-col :xs="24" :md="12">
+        <a-form-item :label="labels.fallbacks">
+          <a-select v-model="modal.fallbacks" mode="multiple"
+            :placeholder="labels.fallbacksPlaceholder">
+            <a-select-option value="tcp">TCP</a-select-option>
+            <a-select-option value="tcp-tls">TCP + TLS</a-select-option>
+            <a-select-option value="ws">WebSocket</a-select-option>
+            <a-select-option value="wss">WSS (TLS)</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
       <a-col :span="24">
         <a-form-item :label="labels.peer">
           <a-row :gutter="[8,8]" type="flex">
@@ -243,6 +254,8 @@
         role: '{{ i18n "pages.tunnels.role" }}',
         transport: '{{ i18n "pages.tunnels.transport" }}',
         tuning: '{{ i18n "pages.tunnels.tuning" }}',
+        fallbacks: '{{ i18n "pages.tunnels.fallbacks" }}',
+        fallbacksPlaceholder: '{{ i18n "pages.tunnels.fallbacksPlaceholder" }}',
         peer: '{{ i18n "pages.tunnels.peer" }}',
         hostPlaceholder: '{{ i18n "pages.tunnels.hostPlaceholder" }}',
         portPlaceholder: '{{ i18n "pages.tunnels.portPlaceholder" }}',
@@ -280,6 +293,7 @@
         return {
           visible: false, id: 0, name: '', role: 'client', transport: 'tcp', tuning: 'balance',
           host: '', port: null, token: '', ports: '', fingerprint: '', proxyV2: false,
+          fallbacks: [],
           saving: false,
         };
       },
@@ -299,8 +313,18 @@
           transport: row.transport || 'tcp', tuning: row.tuning || 'balance',
           host: row.serverAddr ? row.serverAddr.host : '', port: row.serverAddr ? row.serverAddr.port : null,
           token: row.token || '', ports: this.portsFromRow(row), fingerprint: row.tlsFingerprint || '',
-          proxyV2: !!row.proxyProtoV2, saving: false,
+          proxyV2: !!row.proxyProtoV2, fallbacks: this.fallbacksFromRow(row), saving: false,
         };
+      },
+      // The row stores the fallbacks as a JSON string array; the form edits
+      // them as the list of selected carriers. A row with no fallbacks
+      // answers [], and the form shows an empty multi-select.
+      fallbacksFromRow(row) {
+        let out = [];
+        if (row.fallbackTransports) {
+          try { out = JSON.parse(row.fallbackTransports); } catch (e) { out = []; }
+        }
+        return out.filter(Boolean);
       },
       // The port list is stored as a JSON array on the row; the form edits it
       // as the human-readable "443 / 53/udp / 443=127.0.0.1:2096" text the
@@ -343,6 +367,7 @@
           serverAddr: { host: m.host || '', port: m.port || 0 },
           forwardedPorts: this.portsToRow(m.ports),
           token: m.token, tlsFingerprint: m.fingerprint, proxyProtoV2: m.proxyV2,
+          fallbackTransports: JSON.stringify(m.fallbacks || []),
         };
         const url = m.id ? `/panel/api/tunnels/update/${m.id}` : '/panel/api/tunnels/add';
         const msg = await HttpUtil.post(url, payload);

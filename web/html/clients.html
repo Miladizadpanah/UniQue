@@ -317,6 +317,15 @@
                           <a-menu-item key="reset" v-if="isServed(row)">
                             <a-icon type="retweet"></a-icon>{{ i18n "pages.inbounds.resetTraffic" }}
                           </a-menu-item>
+                          <!-- Manual calendar renewal: advance this account's expiry
+                               by its own reset period, the operator's "renew it
+                               now" trigger alongside the panel's periodic
+                               autoRenewClients. An account with no reset period
+                               answers with the "set one" hint rather than a
+                               silent no-op. -->
+                          <a-menu-item key="renew" v-if="isServed(row)">
+                            <a-icon type="calendar"></a-icon>{{ i18n "pages.inbounds.renewClient" }}
+                          </a-menu-item>
                           <!-- Freeze locks the remaining days instead of letting them
                                tick away while the account is off, so a customer who
                                pauses for a month keeps the month. -->
@@ -863,6 +872,8 @@
               cancelText: '{{ i18n "cancel" }}',
               onOk: () => this.resetAccountTraffic(row),
             });
+          case 'renew':
+            return this.renewAccount(row);
         }
       },
 
@@ -1355,6 +1366,28 @@
             `/panel/api/inbounds/${first.inboundId}/resetClientTraffic/${encodeURIComponent(row.email)}`);
           await this.getDBInbounds();
           await this.refreshResellerBalance();
+        } finally {
+          this.loading(false);
+        }
+      },
+      // Manual calendar renewal: the operator's "renew this account now"
+      // action, alongside the panel's own periodic autoRenewClients. The
+      // route advances the account's expiry by its own reset period (the
+      // same answer auto-renewal gives when the deadline passes), so an
+      // account that is still valid gets "current + N days" and an
+      // account that has already expired gets "the next period boundary"
+      // — the calendar, not "today".
+      async renewAccount(row) {
+        const first = (row.memberships || [])[0];
+        if (!first) return;
+        this.loading();
+        try {
+          const msg = await HttpUtil.post(
+            `/panel/api/inbounds/${first.inboundId}/renewClient/${encodeURIComponent(row.email)}`);
+          if (msg && msg.success) {
+            this.$message.success('{{ i18n "pages.inbounds.toasts.renewClientSuccess" }}');
+          }
+          await this.getDBInbounds();
         } finally {
           this.loading(false);
         }

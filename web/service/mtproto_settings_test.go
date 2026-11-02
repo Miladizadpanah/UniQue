@@ -66,7 +66,7 @@ func TestMtprotoInboundSettingsApplyToEveryAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := s.buildServerConfig(inbound, settings)
+	cfg := s.buildServerConfig(inbound, settings, inbound.Total)
 
 	for _, want := range []string{"classic = true", "secure = false", "tls = true"} {
 		if !strings.Contains(cfg, want) {

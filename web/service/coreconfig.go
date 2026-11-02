@@ -549,7 +549,7 @@ func (s *CoreService) mtprotoConfigTargets() []coreConfigTarget {
 			Label: "config.toml", Remark: coreConfigRemark(inbound),
 			Path:   svc.configDir(inbound.Id) + "/config.toml",
 			Format: "toml",
-			render: func() (string, error) { return svc.buildServerConfig(ib, st), nil },
+			render: func() (string, error) { return svc.buildServerConfig(ib, st, ib.Total), nil },
 			validate: func(content string) error {
 				var probe map[string]any
 				if err := toml.Unmarshal([]byte(content), &probe); err != nil {

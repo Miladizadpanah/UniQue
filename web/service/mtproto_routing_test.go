@@ -97,7 +97,7 @@ func TestMtprotoSocksCarriesPerClientIdentity(t *testing.T) {
 func TestMtprotoUpstreamRequestsAccountIdentity(t *testing.T) {
 	inbound, settings := mtprotoRoutingFixture(t)
 	s := &MtprotoService{}
-	cfg := s.buildServerConfig(inbound, settings)
+	cfg := s.buildServerConfig(inbound, settings, inbound.Total)
 
 	if !strings.Contains(cfg, "socks_user_from_account = true") {
 		t.Error("upstream lacks socks_user_from_account: telemt would present no identity and every client would share one route")
@@ -140,7 +140,7 @@ func TestMtprotoAdtagDisablesRouting(t *testing.T) {
 	if cfg := s.GetSocksConfig(inbound); cfg != nil {
 		t.Error("adtag inbound still got a socks inbound: its traffic cannot survive a proxy hop")
 	}
-	cfg := s.buildServerConfig(inbound, settings)
+	cfg := s.buildServerConfig(inbound, settings, inbound.Total)
 	if !strings.Contains(cfg, `type = "direct"`) {
 		t.Error("adtag inbound is not on a direct upstream")
 	}
@@ -165,7 +165,7 @@ func TestMtprotoAdtagIsPerClient(t *testing.T) {
 	// still no tag line.
 
 	s := &MtprotoService{}
-	lines := tomlSection(s.buildServerConfig(inbound, settings), "[access.user_ad_tags]")
+	lines := tomlSection(s.buildServerConfig(inbound, settings, inbound.Total), "[access.user_ad_tags]")
 	got := map[string]bool{}
 	for _, line := range lines {
 		got[line] = true

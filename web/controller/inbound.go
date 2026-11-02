@@ -132,6 +132,11 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	// ownsClient as well as owns: the service resolves this one by :email and ignores
 	// :id, so guarding only :id checks the wrong object.
 	g.POST("/:id/resetClientTraffic/:email", requirePerm(model.PermEditClient), owns, ownsClient, a.resetClientTraffic)
+	// Manual calendar renewal: advance one account's expiry by its own reset
+	// period, the operator's "renew it now" trigger alongside the panel's own
+	// periodic autoRenewClients. Same edit-client gate and owner checks as
+	// the traffic reset beside it.
+	g.POST("/:id/renewClient/:email", requirePerm(model.PermEditClient), owns, ownsClient, a.renewClient)
 	g.POST("/resetAllTraffics", requirePerm(model.PermBulkOperation), a.resetAllTraffics)
 	g.POST("/resetAllClientTraffics/:id", requirePerm(model.PermBulkOperation), owns, a.resetAllClientTraffics)
 	g.POST("/delDepletedClients/:id", requirePerm(model.PermDeleteClient), owns, a.delDepletedClients)
@@ -2177,6 +2182,34 @@ func containsInboundId(ids []int, id int) bool {
 		}
 	}
 	return false
+}
+
+// renewClient is the operator's manual calendar-renewal action: advance one
+// account's expiry by its own reset period, the same answer the panel's own
+// autoRenewClients would give when the account's period rolls over. The
+// operator's "I will not wait for the next traffic tick" trigger.
+//
+// The :id is owner-checked by the route (the :email is checked the same way
+// by the owner's own client scope), the same pattern as resetClientTraffic
+// above it; both routes resolve the account by email and act on the
+// account's calendar, not on one inbound's row.
+func (a *InboundController) renewClient(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), err)
+		return
+	}
+	email := c.Param("email")
+	changed, err := a.inboundService.RenewClientByEmail(email)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if changed {
+		a.xrayService.SetToNeedRestart()
+	}
+	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.renewClientSuccess"), nil)
+	_ = id
 }
 
 // resetClientTraffic resets the traffic counter for a specific client in an inbound.

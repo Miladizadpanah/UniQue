@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -212,19 +211,65 @@ func (a *NodeAPIController) mtlsSign(c *gin.Context) {
 	c.Data(http.StatusOK, "application/pem-certificate", certPEM)
 }
 
-// tokenGate is the constant-time node token check. Same policy as the status
-// endpoint: unset token denies everyone, so rotation is a one-field operation.
+// tokenGate is the constant-time node token check, upgraded for scoped
+// tokens. It accepts EITHER the shared node token (full access, the legacy
+// path — the settings-table value the status endpoint has always read) OR
+// one of the panel's own scoped ApiToken rows (the scope restricts the
+// routes the credential may open). The two coexist: a panel that has never
+// minted a scoped token behaves exactly as before, and the shared token
+// remains the full-access answer the legacy callers rely on.
+//
+// A scoped token's scope is checked against the route it opens: a
+// read-only token (ScopeNodeRead) opens the read routes; a write token
+// (ScopeNodeWrite) opens the write routes; a telemetry token
+// (ScopeHeartbeat) opens only the heartbeat route. The shared token's
+// scope is the all-bits mask, so it opens every route the way it always
+// has. The approval gate (a.approvalGate) still applies to the write
+// routes on top of this: a scoped write token is not enough to provision
+// on a node whose operator never approved the hub.
 func (a *NodeAPIController) tokenGate(c *gin.Context) {
-	configured := a.settingService.GetNodeApiToken()
-	if configured == "" {
+	tokenSvc := service.ApiTokenService{}
+	scope, ok := tokenSvc.ResolveScope(c.GetHeader("X-Node-Token"))
+	if !ok {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	if subtle.ConstantTimeCompare([]byte(configured), []byte(c.GetHeader("X-Node-Token"))) != 1 {
-		c.AbortWithStatus(http.StatusUnauthorized)
+	// The gate's per-route scope check: the route the credential is trying
+	// to open has a required scope, and the credential's scope must carry
+	// it. The shared token's all-bits mask carries every route; a scoped
+	// token that does not carry the route's scope is refused, not
+	// escalated. The required scope is derived from the request path.
+	required := routeScopeForPath(c.FullPath())
+	if scope&required == 0 {
+		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 	c.Next()
+}
+
+// routeScopeForPath answers "which scope bit does this route require" —
+// the gate's per-route check. The read routes require ScopeNodeRead, the
+// write routes ScopeNodeWrite, and the telemetry route ScopeHeartbeat. A
+// path the gate does not recognise (a future route the operator has not
+// yet scoped) answers the most permissive bit, ScopeNodeWrite, so an
+// unrecognised path is refused by a read-only token and answered by a
+// write token: the safe direction is "the new route inherits the write
+// gate", not "the new route is open to everyone".
+func routeScopeForPath(path string) int64 {
+	switch {
+	case path == "/panel/node/heartbeat":
+		return service.RouteScopeTelemetry
+	case path == "/panel/node/inbounds" || path == "/panel/node/clients" ||
+		path == "/panel/node/pairing/status" || path == "/panel/node/mtls/ca":
+		return service.RouteScopeRead
+	default:
+		// Every other route in the group is a write route: the create,
+		// clone, delete, purge, mTLS sign, and pairing request routes.
+		// The default is the most permissive scope, so an unrecognised
+		// path (a route added after this table was written) is refused
+		// by a read-only token and answered by a write one.
+		return service.RouteScopeWrite
+	}
 }
 
 // inbounds is the node's enabled inbounds, settings blob included: the hub

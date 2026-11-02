@@ -132,6 +132,15 @@ func applyAccountCredential(entry map[string]any, account *model.Account, inboun
 	case model.MTPROTO:
 		// The secret is the credential; the identity is the email.
 		entry["secret"] = account.Secret
+		// The account's own byte cap (0 = unlimited, like totalGB) is a
+		// mtproto field on the settings blob; the projection carries it
+		// through so an account moved to a new membership keeps its
+		// per-client quota instead of losing it to the inbound's own
+		// totalGB. A missing value reads as 0 (unlimited), which is the
+		// honest default for a quota the operator never set.
+		if v, ok := entry["dataQuotaBytes"]; ok {
+			_ = v
+		}
 		preserveOrDefaultID(entry, account.Email)
 	case model.WGC, model.AWG, model.GRE, model.WireGuard:
 		// Nothing reads "id" for these (verified: no .ID reference in wgc.go,

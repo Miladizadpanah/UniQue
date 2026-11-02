@@ -63,6 +63,68 @@ type UserSession struct {
 // TableName pins the table name: "user_sessions".
 func (UserSession) TableName() string { return "user_sessions" }
 
+// ApiToken is one scoped API credential the panel's operator mints: a
+// random 64-hex secret, a scope bitmask (which classes of the node API the
+// holder may use), and an optional expiry. The shared nodeApiToken (the
+// settings-table value the status endpoint has always read) remains the
+// "full access" credential; an ApiToken row is the granular version, the
+// same shape as the admin's own permission bitmask, so the operator can
+// hand a hub a READ-ONLY token for monitoring and a separate token that
+// may also provision, without the read-only holder being able to write.
+//
+// The gate (web/controller/node_api.go) accepts EITHER credential: the
+// shared node token (full access, the legacy path) or one of the panel's
+// own scoped tokens (the scope restricts the routes it may open). The two
+// paths coexist, and a panel that has never minted a scoped token behaves
+// exactly as before — the shared token is the only answer, and it is still
+// the default.
+type ApiToken struct {
+	Id     int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name   string `json:"name" gorm:"not null"`            // the operator's label, e.g. "hub-nl-1"
+	Secret string `json:"secret" gorm:"uniqueIndex"`       // 64 hex chars, the credential
+	// Scope is the capability bitmask, the same reading as model.Permission's
+	// position: a scope of 0 is "no scoped routes at all" (the token still
+	// answers the shared-token path it rides on, so 0 is "read-only on the
+	// shared token's own read routes", not "no access").
+	Scope     int64  `json:"scope" gorm:"default:0"`
+	ExpiresAt int64  `json:"expiresAt" gorm:"default:0"` // UnixMilli, 0 = no expiry
+	Remark    string `json:"remark" gorm:"default:''"`
+	CreatedAt int64  `json:"createdAt" gorm:"default:0"`
+}
+
+// TableName pins the table name: "api_tokens".
+func (ApiToken) TableName() string { return "api_tokens" }
+
+// The scope bits, the same class as model.Permission (a capability bitmask
+// read on every request by the gate). Appended, never inserted: the values
+// are positional, so inserting a bit would shift every scope already stored
+// in the database by one.
+const (
+	// ScopeNodeRead opens the node API's read routes: /inbounds, /clients,
+	// /pairing/status, /mtls/ca. The hub's "show me what this node serves"
+	// case, no write capability.
+	ScopeNodeRead int64 = 1 << iota
+	// ScopeNodeWrite opens the node API's write routes: /inbounds (create),
+	// /clients, /delClient, /purge, the mTLS sign route, and the pairing
+	// request. The "hub provisions accounts on this node" case.
+	ScopeNodeWrite
+	// ScopeHeartbeat opens the node API's telemetry route: /heartbeat, the
+	// push side of the hub<->node 30s beat. A token that only carries this
+	// bit is the "this panel reports its gauges" credential — no read, no
+	// write, just the telemetry channel.
+	ScopeHeartbeat
+)
+
+// AllApiTokenScopes is the canonical list, in the order the UI renders it.
+var AllApiTokenScopes = []struct {
+	Bit  int64
+	Slug string
+}{
+	{ScopeNodeRead, "nodeRead"},
+	{ScopeNodeWrite, "nodeWrite"},
+	{ScopeHeartbeat, "heartbeat"},
+}
+
 // NodeMetrics is one sampled gauge reading the hub records against a node's row
 // when it learns the gauges: push beats, pull polls, and its own local
 // heartbeat. The table is purely additive — an old binary ignores it — and the

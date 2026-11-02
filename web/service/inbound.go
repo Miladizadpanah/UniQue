@@ -4593,6 +4593,64 @@ func (s *InboundService) ResetClientExpiryTimeByEmail(clientEmail string, expiry
 	return needRestart, err
 }
 
+// RenewClientByEmail is the operator's manual calendar-renewal action: advance
+// the account's expiry by its own reset period (the same number of days the
+// panel's periodic autoRenewClients advances it by when the deadline passes).
+// A blank reset (0) means "no calendar reset configured", and the answer is
+// the error that says so, not a silent no-op: an operator who clicked
+// "renew" on an account the panel has no renewal period for wants to know
+// that, not have their click swallowed.
+//
+// The advance is computed from the account's CURRENT expiry, not "now", so
+// an account that is still valid for 10 days and has a 30-day reset lands
+// on "current + 30 days", not "today + 30 days" — the same answer the
+// auto-renewal would give when the account's period rolls over, which is the
+// operator's "renew it now, the way the calendar would" case. A breach
+// (the account is already past its expiry) advances from the PAST, which is
+// the "the account expired yesterday, put it back on the calendar" case
+// the auto-renewal handles on its own, and the manual action is the
+// operator's "do not wait for the next traffic tick" trigger.
+func (s *InboundService) RenewClientByEmail(clientEmail string) (bool, error) {
+	db := database.GetDB()
+	if db == nil {
+		return false, common.NewError("database not available")
+	}
+	var traffic xray.ClientTraffic
+	if err := db.Model(xray.ClientTraffic{}).Where("email = ?", clientEmail).First(&traffic).Error; err != nil {
+		return false, common.NewError("no traffic row for account:", clientEmail)
+	}
+	if traffic.Reset <= 0 {
+		return false, common.NewError("account has no calendar reset period; set one on the inbound to enable renewal")
+	}
+	// The advance: the same computation autoRenewClients runs, from the
+	// account's CURRENT expiry rather than "now", so a still-valid account
+	// is advanced, not re-anchored.
+	now := time.Now().Unix() * 1000
+	newExpiry := traffic.ExpiryTime
+	if newExpiry <= 0 {
+		// A no-expiry account has no calendar to renew: the answer is the
+		// error that says so, the same way a blank reset above was.
+		return false, common.NewError("account has no expiry to renew")
+	}
+	for newExpiry < now {
+		newExpiry += (int64(traffic.Reset) * 86400000)
+	}
+	changed, err := s.ResetClientExpiryTimeByEmail(clientEmail, newExpiry)
+	if err != nil {
+		return false, err
+	}
+	// The traffic row's expiry is the source the enforcement paths read, so
+	// it must move with the settings blob or the account would read as
+	// "already renewed" on the settings side and "still expired" on the
+	// traffic side, the same desync autoRenewClients' own commit avoids.
+	_ = db.Model(xray.ClientTraffic{}).Where("email = ?", clientEmail).
+		Updates(map[string]any{
+			"expiry_time": newExpiry,
+			"enable":      true,
+		}).Error
+	return changed, nil
+}
+
 func (s *InboundService) ResetClientTrafficLimitByEmail(clientEmail string, totalGB int) (bool, error) {
 	if totalGB < 0 {
 		return false, common.NewError("totalGB must be >= 0")

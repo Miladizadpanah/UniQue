@@ -90,7 +90,15 @@ func (j *TunnelWatchdogJob) Run() {
 					"up_since":   time.Now().UnixMilli(),
 					"updated_at": time.Now().UnixMilli(),
 				}).Error
-			recordTunnelHealthEvent(t.Id, string(model.TunnelUp), "recovered")
+			// The recovery may have settled on a fallback carrier (the
+			// active one wedged, the client's walk reached a fallback).
+			// Record WHICH, so the health view answers "up on wss" instead
+			// of a carrier the operator believes is down.
+			if fb := mgr.SettledOnCarrier(t.Id); fb != "" && fb != string(t.Transport) {
+				recordTunnelHealthEvent(t.Id, string(model.TunnelUp), "recovered on fallback carrier "+fb)
+			} else {
+				recordTunnelHealthEvent(t.Id, string(model.TunnelUp), "recovered")
+			}
 			logger.Info("tunnel", t.Name, "recovered: byte movement resumed")
 		}
 	}

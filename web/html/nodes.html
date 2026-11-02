@@ -194,6 +194,87 @@
           <div :style="{ color: 'var(--text-3)', marginTop: '8px', fontSize: '12px' }">[[ labels.tokenHint ]]</div>
         </div>
 
+        <!-- Scoped API tokens: the operator's granular node-API credentials,
+             one token per hub with its own scope bitmask and optional
+             expiry. The shared node token above remains the full-access
+             credential; these are the "hand a hub a read-only token" and
+             the "a token that may also provision" versions, each with the
+             routes its scope opens. -->
+        <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)', padding: '0', overflow: 'hidden' }">
+          <div :style="{ padding: 'var(--sp-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }">
+            <span class="bo-tile-title">[[ labels.scopedTokens ]]</span>
+            <a-button type="primary" size="small" icon="plus" :loading="scopedTokenSaving" @click="createScopedToken">
+              [[ labels.createScopedToken ]]
+            </a-button>
+          </div>
+          <div :style="{ padding: '0 12px', color: 'var(--text-3)', fontSize: '12px' }">[[ labels.scopedTokensDesc ]]</div>
+          <a-table :columns="scopedTokenCols" :row-key="r => r.id" :data-source="scopedTokens"
+            :pagination="{ pageSize: 5, size: 'small' }" size="small"
+            :locale='{ emptyText: `{{ i18n "noData" }}` }'>
+            <template slot="scope" slot-scope="text, row">
+              <a-tag v-if="row.scope & 1">{{ i18n "pages.nodes.scopeNodeRead" }}</a-tag>
+              <a-tag v-if="row.scope & 2" color="blue">{{ i18n "pages.nodes.scopeNodeWrite" }}</a-tag>
+              <a-tag v-if="row.scope & 4" color="purple">{{ i18n "pages.nodes.scopeHeartbeat" }}</a-tag>
+              <span v-if="!row.scope" :style="{ color: 'var(--text-3)' }">—</span>
+            </template>
+            <template slot="expiry" slot-scope="text, row">
+              <span v-if="row.expiresAt > 0">[[ IntlUtil.formatDate(row.expiresAt / 1000) ]]</span>
+              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
+            </template>
+            <template slot="secret" slot-scope="text, row">
+              <a-tooltip :title="row.secret">
+                <span :style="{ fontFamily: 'monospace', fontSize: '11px' }">
+                  [[ row.secret.slice(0, 8) + '…' + row.secret.slice(-4) ]]
+                </span>
+              </a-tooltip>
+            </template>
+            <template slot="action" slot-scope="text, row">
+              <a @click="rotateScopedToken(row)" :style="{ color: 'var(--accent)' }">{{ i18n "pages.nodes.rotated" }}</a>
+              <a-divider type="vertical"></a-divider>
+              <a-popconfirm title="{{ i18n "pages.nodes.tokenDeleted" }}"
+                ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
+                @confirm="delScopedToken(row)">
+                <a style="color: var(--error)">{{ i18n "delete" }}</a>
+              </a-popconfirm>
+            </template>
+          </a-table>
+          <!-- The mint form: name + scope + optional expiry. The secret is
+               minted server-side and returned ONCE in the answer; a copy
+               box shows it while it is fresh, and the table's secret
+               column is the persistent reference. -->
+          <div v-if="scopedTokenForm" :style="{ padding: 'var(--sp-4)', borderTop: '1px solid var(--border)' }">
+            <a-row :gutter="[16, 8]">
+              <a-col :xs="24" :md="8">
+                <a-input v-model="scopedTokenForm.name" :placeholder="labels.scopedTokenName"></a-input>
+              </a-col>
+              <a-col :xs="24" :md="8">
+                <a-select v-model="scopedTokenForm.scope" :placeholder="labels.scopedTokens">
+                  <a-select-option :value="1">{{ i18n "pages.nodes.scopeNodeRead" }}</a-select-option>
+                  <a-select-option :value="2">{{ i18n "pages.nodes.scopeNodeWrite" }}</a-select-option>
+                  <a-select-option :value="4">{{ i18n "pages.nodes.scopeHeartbeat" }}</a-select-option>
+                  <a-select-option :value="3">{{ i18n "pages.nodes.scopeNodeRead" }} + {{ i18n "pages.nodes.scopeNodeWrite" }}</a-select-option>
+                </a-select>
+              </a-col>
+              <a-col :xs="24" :md="8">
+                <a-input v-model="scopedTokenForm.expiresAt" :placeholder="labels.scopedTokenExpiry"></a-input>
+              </a-col>
+            </a-row>
+            <a-row :gutter="[16, 8]" :style="{ marginTop: '8px' }" type="flex">
+              <a-col :flex="1">
+                <a-input v-if="scopedTokenForm.freshSecret" :value="scopedTokenForm.freshSecret" readonly>
+                  <a-icon slot="prefix" type="key"></a-icon>
+                </a-input>
+              </a-col>
+              <a-col :style="{ whiteSpace: 'nowrap' }">
+                <a-button size="small" @click="scopedTokenForm = null">{{ i18n "cancel" }}</a-button>
+                <a-button size="small" type="primary" :loading="scopedTokenSaving" @click="doCreateScopedToken">
+                  {{ i18n "confirm" }}
+                </a-button>
+              </a-col>
+            </a-row>
+          </div>
+        </div>
+
         <!-- Federation: this hub's own accounts hosted on remote nodes. The
              link is the importable config for the customer (the node's host). -->
         <div class="bo-tile" :style="{ marginTop: 'var(--gap-md)', padding: '0', overflow: 'hidden' }">
@@ -430,6 +511,11 @@
       myBaseUrl: '',
       savingToken: false,
       genTok: false,
+      // Scoped API tokens: the operator's granular node-API credentials,
+      // one token per hub with its own scope bitmask and optional expiry.
+      scopedTokens: [],
+      scopedTokenSaving: false,
+      scopedTokenForm: null,
       nodeAccounts: [],
       loadingAccounts: false,
       accountsNode: 0,
@@ -522,6 +608,18 @@
         expiryMs: '{{ i18n "pages.nodes.expiryMs" }}',
         generateToken: '{{ i18n "pages.nodes.generateToken" }}',
         tokenGenerated: '{{ i18n "pages.nodes.tokenGenerated" }}',
+        tokenDeleted: '{{ i18n "pages.nodes.tokenDeleted" }}',
+        scopedTokens: '{{ i18n "pages.nodes.scopedTokens" }}',
+        scopedTokensDesc: '{{ i18n "pages.nodes.scopedTokensDesc" }}',
+        scopeNodeRead: '{{ i18n "pages.nodes.scopeNodeRead" }}',
+        scopeNodeWrite: '{{ i18n "pages.nodes.scopeNodeWrite" }}',
+        scopeHeartbeat: '{{ i18n "pages.nodes.scopeHeartbeat" }}',
+        createScopedToken: '{{ i18n "pages.nodes.createScopedToken" }}',
+        scopedTokenName: '{{ i18n "pages.nodes.scopedTokenName" }}',
+        scopedTokenExpiry: '{{ i18n "pages.nodes.scopedTokenExpiry" }}',
+        scopedTokenOk: '{{ i18n "pages.nodes.scopedTokenOk" }}',
+        scopedTokenRotated: '{{ i18n "pages.nodes.scopedTokenRotated" }}',
+        rotated: '{{ i18n "pages.nodes.rotated" }}',
         ensureInbounds: '{{ i18n "pages.nodes.ensureInbounds" }}',
         // CPU/RAM/Net history card in the manage modal
         metricsHistory: '{{ i18n "pages.nodes.metricsHistory" }}',
@@ -631,6 +729,21 @@
           { title: '', align: 'center', width: 170, scopedSlots: { customRender: 'pairingAction' } },
         ];
       },
+      // The scoped API tokens table: one row per minted token, its scope
+      // bits, its expiry, and a copy-able secret. The scope column renders
+      // a tag per bit (1 = read, 2 = write, 4 = telemetry); a token with
+      // no scope reads as "—", which is the read-only-on-shared-token
+      // case, not an error.
+      scopedTokenCols() {
+        const L = this.labels;
+        return [
+          { title: L.scopedTokenName, align: 'left', width: 140, dataIndex: 'name' },
+          { title: L.scopedTokens, align: 'center', width: 220, scopedSlots: { customRender: 'scope' } },
+          { title: L.scopedTokenExpiry, align: 'center', width: 130, scopedSlots: { customRender: 'expiry' } },
+          { title: L.token, align: 'center', width: 120, scopedSlots: { customRender: 'secret' } },
+          { title: '', align: 'center', width: 140, scopedSlots: { customRender: 'action' } },
+        ];
+      },
     },
     methods: {
       async load() {
@@ -656,6 +769,7 @@
         this.spinning = false;
         this.loadNodeAccounts(this.accountsNode);
         this.loadPairings();
+        this.loadScopedTokens();
       },
       async refreshAll() {
         this.refreshing = true;
@@ -841,6 +955,56 @@
       // on which ports — the tunnel the hub's accounts ride. Pure read; the
       // write path lives on the node's own operator panel, so there is nothing
       // to hot-add or provision here.
+      // --- scoped API tokens -------------------------------------------------
+      // The operator's granular node-API credentials: one token per hub with
+      // its own scope bitmask and optional expiry. The list is loaded on
+      // page open and after every mint/rotate/delete; the mint form is the
+      // "hand a hub a read-only token" case, and the rotate/delete actions
+      // are the "rotate" and "revoke" cases, each with the same semantics
+      // as the shared node token's own rotation.
+      async loadScopedTokens() {
+        const msg = await HttpUtil.get('/panel/api/nodes/scopedTokens');
+        if (msg && msg.success) this.scopedTokens = msg.obj || [];
+      },
+      createScopedToken() {
+        this.scopedTokenForm = {
+          name: '', scope: 1, expiresAt: '', remark: '', freshSecret: null,
+        };
+      },
+      async doCreateScopedToken() {
+        const f = this.scopedTokenForm;
+        if (!f || !f.name.trim()) {
+          this.$message.warning(this.labels.scopedTokenName);
+          return;
+        }
+        this.scopedTokenSaving = true;
+        const msg = await HttpUtil.post('/panel/api/nodes/scopedTokens', {
+          name: f.name.trim(),
+          scope: f.scope || 0,
+          expiresAt: 0,
+          remark: f.remark || '',
+        });
+        this.scopedTokenSaving = false;
+        if (msg && msg.success && msg.obj) {
+          f.freshSecret = msg.obj.secret;
+          this.loadScopedTokens();
+          this.$message.success(this.labels.scopedTokenOk);
+        }
+      },
+      async rotateScopedToken(row) {
+        const msg = await HttpUtil.post('/panel/api/nodes/scopedTokens/rotate/' + row.id);
+        if (msg && msg.success && msg.obj) {
+          row.secret = msg.obj.secret;
+          this.$message.success(this.labels.scopedTokenRotated);
+        }
+      },
+      async delScopedToken(row) {
+        const msg = await HttpUtil.post('/panel/api/nodes/scopedTokens/del/' + row.id);
+        if (msg && msg.success) {
+          this.scopedTokens = this.scopedTokens.filter(t => t.id !== row.id);
+          this.$message.success(this.labels.tokenDeleted);
+        }
+      },
       async loadInbounds() {
         const n = this.manageModal.node;
         if (!n) return;

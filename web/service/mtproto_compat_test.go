@@ -53,7 +53,7 @@ func renderMtproto(t *testing.T, inbound *model.Inbound) string {
 	if err != nil {
 		t.Fatalf("parseSettings: %v", err)
 	}
-	return s.buildServerConfig(inbound, settings)
+	return s.buildServerConfig(inbound, settings, inbound.Total)
 }
 
 // The whole contract in one assertion: reading an inbound still in the old shape must

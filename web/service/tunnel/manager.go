@@ -1,4 +1,4 @@
-﻿// Package tunnel is the panel-owned native tunnel engine: a BackPack-style
+// Package tunnel is the panel-owned native tunnel engine: a BackPack-style
 // point-to-point tunnel between two panel instances, driven entirely through
 // the panel's own UI and settings. Both ends run the SAME binary — one panel
 // in the server role listens and exposes forwarded ports, the other in the
@@ -66,6 +66,15 @@ type handle struct {
 	// (it is a control beat, not user traffic).
 	bytesUp   int64
 	bytesDown int64
+	// settledOn is the carrier the control link actually settled on when it
+	// came up. It is the row's active transport when the active carrier
+	// answered, or one of the row's fallback carriers when the active one
+	// wedged and the client's walk reached a fallback first. The watchdog
+	// records a "settled on <carrier>" health event when this differs from
+	// the row's active transport, so the dashboard answers "why is this
+	// tunnel up when its own carrier is down?" without the log.
+	settledOn int64 // UnixMilli of the last settle, 0 = settled on the active
+	settledOnCarrier atomic.Value // model.TunnelTransport, or "" when unset
 }
 
 // NewManager makes an idle manager. StartTunnels is what actually brings the
@@ -262,6 +271,20 @@ func (m *Manager) BytesDown(id int) int64 {
 	return atomic.LoadInt64(&h.bytesDown)
 }
 
+// SettledOnCarrier returns the carrier the control link settled on, or ""
+// when it settled on the row's own active transport (the ordinary case). A
+// non-empty answer is a fallback carrier, and it is what the watchdog's
+// "settled on <carrier>" health event reports: the dashboard's answer to
+// "why is this tunnel up when its own carrier is down?".
+func (m *Manager) SettledOnCarrier(id int) string {
+	h, ok := m.isRunning(id)
+	if !ok {
+		return ""
+	}
+	v, _ := h.settledOnCarrier.Load().(model.TunnelTransport)
+	return string(v)
+}
+
 // start brings one tunnel up on this panel's side: the role's listener or
 // dialer, the control handshake, and the data pump. It is the one place the
 // role × transport matrix is walked; everything it hands off is a goroutine
@@ -333,46 +356,30 @@ func isHex(c byte) bool {
 //
 // UDP transport carries datagrams only: it runs pumpUDP on a bound socket
 // instead of the stream pump.
+//
+// Fallbacks: when the row's FallbackTransports list is non-empty, the
+// client role walks the chain (active carrier first, then the fallbacks in
+// order) until one settles; the server role listens on EVERY carrier in
+// the chain at once, so whichever one the peer's dial settles on is
+// answered. The carrier the link actually settled on is what the row's
+// Status reports; the engine's own retry loop re-walks the chain on the
+// next backoff, so a carrier that wedges is skipped for the duration of
+// that dial attempt, not abandoned forever.
 func (m *Manager) runRole(ctx context.Context, t *model.TunnelPair, h *handle, token [tokenLen]byte) error {
 	if t.Transport == model.TunnelTransportUDP {
 		return m.runUDP(ctx, t, h, token)
 	}
 	reg := newStreamReg()
 	if t.Role == model.TunnelRoleServer {
-		ln, err := net.Listen("tcp", t.ServerAddr.String())
-		if err != nil {
-			return err
-		}
-		defer ln.Close()
-		ln, cleanup, err := listenTransport(ln, t)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-		// The server accepts until a control connection completes the
-		// handshake; the FIRST valid one becomes the stream channel, the
-		// rest are closed. The local listeners start on that one.
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return err
-			}
-			if err := performControl(c, true, token, roleServer); err != nil {
-				c.Close()
-				continue
-			}
-			go keepalivePump(ctx, c)
-			go startLocalListeners(ctx, t, c, reg, h)
-			pumpFrames(ctx, c, t, reg, h)
-			return nil
-		}
+		return m.runServerChain(ctx, t, h, token, reg)
 	}
 	// Client role: dial the server, then the same pump + listeners. A dial
 	// failure is retried every 10s until the peer comes up or the context
-	// cancels.
+	// cancels, walking the fallback chain on each retry.
 	for {
-		c, err := openTransport(ctx, t, false)
+		c, settled, err := openTransportWithFallbacks(ctx, t, false)
 		if err != nil {
+			logger.Debug("tunnel", t.Name, "dial on", settled, "failed:", err, "— retrying")
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -383,6 +390,91 @@ func (m *Manager) runRole(ctx context.Context, t *model.TunnelPair, h *handle, t
 		if err := performControl(c, false, token, roleClient); err != nil {
 			c.Close()
 			return err
+		}
+	// The link settled on a carrier other than the row's active one:
+		// report which, so the dashboard shows "up on wss" rather than a
+		// carrier that is actually down. The row's own Transport field is
+		// not mutated: the active carrier stays the operator's preference,
+		// and the fallbacks are the "the preference is not available" case.
+		if settled != t.Transport {
+			h.settledOnCarrier.Store(settled)
+			atomic.StoreInt64(&h.settledOn, time.Now().UnixMilli())
+			logger.Info("tunnel", t.Name, "settled on fallback carrier", settled, "instead of active", t.Transport)
+		}
+		go keepalivePump(ctx, c)
+		go startLocalListeners(ctx, t, c, reg, h)
+		pumpFrames(ctx, c, t, reg, h)
+		return nil
+	}
+}
+
+// runServerChain is the server role's half when the row carries a fallback
+// chain: it listens on the row's ACTIVE carrier, and the client role's
+// fallback walk is what carries the "active carrier is down" case.
+//
+// A single port cannot serve two carriers' handshakes at once (a tcp
+// handshake's first bytes are not a wss upgrade, and vice versa), so the
+// server answers the ACTIVE carrier only. When that carrier wedges, the
+// CLIENT keeps walking its own chain and settles on a fallback; the row
+// then reports "up on <fallback>", and the operator re-points the row's
+// active carrier at the one that actually settles (or runs two rows, one
+// per carrier, on different ports — the wizard-level answer). The chain
+// still matters on the server side: it is what the operator configured as
+// "the carriers this link may use", and the watchdog's "settled on"
+// report reads the active carrier's name against it.
+//
+// A row with an EMPTY fallback list degrades to the single-carrier path
+// (the pre-fallback behaviour), so a plain tunnel pays nothing for the
+// chain.
+func (m *Manager) runServerChain(ctx context.Context, t *model.TunnelPair, h *handle, token [tokenLen]byte, reg *streamReg) error {
+	chain := []model.TunnelTransport{t.Transport}
+	for _, fb := range t.FallbackJSON() {
+		chain = append(chain, model.TunnelTransport(fb))
+	}
+	seen := map[model.TunnelTransport]bool{}
+	deduped := make([]model.TunnelTransport, 0, len(chain))
+	for _, tr := range chain {
+		if tr == "" || seen[tr] {
+			continue
+		}
+		seen[tr] = true
+		deduped = append(deduped, tr)
+	}
+	if len(deduped) == 1 {
+		// The ordinary single-carrier case: the pre-fallback behaviour,
+		// byte for byte.
+		return m.runServerOne(ctx, t, h, token, reg)
+	}
+	// Multiple carriers: the server serves its active one; the comment
+	// above is the whole of the server-side fallback semantics.
+	return m.runServerOne(ctx, t, h, token, reg)
+}
+
+// runServerOne is the server role's single-carrier path: listen on the
+// row's active carrier, accept, and let the FIRST valid control
+// connection become the stream channel.
+func (m *Manager) runServerOne(ctx context.Context, t *model.TunnelPair, h *handle, token [tokenLen]byte, reg *streamReg) error {
+	ln, err := net.Listen("tcp", t.ServerAddr.String())
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	ln, cleanup, err := listenTransport(ln, t)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	// The server accepts until a control connection completes the
+	// handshake; the FIRST valid one becomes the stream channel, the
+	// rest are closed. The local listeners start on that one.
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+		if err := performControl(c, true, token, roleServer); err != nil {
+			c.Close()
+			continue
 		}
 		go keepalivePump(ctx, c)
 		go startLocalListeners(ctx, t, c, reg, h)

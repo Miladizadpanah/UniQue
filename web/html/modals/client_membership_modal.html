@@ -425,6 +425,25 @@
           </a-col>
         </a-row>
 
+         <!-- mtproto's per-client byte quota. The account's own cap, in GB,
+              that the mtproto backend counts up+down against in
+              [access.user_data_limit]; 0 = inherit the inbound's TotalGB.
+              The panel's traffic job flips enable=false on a breach, the
+              same way every other protocol's quota works, so the account
+              is cut off the same way a vless or wireguard quota would. -->
+        <a-row :gutter="12" :style="{ marginTop: '14px' }"
+          v-if="clientMembershipModal.isMtproto">
+          <a-col :span="12">
+            <div class="bo-cf-field">
+              <label>{{ i18n "pages.clients.dataQuota" }}</label>
+              <a-input v-model.trim="clientMembershipModal.dataQuota"
+                placeholder='{{ i18n "pages.clients.limitInherit" }}'
+                addon-after="GB"></a-input>
+              <div class="bo-cf-hint">{{ i18n "pages.clients.dataQuotaDesc" }}</div>
+            </div>
+          </a-col>
+        </a-row>
+
         <!-- Said here rather than left for the operator to discover, because the
              field accepts a number bigger than the inbound's and then quietly does
              not honour it. It cannot: an account's tunnel addresses are laid out on
@@ -480,6 +499,12 @@
     limitDown: '',
     limitUp: '',
     limitDevices: '',
+    // mtproto's per-client byte quota box. 0 = inherit the inbound's totalGB,
+    // the same shape the backend's resolveEffectiveQuota reads. Held here
+    // rather than on `client` because `client` is serialised straight onto
+    // the posted entry, where a blank box must become 0, not the empty
+    // string. dataQuotaBytes() below is the one place that conversion happens.
+    dataQuota: '',
     // A negative expiryTime means "N days from first use" and the clock has not
     // started, which is what this switch writes.
     delayedStart: false,
@@ -650,6 +675,7 @@
         this.limitDown = this.storedLimit(row.speedLimitDown);
         this.limitUp = this.storedLimit(row.speedLimitUp);
         this.limitDevices = this.storedLimit(row.userLimitOverride);
+        this.dataQuota = this.storedLimit(row.dataQuotaBytes);
       } else {
         this.client = Object.assign(this.blankClient(), {
           email: this.mint('email'), enable: true,
@@ -663,6 +689,7 @@
         this.limitDown = '';
         this.limitUp = '';
         this.limitDevices = '';
+        this.dataQuota = '';
       }
       this.visible = true;
     },
@@ -837,6 +864,15 @@
     adtagField: { key: 'adtag', label: '{{ i18n "pages.xray.mtproto.adtag" }}',
       protocols: ['mtproto'], identity: [] },
     get adtagUsed() { return this.fieldUsed(this.adtagField); },
+    // The per-client byte quota box is mtproto's own field: it is drawn
+    // only when the account is served on an mtproto inbound, because the
+    // backend's [access.user_data_limit] render is mtproto-specific. The
+    // other protocols' quotas ride on totalGB (the shared cap), and the
+    // mtproto box is the account's OWN tighter cap, which the panel's
+    // traffic job enforces the same way.
+    get isMtproto() {
+      return this.selectedProtocols.includes('mtproto');
+    },
 
     // The protocols currently ticked, deduplicated.
     get selectedProtocols() {
@@ -1208,6 +1244,10 @@
         speedLimitDown: this.postedLimit(this.limitDown),
         speedLimitUp: this.postedLimit(this.limitUp),
         userLimitOverride: this.postedLimit(this.limitDevices),
+        // The mtproto per-client byte cap, in BYTES. An empty box posts 0,
+        // which the backend reads as "inherit the inbound's totalGB" — the
+        // same 0-loses rule resolveEffectiveQuota applies.
+        dataQuotaBytes: this.isMtproto ? (Number(this.dataQuota) || 0) * 1073741824 : 0,
         comment: c.comment || '',
         subId: c.subId || '',
         reset: Number(c.reset) || 0,

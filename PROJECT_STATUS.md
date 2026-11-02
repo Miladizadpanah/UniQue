@@ -41,8 +41,23 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - ✅ فاز ۲b — ری‌لای ترافیک واقعی کاربر روی کانال control تونل [کامیت 0578c83]
 - ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import) [کامیت b5aeeac]
 - ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history [کامیت 2d694cb]
-- ✅ فاز ۵ — control-plane NX-style (2FA TOTP، session mgmt، webhooks outbox، backup encryption، Ctrl-K palette، PWA)
-- ⏭ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+- ✅ فاز ۵ — control-plane NX-style (2FA TOTP، session mgmt، webhooks outbox، backup encryption، Ctrl-K palette، PWA) [کامیت 3413edf]
+- ✅ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens [کامیت COMMIT_PENDING]
+
+
+## ۰f. فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
+
+چهار ارتقا نهایی که پنل را به «بهترین پنل» تبدیل می‌کند:
+
+- **Fallback transports (توانایی تغییر کالر زنده‌ی تونل)**: موتور تونل حالا وقتی کالر اصلی (active transport) settle نشود، به‌صورت خودکار fallback‌های به‌ترتیب را امتحان می‌کند (`openTransportWithFallbacks` در `web/service/tunnel/core.go`). رول client روی هر retry، زنجیره‌ی (active + fallbacks) را walk می‌کند؛ هر کالر که dial بشود، برمی‌گردد و `settledOnCarrier` + `settledOn` روی handle ثبت می‌شود. `Manager.SettledOnCarrier(id)` accessor جدید. Watchdog (`web/job/tunnel_watchdog_job.go`) حالا روی «بازگشت به up» اگر تونل روی یک fallback کالر settle شده باشد، event سلامت «recovered on fallback carrier X» ثبت می‌کند. UI تونل: فیلد چندمانتاکی «Fallback transports» در wizard (`web/html/tunnels.html`) + i18n `pages.tunnels.fallbacks`/`fallbacksPlaceholder`.
+
+- **MTProto per-client byte quota**: `mtprotoClient.DataQuotaBytes int64` (JSON `dataQuotaBytes`) به `web/service/mtproto.go` اضافه شد؛ `buildServerConfig` حالا پارامتر سومی `inboundTotalGB int64` می‌گیرد (Total اینباند) و بخش جدید `[access.user_data_limit]` به‌ازای هر client render می‌کند؛ helper `resolveEffectiveQuota(inboundTotal, accountTotal)` قواعد 0-loses را اجرا می‌کند (همان شکل `resolveUserLimitOverride`). هر دو call site (`web/service/coreconfig.go:552` و `web/service/mtproto.go generateServerConfig`) با `inbound.Total` به‌روز شدند؛ ۴ test mtproto هم (`buildServerConfig(inbound, settings, inbound.Total)`) patch شدند. JS/model: `MtprotoUser` حالا `dataQuotaBytes` (+ `_dataQuotaGB` getter/setter) دارد (`web/assets/js/model/inbound.js`)؛ مودال membership (`web/html/modals/client_membership_modal.html`) input `dataQuota` (GB) فقط برای mtproto + `isMtproto` getter + post `dataQuotaBytes` (bytes).
+
+- **Calendar renewal (تمدید دستی)**: `InboundService.RenewClientByEmail(clientEmail)` در `web/service/inbound.go` — پریود reset حساب را می‌خواند، `ExpiryTime` را دقیقاً مثل `autoRenewClients` به‌ جلو می‌راند، سپس `ResetClientExpiryTimeByEmail` + update DB روی ردیف traffic (expiry_time + enable) را صدا می‌زند. مسیر جدید `POST /:id/renewClient/:email` در `web/controller/inbound.go` (gated با `PermEditClient` + owns + ownsClient، مثل `resetClientTraffic`). `web/html/clients.html` یک آیتم `renew` (آیکون کالندر) در منوی row + روش `renewAccount(row)` + i18n `pages.inbounds.renewClient`/`toasts.renewClientSuccess` (fa: «تمدید الان»).
+
+- **Scoped API tokens**: `model.ApiToken` (جدول `api_tokens`) + scope bitmask consts (`ScopeNodeRead`/`ScopeNodeWrite`/`ScopeHeartbeat`) + `model.AllApiTokenScopes` در `database/model/tunnel.go`؛ در `database/db.go` AutoMigrate ثبت شد. `web/service/api_token.go` (فایل جدید): `ApiTokenService` با `CreateToken`/`List`/`Rotate`/`Delete`/`ResolveScope` — gate یا token اشتراکی (دسترسی کامل) یا یک token محدود (scope را چک می‌کند) را قبول می‌کند. `tokenGate` در `web/controller/node_api.go` بازمی‌نویسی شد (`routeScopeForPath` + `ResolveScope`، بدون `crypto/subtle` — مقایسه در api_token.go). ۴ مسیر جدید در `web/controller/node.go`: `GET /panel/api/nodes/scopedTokens`, `POST /panel/api/nodes/scopedTokens`, `POST .../rotate/:id`, `POST .../del/:id` (handlerهای `listScopedTokens`/`createScopedToken`/`rotateScopedToken`/`delScopedToken`). یک بخش «Scoped API tokens» روی `web/html/nodes.html` (جدول + فرم mint + rotate/delete) + i18n `pages.nodes.scopedTokens*`/`scopeNodeRead`/`scopeNodeWrite`/`scopeHeartbeat`/`tokenDeleted`/`rotated` (en + fa).
+
+**Build**: `GOOS=linux go build ./...` + `go vet` سبز.
 
 
 ## ۰e. فاز ۵ — control-plane سبک NX-style

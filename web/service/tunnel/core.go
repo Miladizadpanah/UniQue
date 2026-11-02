@@ -222,6 +222,59 @@ func openTransport(ctx context.Context, t *model.TunnelPair, isServer bool) (net
 	return nil, fmt.Errorf("unknown transport %q", t.Transport)
 }
 
+// openTransportWithFallbacks walks the active transport first, then the
+// row's FallbackTransports list in order, until one settles. A "settle" is a
+// dial that completes (openTransport returns a conn): which carrier survives
+// is decided by what the path actually carries, not by name. The first
+// transport in the chain that opens wins and is what the tunnel runs on;
+// the row's own Status field reports "up" with the ACTIVE carrier's name,
+// and the fallbacks are the ordered list the operator configured for "the
+// active one stops settling" (a wedged or filtered path).
+//
+// The active transport is ALWAYS tried first, then the fallbacks in order;
+// an empty fallback list is the ordinary "one carrier" case, and the
+// function degrades to openTransport.
+//
+// The UDP transport is NOT part of the chain: a UDP "tunnel" is a
+// datagram relay on a single socket, and there is no meaningful "next
+// carrier" to switch to when the UDP socket stops moving bytes. The
+// caller (runRole) routes UDP rows through runUDP, so this function only
+// ever sees stream carriers.
+func openTransportWithFallbacks(ctx context.Context, t *model.TunnelPair, isServer bool) (net.Conn, model.TunnelTransport, error) {
+	chain := []model.TunnelTransport{t.Transport}
+	for _, fb := range t.FallbackJSON() {
+		chain = append(chain, model.TunnelTransport(fb))
+	}
+	// De-duplicate: the operator may have listed the active carrier as its
+	// own first fallback, and retrying a carrier that just failed adds
+	// latency without information.
+	seen := map[model.TunnelTransport]bool{}
+	deduped := make([]model.TunnelTransport, 0, len(chain))
+	for _, tr := range chain {
+		if tr == "" || seen[tr] {
+			continue
+		}
+		seen[tr] = true
+		deduped = append(deduped, tr)
+	}
+	var lastErr error
+	for _, tr := range deduped {
+		probe := *t
+		probe.Transport = tr
+		c, err := openTransport(ctx, &probe, isServer)
+		if err == nil {
+			return c, tr, nil
+		}
+		lastErr = err
+		// A context-cancelled dial is not a carrier failure: the tunnel is
+		// being torn down, and trying the next carrier would just be noise.
+		if ctx.Err() != nil {
+			return nil, tr, err
+		}
+	}
+	return nil, deduped[len(deduped)-1], lastErr
+}
+
 // tlsClientConfig is the TLS 1.3 config a tunnel's data channel uses. A blank
 // fingerprint means "no SNI pin" — the cert is validated against the default
 // pool, which is right for a domain-fronted tunnel on a CDN.

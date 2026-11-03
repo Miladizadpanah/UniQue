@@ -1,6 +1,6 @@
 # VPN-UI (UniQue) — گزارش کامل وضعیت پروژه
 
-> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + ۲ + ۲b + ۳ + ۴ + ۵)
+> آخرین به‌روزرسانی: ۲ نوامبر ۲۰۲۶ · نسخه‌ی جاری: **v3.0.1** (فاز ۱ + ۲ + ۲b + ۳ + ۴ + ۵ + ۶)
 > ریپازیتوری دپلوی: `github.com/Miladizadpanah/UniQue`
 
 ---
@@ -42,7 +42,7 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import) [کامیت b5aeeac]
 - ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history [کامیت 2d694cb]
 - ✅ فاز ۵ — control-plane NX-style (2FA TOTP، session mgmt، webhooks outbox، backup encryption، Ctrl-K palette، PWA) [کامیت 3413edf]
-- ✅ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens [کامیت COMMIT_PENDING]
+- ✅ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens [کامیت eccb100]
 
 
 ## ۰f. فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens

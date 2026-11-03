@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"strconv"
 )
@@ -250,6 +251,40 @@ func (a TunnelAddr) String() string {
 		return ":" + strconv.Itoa(a.Port)
 	}
 	return a.Host + ":" + strconv.Itoa(a.Port)
+}
+
+// Value implements driver.Valuer so GORM can persist a TunnelAddr column as a
+// JSON string. Without this, a plain struct field fails at the DB layer with
+// "unsupported type model.TunnelAddr, a struct" the moment a row is created.
+func (a TunnelAddr) Value() (driver.Value, error) {
+	return json.Marshal(a)
+}
+
+// Scan implements sql.Scanner: the inverse of Value, so a stored JSON string
+// rehydrates into the struct. A blank/absent value leaves the zero TunnelAddr,
+// which the service layer treats as "no address set".
+func (a *TunnelAddr) Scan(v any) error {
+	if v == nil {
+		*a = TunnelAddr{}
+		return nil
+	}
+	var raw []byte
+	switch t := v.(type) {
+	case []byte:
+		raw = t
+	case string:
+		raw = []byte(t)
+	default:
+		// A value we don't know how to parse is left empty rather than
+		// failing the whole row: a bad cell is a no-address, not a crash.
+		*a = TunnelAddr{}
+		return nil
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		*a = TunnelAddr{}
+		return nil
+	}
+	return json.Unmarshal(raw, a)
 }
 
 func containsColon(s string) bool {

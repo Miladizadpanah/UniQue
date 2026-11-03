@@ -42,7 +42,7 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - ✅ فاز ۳ — صفحه‌ی 3X-UI (app icons، balancers، custom template، external import) [کامیت b5aeeac]
 - ✅ فاز ۴ — inbound clone to nodes + mTLS + tunnel health monitor + CPU/mem history [کامیت 2d694cb]
 - ✅ فاز ۵ — control-plane NX-style (2FA TOTP، session mgmt، webhooks outbox، backup encryption، Ctrl-K palette، PWA) [کامیت 3413edf]
-- ✅ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens [کامیت eccb100]
+- ✅ فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens [کامیت‌های eccb100 + 3be5b00 + 2f97acc + b0691a2]
 
 
 ## ۰f. فاز ۶ — fallbacks + MTProto quota + calendar renewal + API scoped tokens
@@ -58,6 +58,16 @@ quic-go/kcp/PCK/EBPF و لایسنس AGPL)، یک موتور تونل **بومی
 - **Scoped API tokens**: `model.ApiToken` (جدول `api_tokens`) + scope bitmask consts (`ScopeNodeRead`/`ScopeNodeWrite`/`ScopeHeartbeat`) + `model.AllApiTokenScopes` در `database/model/tunnel.go`؛ در `database/db.go` AutoMigrate ثبت شد. `web/service/api_token.go` (فایل جدید): `ApiTokenService` با `CreateToken`/`List`/`Rotate`/`Delete`/`ResolveScope` — gate یا token اشتراکی (دسترسی کامل) یا یک token محدود (scope را چک می‌کند) را قبول می‌کند. `tokenGate` در `web/controller/node_api.go` بازمی‌نویسی شد (`routeScopeForPath` + `ResolveScope`، بدون `crypto/subtle` — مقایسه در api_token.go). ۴ مسیر جدید در `web/controller/node.go`: `GET /panel/api/nodes/scopedTokens`, `POST /panel/api/nodes/scopedTokens`, `POST .../rotate/:id`, `POST .../del/:id` (handlerهای `listScopedTokens`/`createScopedToken`/`rotateScopedToken`/`delScopedToken`). یک بخش «Scoped API tokens» روی `web/html/nodes.html` (جدول + فرم mint + rotate/delete) + i18n `pages.nodes.scopedTokens*`/`scopeNodeRead`/`scopeNodeWrite`/`scopeHeartbeat`/`tokenDeleted`/`rotated` (en + fa).
 
 **Build**: `GOOS=linux go build ./...` + `go vet` سبز.
+
+### ۰g. fixهای لازم‌الجنا برای «قابلیت‌های فاز ۶» (کامیت‌های 3be5b00، 2f97acc، b0691a2)
+
+تست زنده‌ی فاز ۶ روی یک VPS واقعی (Ubuntu 24.04) سه باگ بلا‌کننده‌ی پنهان را آشکار کرد که هر سه را fix کردیم:
+
+- **`model.TunnelAddr` بدون `Value()`/`Scan()`** (2f97acc): ساختار `ServerAddr` روی `TunnelPair` بدون پیاده‌سازی `driver.Valuer`/`sql.Scanner` بود، بنابراین GORM نمی‌توانست آن را روی ستون ذخیره کند. ساختن ردیف تونل با `sql: converting argument type: unsupported type model.TunnelAddr, a struct` خطا می‌داد — دقیقاً همان نقطه‌ای که قابلیت fallback فاز ۶ را end-to-end test می‌کرد. دو متد جدید اضافه شد: `Value()` (json.Marshal) و `Scan()` (json.Unmarshal با handling nil/empty). مسیر create (`db.Create`) و مسیر edit (`Updates` map) هر دو حالا persist می‌شوند.
+- **دوبار شدن کلید `subPageTemplate` در fa_IR TOML** (3be5b00): کلید در section `[pages.settings.panel]` دو بار تعریف شده بود (یکی از فاز ۳، یکی از فاز بعدی‌تر). TOML v1.0 duplicate key در یک table را hard error می‌داند و پنل با `toml: key subPageTemplate is already defined` boot نمی‌شد. نسخه‌ی دوم حذف شد.
+- **نام‌های ستون اشتباه در `Updates` map تونل** (b0691a2): مسیر edit تونل از map با کلیدهای `fallback`/`ports`/`fingerprint`/`proxy_v2` استفاده می‌کرد، ولی schema واقعی AutoMigrate ستون‌های `fallback_transports`/`forwarded_ports`/`tls_fingerprint`/`proxy_proto_v2` را می‌سازد. create روی struct field-name (GORM snake_case) کار می‌کرد، ولی edit روی `Updates` مستقیم نام ستون را می‌کوبد و SQLite با `no such column: fallback` خطا می‌داد. map با نام‌های واقعی بازنویسی شد.
+
+**نتیجه‌ی تست زنده روی VPS (`phase6_v7.sh`)**: ۱۵/۱۵ سبز — تونل + fallback (create/persist/update)، scoped tokens (create/gate-accept/rotate/old-reject/new-accept/delete-reject/write-only-refused-on-read)، renew client (clean error، نه panic)، VLESS inbound + client با totalGB (round-trip ۱۰ GB در `settings.clients`)، و gate درست روی MTProto (بدون core، inbound create درستی رد می‌شود).
 
 
 ## ۰e. فاز ۵ — control-plane سبک NX-style

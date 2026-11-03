@@ -31,19 +31,3 @@ command with `VPNUI_REF=<tag>` to pin a release.
   disk and memory events.
 - **Security** — node pairing gate (an operator must approve each hub), mTLS CA
   generated automatically on every boot, anti-flapping offline detection.
-
-## Donate
-
-🔹USDC-Polygon: `0xdC2Ab962954e8fA1502C44656c5A32CF2979568C`
-
-🔹USDT-BEP20: `0xdC2Ab962954e8fA1502C44656c5A32CF2979568C`
-
-🔹USDT-TRC20: `TXEhckDXtdLGAjP5PZXfNnQjPHzEVTcBmR`
-
-🔹TRX: `TXEhckDXtdLGAjP5PZXfNnQjPHzEVTcBmR`
-
-🔹LTC: `ltc1qmapmnuf6cq9x679nmu0k4uyq779mxxcwnkgdll`
-
-🔹BTC: `bc1q62w7lyndzndsp74vj4dsayvun8xnapzq6hx5ea`
-
-🔹ETH: `0xdC2Ab962954e8fA1502C44656c5A32CF2979568C`

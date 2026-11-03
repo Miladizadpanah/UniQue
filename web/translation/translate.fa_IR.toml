@@ -843,8 +843,6 @@
 "cloneToNodeDesc" = "پروتکل، تنظیمات استریم و حساب‌های این اینباند را روی یک نود تأییدشده کلون می‌کند. نود پورت آزاد خودش را انتخاب می‌کند و اعتبارنامه‌ها را خودش می‌سازد؛ هاب هر حساب را به‌عنوان NodeAccount ردیابی می‌کند."
 "nodeMetrics" = "تاریخچه CPU / RAM"
 "nodeMetricsDesc" = "نمودار گِیج‌های CPU، RAM و شبکه‌ی این نود را از ضربات قلب (heartbeat) و pollها نشان می‌دهد."
-"subPageTemplate" = "صفحه‌ی سفارشی اشتراک"
-"subPageTemplateDesc" = "کد HTML صفحه‌ی اشتراکی که وقتی لینک در مرورگر باز می‌شود نمایش داده می‌شود. متغیرها: {USER} {REMAINING} {TOTAL} {USED} {UPLOAD} {DOWNLOAD} {EXPIRE} {SUB_URL} {SUB_JSON} {SUB_CLASH} {BASE_URL} {LINKS}. برای استفاده از صفحه‌ی پیش‌فرض خالی بگذارید."
 "subEnableRouting" = "فعال‌سازی مسیریابی"
 "subEnableRoutingDesc" = "تنظیمات سراسری برای فعال‌سازی مسیریابی در کلاینت VPN. (فقط برای Happ)"
 "subRoutingRules" = "قوانین مسیریابی"

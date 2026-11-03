@@ -110,21 +110,27 @@ func (s *TunnelService) Save(t *model.TunnelPair) (*model.TunnelPair, error) {
 			}
 		}
 		t.UpdatedAt = time.Now().UnixMilli()
+		// The column names are the GORM snake_case of the struct fields, NOT
+		// short aliases: the DB schema (AutoMigrate) names them
+		// fallback_transports / forwarded_ports / tls_fingerprint /
+		// proxy_proto_v2. The create path (db.Create) reads the struct
+		// fields directly so it was always right; this Updates map must
+		// match the actual column names or SQLite answers "no such column".
 		if err := db.Model(&model.TunnelPair{}).Where("id = ?", t.Id).Updates(map[string]any{
-			"name":       t.Name,
-			"remark":     t.Remark,
-			"role":       t.Role,
-			"direction":  t.Direction,
-			"transport":  t.Transport,
-			"fallback":   t.FallbackTransports,
-			"server_addr": t.ServerAddr,
-			"ports":      t.ForwardedPorts,
-			"token":      t.Token,
-			"fingerprint": t.TLSFingerprint,
-			"tuning":     t.Tuning,
-			"proxy_v2":   t.ProxyProtoV2,
-			"enable":     t.Enable,
-			"updated_at": t.UpdatedAt,
+			"name":              t.Name,
+			"remark":            t.Remark,
+			"role":              t.Role,
+			"direction":         t.Direction,
+			"transport":         t.Transport,
+			"fallback_transports": t.FallbackTransports,
+			"server_addr":       t.ServerAddr,
+			"forwarded_ports":   t.ForwardedPorts,
+			"token":             t.Token,
+			"tls_fingerprint":   t.TLSFingerprint,
+			"tuning":            t.Tuning,
+			"proxy_proto_v2":    t.ProxyProtoV2,
+			"enable":            t.Enable,
+			"updated_at":        t.UpdatedAt,
 		}).Error; err != nil {
 			return nil, err
 		}

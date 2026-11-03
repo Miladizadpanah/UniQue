@@ -1,4 +1,4 @@
-﻿"username" = "Имя пользователя"
+"username" = "Имя пользователя"
 "presetSni" = "SNI / Domain"
 "presetSniHint" = "The SNI the client presents. For a CDN front it is the CDN domain; leave blank to keep the preset default."
 "presetCdnEndpoint" = "CDN Front (optional)"

@@ -60,13 +60,13 @@ type ocservSettings struct {
 	Key             string `json:"key"`             // content mode: server key PEM
 	CaCert          string `json:"caCert"`          // optional CA PEM (self-signed)
 
-	ClientToClient    bool           `json:"clientToClient"`
-	CrossInbound      bool           `json:"crossInbound"`
-	UserLimit         *int           `json:"userLimit"`         // nil=absent(legacy=>1); 0=no limit; else 1..64. Parse-only — enforce via effectiveUserLimit.
-	UserLimitStrategy string         `json:"userLimitStrategy"` // "accept" (evict oldest) or "reject"
-	IpRanges          []string             `json:"ipRanges"`          // panel-managed 10.4.x /24 ranges
-	Clients           []ocservClient       `json:"clients"`
-	ExternalProxy     []ocservExternalProxy `json:"externalProxy"`    // alternate endpoints (relay/CDN) for client configs
+	ClientToClient    bool                  `json:"clientToClient"`
+	CrossInbound      bool                  `json:"crossInbound"`
+	UserLimit         *int                  `json:"userLimit"`         // nil=absent(legacy=>1); 0=no limit; else 1..64. Parse-only — enforce via effectiveUserLimit.
+	UserLimitStrategy string                `json:"userLimitStrategy"` // "accept" (evict oldest) or "reject"
+	IpRanges          []string              `json:"ipRanges"`          // panel-managed 10.4.x /24 ranges
+	Clients           []ocservClient        `json:"clients"`
+	ExternalProxy     []ocservExternalProxy `json:"externalProxy"` // alternate endpoints (relay/CDN) for client configs
 }
 
 // effectiveRanges returns the inbound's client /24 ranges, or nil to signal the
@@ -772,10 +772,10 @@ func (s *OcservService) runCmd(name string, args ...string) error {
 // Android, iOS). One entry per endpoint in the external-proxy list; when no external
 // proxies are configured, one entry for the panel's own address.
 type OcservClientConfig struct {
-	Remark   string `json:"remark"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Config   string `json:"config"` // the full XML text
+	Remark string `json:"remark"`
+	Host   string `json:"host"`
+	Port   int    `json:"port"`
+	Config string `json:"config"` // the full XML text
 }
 
 // RenderClientConfigs returns the OpenConnect .xml provisioning files for the account

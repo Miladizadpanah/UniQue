@@ -13,11 +13,11 @@ import (
 
 func TestNormalizeApiTlsMode(t *testing.T) {
 	cases := map[string]string{
-		"":        xray.ApiTlsInsecure,
+		"":         xray.ApiTlsInsecure,
 		"insecure": xray.ApiTlsInsecure,
-		"SKIP":    xray.ApiTlsSkip,
-		"verify":  xray.ApiTlsVerify,
-		"bogus":   xray.ApiTlsInsecure, // unknown falls back to the LAN-safe mode
+		"SKIP":     xray.ApiTlsSkip,
+		"verify":   xray.ApiTlsVerify,
+		"bogus":    xray.ApiTlsInsecure, // unknown falls back to the LAN-safe mode
 	}
 	for in, want := range cases {
 		if got := normalizeApiTlsMode(in); got != want {
@@ -59,9 +59,9 @@ func TestRemoteApiTarget(t *testing.T) {
 func TestBaseHostOf(t *testing.T) {
 	cases := map[string]string{
 		"https://node2.example.com:2096/subs": "node2.example.com",
-		"http://10.1.2.3:2097":               "10.1.2.3",
-		"not-a-url":                            "",
-		"":                                     "",
+		"http://10.1.2.3:2097":                "10.1.2.3",
+		"not-a-url":                           "",
+		"":                                    "",
 	}
 	for in, want := range cases {
 		if got := baseHostOf(in); got != want {

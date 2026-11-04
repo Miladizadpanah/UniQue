@@ -952,17 +952,29 @@ body { background:var(--bg); }
         this.loadingStates.spinning = false;
       },
       async getTwoFactorEnable() {
-        const msg = await HttpUtil.post('/getTwoFactorEnable');
-        if (msg.success) {
-          this.twoFactorEnable = msg.obj;
-          this.loadingStates.fetched = true;
-          this.$nextTick(() => {
-            // autofocus cannot do this: the form is not in the document when the
-            // page is parsed, it arrives with this response.
-            if (this.$refs.username) this.$refs.username.focus();
-          });
-          return msg.obj;
+        try {
+          const msg = await HttpUtil.post('/getTwoFactorEnable');
+          if (msg.success) {
+            this.twoFactorEnable = msg.obj;
+            this.loadingStates.fetched = true;
+            this.$nextTick(() => {
+              // autofocus cannot do this: the form is not in the document when the
+              // page is parsed, it arrives with this response.
+              if (this.$refs.username) this.$refs.username.focus();
+            });
+            return msg.obj;
+          }
+        } catch (e) {
+          // The endpoint may 404 on a misconfigured basePath or an older binary.
+          // Fail OPEN: reveal the form without the 2FA field rather than hang
+          // the spinner forever. The login() flow still surfaces twoFactorRequired
+          // after a correct password, so 2FA accounts are not locked out.
         }
+        this.loadingStates.fetched = true;
+        this.$nextTick(() => {
+          if (this.$refs.username) this.$refs.username.focus();
+        });
+        return false;
       }
     },
   });

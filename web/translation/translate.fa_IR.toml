@@ -1,38 +1,23 @@
-"username" = "ÙØ§ÙâÚ©Ø§Ø±Ø¨Ø±Û"
-"password" = "Ø±ÙØ²Ø¹Ø¨ÙØ±"
 "login" = "ÙØ±ÙØ¯"
 "confirm" = "ØªØ§ÛÛØ¯"
-"cancel" = "Ø§ÙØµØ±Ø§Ù"
 "close" = "Ø¨Ø³ØªÙ"
-"save" = "Ø°Ø®ÛØ±Ù"
-"logout" = "Ø®Ø±ÙØ¬"
 "create" = "Ø§ÛØ¬Ø§Ø¯"
 "update" = "Ø¨ÙâØ±ÙØ²Ø±Ø³Ø§ÙÛ"
 "copy" = "Ú©Ù¾Û"
 "copied" = "Ú©Ù¾Û Ø´Ø¯"
 "copyFailed" = "Ú©Ù¾Û ÙØ´Ø¯"
 "saved" = "Ø°Ø®ÛØ±Ù Ø´Ø¯"
-"version" = "ÙØ³Ø®Ù"
-"latency" = "ØªØ£Ø®ÛØ±"
-"download" = "Ø¯Ø§ÙÙÙØ¯"
-"remark" = "ÙØ§Ù"
-"enable" = "ÙØ¹Ø§Ù"
-"protocol" = "Ù¾Ø±ÙØªÚ©Ù"
 "search" = "Ø¬Ø³ØªØ¬Ù"
 "filter" = "ÙÛÙØªØ±"
 "loading" = "...Ø¯Ø± Ø­Ø§Ù Ø¨Ø§Ø±Ú¯Ø°Ø§Ø±Û"
 "second" = "Ø«Ø§ÙÛÙ"
 "minute" = "Ø¯ÙÛÙÙ"
 "hour" = "Ø³Ø§Ø¹Øª"
-"day" = "Ø±ÙØ²"
 "check" = "ÚÚ© Ú©Ø±Ø¯Ù"
 "indefinite" = "ÙØ§ÙØ­Ø¯ÙØ¯"
-"unlimited" = "ÙØ§ÙØ­Ø¯ÙØ¯"
 "none" = "ÙÛÚ"
 "all" = "ÙÙÙ"
 "qrCode" = "QRÚ©Ø¯"
-"info" = "Ø§Ø·ÙØ§Ø¹Ø§Øª Ø¨ÛØ´ØªØ±"
-"edit" = "ÙÛØ±Ø§ÛØ´"
 "delete" = "Ø­Ø°Ù"
 "reset" = "Ø±ÛØ³Øª"
 "noData" = "Ø¯Ø§Ø¯ÙâØ§Û ÙØ¬ÙØ¯ ÙØ¯Ø§Ø±Ø¯."
@@ -42,26 +27,16 @@
 "useIPv4ForHost" = "Ø§Ø² IPv4 Ø¨Ø±Ø§Û ÙÛØ²Ø¨Ø§Ù Ø§Ø³ØªÙØ§Ø¯Ù Ú©ÙÛØ¯"
 "transmission" = "Ø±Ø§ÙâØ§ØªØµØ§Ù"
 "host" = "Ø¢Ø¯Ø±Ø³"
-"path" = "ÙØ³ÛØ±"
 "camouflage" = "ÙØ¨ÙÙâØ³Ø§Ø²Û"
-"status" = "ÙØ¶Ø¹ÛØª"
-"enabled" = "ÙØ¹Ø§Ù"
-"disabled" = "ØºÛØ±ÙØ¹Ø§Ù"
 "depleted" = "ÙÙÙØ¶Û"
 "depletingSoon" = "Ø¯Ø±âØ­Ø§ÙâØ§ÙÙØ¶Ø§"
-"offline" = "Ø¢ÙÙØ§ÛÙ"
-"online" = "Ø¢ÙÙØ§ÛÙ"
 "domainName" = "Ø¢Ø¯Ø±Ø³ Ø¯Ø§ÙÙÙ"
 "monitor" = "Ø¢ÛâÙ¾Û Ø§ØªØµØ§Ù"
 "certificate" = "Ú¯ÙØ§ÙÛ Ø¯ÛØ¬ÛØªØ§Ù"
 "fail" = "ÙØ§ÙÙÙÙ"
-"comment" = "ØªÙØ¶ÛØ­Ø§Øª"
 "success" = "ÙÙÙÙ"
-"lastOnline" = "Ø¢Ø®Ø±ÛÙ ÙØ¹Ø§ÙÛØª"
 "getVersion" = "Ø¯Ø±ÛØ§ÙØª ÙØ³Ø®Ù"
 "install" = "ÙØµØ¨"
-"clients" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
-"usage" = "Ø§Ø³ØªÙØ§Ø¯Ù"
 "twoFactorCode" = "Ú©Ø¯"
 "remained" = "Ø¨Ø§ÙÛâÙØ§ÙØ¯Ù"
 "security" = "Ø§ÙÙÛØª"
@@ -81,20 +56,15 @@
 "somethingWentWrong" = "ÙØ´Ú©ÙÛ Ù¾ÛØ´ Ø¢ÙØ¯"
 
 [subscription]
-"title" = "Ø§Ø·ÙØ§Ø¹Ø§Øª Ø³Ø§Ø¨Ø³Ú©Ø±ÛÙ¾Ø´Ù"
 "subId" = "Ø´ÙØ§Ø³Ù Ø§Ø´ØªØ±Ø§Ú©"
-"status" = "ÙØ¶Ø¹ÛØª"
 "downloaded" = "Ø¯Ø§ÙÙÙØ¯"
 "uploaded" = "Ø¢Ù¾ÙÙØ¯"
-"expiry" = "ØªØ§Ø±ÛØ® Ù¾Ø§ÛØ§Ù"
 "totalQuota" = "Ø­Ø¬Ù Ú©ÙÛ"
 "individualLinks" = "ÙÛÙÚ©âÙØ§Û ØªÚ©Û"
 "copyAll" = "Ú©Ù¾Û ÙÙÙ"
 "configFiles" = "ÙØ§ÛÙâÙØ§Û ØªÙØ¸ÛÙØ§Øª"
 "installApps" = "ÙØµØ¨ Ø¯Ø± Ø§Ù¾ÙÛÚ©ÛØ´ÙâÙØ§"
-"active" = "ÙØ¹Ø§Ù"
 "inactive" = "ØºÛØ±ÙØ¹Ø§Ù"
-"unlimited" = "ÙØ§ÙØ­Ø¯ÙØ¯"
 "noExpiry" = "Ø¨Ø¯ÙÙ Ø§ÙÙØ¶Ø§"
 
 [menu]
@@ -105,17 +75,12 @@
 "dark" = "ØªÛØ±Ù"
 "ultraDark" = "ÙÙÙ ØªÛØ±Ù"
 "dashboard" = "ÙÙØ§Û Ú©ÙÛ"
-"inbounds" = "ÙØ±ÙØ¯ÛâÙØ§"
-"clients" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
-"settings" = "ØªÙØ¸ÛÙØ§Øª Ù¾ÙÙ"
 "xray" = "Ù¾ÛÚ©Ø±Ø¨ÙØ¯Û Ø§ÛÚ©Ø³âØ±Û"
 "core" = "ØªÙØ¸ÛÙØ§Øª ÙØ³ØªÙ"
 "admins" = "Ø§Ø¯ÙÛÙâÙØ§"
 "resellers" = "ÙÙØ§ÛÙØ¯Ú¯Ø§Ù"
-"nodes" = "ÙÙØ¯ÙØ§"
 "tunnel" = "ÙØ¯ÛØ±ÛØª ØªÙÙÙ"
 "logout" = "Ø®Ø±ÙØ¬"
-"link" = "ÙØ¯ÛØ±ÛØª"
 
 [pages.core]
 "configTitle" = "ÙÛØ±Ø§ÛØ´Ú¯Ø± Ù¾ÛØ´Ø±ÙØªÙ Ù¾ÛÚ©Ø±Ø¨ÙØ¯Û"
@@ -134,18 +99,13 @@
 "configSaved" = "Ù¾ÛÚ©Ø±Ø¨ÙØ¯Û Ø°Ø®ÛØ±Ù Ø´Ø¯"
 
 [pages.tunnel]
-"title" = "ÙØ¯ÛØ±ÛØª ØªÙÙÙ"
 "subtitle" = "Ø´Ø¨Ú©Ù ÙØ§Ø¨ Ù Ø§Ø³Ù¾ÙÚ©: ÛÚ© Ø³Ø±ÙØ± ÙØ±Ú©Ø²Û ØªÙØ§Ù Ø§ÛÙØ¨Ø§ÙØ¯ ÙØ­ÙÛ Ø±Ø§ Ø§Ø² Ø·Ø±ÛÙ ØªØ§ Û±Û°Û° ÙÙØ¯ Ø®Ø§Ø±Ø¬Û Ø¹Ø¨ÙØ± ÙÛâÚ©ÙØ¯Ø ÛØ§ Ø¨Ø±Ø¹Ú©Ø³"
 "list" = "Ø´Ø¨Ú©ÙâÙØ§"
-"add" = "Ø´Ø¨Ú©Ù Ø¬Ø¯ÛØ¯"
-"edit" = "ÙÛØ±Ø§ÛØ´ Ø´Ø¨Ú©Ù"
-"name" = "ÙØ§Ù"
 "role" = "Ø¬ÙØª"
 "role.direct" = "ÙØ³ØªÙÛÙ: ÙØ§Ø¨ Ø¯Ø± Ø§ÛØ±Ø§ÙØ Ø§Ø³Ù¾ÙÚ©âÙØ§ Ø¯Ø± Ø®Ø§Ø±Ø¬"
 "role.reverse" = "ÙØ¹Ú©ÙØ³: Ø§Ø³Ù¾ÙÚ©âÙØ§ Ø¯Ø± Ø§ÛØ±Ø§ÙØ ÙØ§Ø¨ Ø¯Ø± Ø®Ø§Ø±Ø¬"
 "hub.host" = "ÙØ³Øª ÙØ§Ø¨ (IP ÛØ§ Ø¯Ø§ÙÙÙ)"
 "hub.port" = "Ù¾ÙØ±Øª ÙØ§Ø¨"
-"protocol" = "Ù¾Ø±ÙØªÚ©Ù"
 "spokes" = "Ø§Ø³Ù¾ÙÚ©âÙØ§"
 "spokes.hint" = "ØªØ§ Û±Û°Û° Ø³Ø±ÙØ± Ø®Ø§Ø±Ø¬Û. ÙØ± Ú©Ø¯Ø§Ù Ø¨Ø§ÛØ¯ ÙÙØ§Ù Ù¾ÙÙ Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©ÙØ¯."
 "spoke.host" = "ÙØ³Øª"
@@ -158,7 +118,6 @@
 "spoke.latency" = "ØªØ£Ø®ÛØ±"
 "spoke.bundle" = "Ø¯Ø§ÙÙÙØ¯ Ø¨Ø§ÙØ¯Ù"
 "spoke.install" = "Ø¯Ø³ØªÙØ± ÙØµØ¨ (Ø±ÙÛ Ø³Ø±ÙØ± Ø§Ø³Ù¾ÙÚ© Ø§Ø¬Ø±Ø§ Ø´ÙØ¯)"
-"enable" = "ÙØ¹Ø§Ù"
 "delete.confirm" = "Ø§ÛÙ Ø´Ø¨Ú©Ù Ù Ø³Ø±ØªÛÙÛÚ©Ø§ØªâÙØ§ÛØ´ Ø­Ø°Ù Ø´ÙØ¯Ø Ø§Ø³Ù¾ÙÚ©âÙØ§ ÙÙØ±Ø§Ù ÙØ·Ø¹ ÙÛâØ´ÙÙØ¯."
 "toasts.added" = "Ø´Ø¨Ú©Ù Ø³Ø§Ø®ØªÙ Ø´Ø¯"
 "toasts.updated" = "Ø´Ø¨Ú©Ù Ø¨ÙâØ±ÙØ² Ø´Ø¯"
@@ -169,7 +128,6 @@
 
 [pages.login]
 "hello" = "Ø³ÙØ§Ù"
-"title" = "Ø®ÙØ´âØ¢ÙØ¯ÛØ¯"
 "loginAgain" = "ÙØ¯Øª Ø²ÙØ§Ù Ø§Ø³ØªÙØ§Ø¯Ù Ø¨ÙâØ§ØªÙØ§ÙâØ±Ø³ÛØ¯ÙØ ÙØ·ÙØ§ Ø¯ÙØ¨Ø§Ø±Ù ÙØ§Ø±Ø¯ Ø´ÙÛØ¯"
 "showPassword" = "ÙÙØ§ÛØ´ Ø±ÙØ²Ø¹Ø¨ÙØ±"
 "hidePassword" = "Ù¾ÙÙØ§Ù Ú©Ø±Ø¯Ù Ø±ÙØ²Ø¹Ø¨ÙØ±"
@@ -188,7 +146,6 @@
 "donateIntro" = "Ø§Ú¯Ø± VPN-UI Ø¨Ø±Ø§Û Ø´ÙØ§ ÙÙÛØ¯ Ø¨ÙØ¯Ù Ø§Ø³ØªØ Ú©ÙÚ© ÙØ§ÙÛ Ø¨Ù ÙØ± ÛÚ© Ø§Ø² Ø§ÛÙ Ø¢Ø¯Ø±Ø³âÙØ§ Ø¨Ù ÙÚ¯ÙØ¯Ø§Ø±Û Ø¢Ù Ú©ÙÚ© ÙÛâÚ©ÙØ¯."
 "restore" = "Ø¨Ø§Ø²ÛØ§Ø¨Û"
 "systemStatus" = "ÙØ¶Ø¹ÛØª Ø³ÛØ³ØªÙ"
-"title" = "ÙÙØ§Û Ú©ÙÛ"
 "cpu" = "Ù¾Ø±Ø¯Ø§Ø²ÙØ¯Ù"
 "logicalProcessors" = "Ù¾Ø±Ø¯Ø§Ø²ÙØ¯ÙâÙØ§Û ÙÙØ·ÙÛ"
 "frequency" = "ÙØ±Ú©Ø§ÙØ³"
@@ -196,7 +153,6 @@
 "storage" = "Ø°Ø®ÛØ±ÙâØ³Ø§Ø²Û"
 "memory" = "Ø­Ø§ÙØ¸Ù Ø±Ù"
 "threads" = "Ø±Ø´ØªÙâÙØ§"
-"xrayStatus" = "Ø§ÛÚ©Ø³âØ±Û"
 "stopXray" = "ØªÙÙÙ"
 "restartXray" = "Ø´Ø±ÙØ¹âÙØ¬Ø¯Ø¯"
 "xraySwitch" = "âÙØ³Ø®Ù"
@@ -227,8 +183,6 @@
 "ipAddresses" = "Ø¢Ø¯Ø±Ø³âÙØ§Û IP"
 "toggleIpVisibility" = "ØªØºÛÛØ± ÙØ¶Ø¹ÛØª ÙÙØ§ÛØ´ IP"
 "overallSpeed" = "Ø³Ø±Ø¹Øª Ú©ÙÛ"
-"upload" = "Ø¢Ù¾ÙÙØ¯"
-"download" = "Ø¯Ø§ÙÙÙØ¯"
 "totalData" = "Ø¯Ø§Ø¯ÙâÙØ§Û Ú©Ù"
 "sent" = "Ø§Ø±Ø³Ø§Ù Ø´Ø¯Ù"
 "received" = "Ø¯Ø±ÛØ§ÙØª Ø´Ø¯Ù"
@@ -318,15 +272,12 @@
 "groupsTitle" = "Ú¯Ø±ÙÙâÙØ§Û ÙØ±ÙØ¯Û"
 "groupsEmpty" = "ÙÙÙØ² Ú¯Ø±ÙÙÛ ÙÛØ³Øª"
 "groupMoveRoot" = "Ø§ÙØªÙØ§Ù Ø¨Ù Ø±ÛØ´Ù"
-"groupDeleteConfirm" = "Ø§ÛÙ Ú¯Ø±ÙÙ Ø­Ø°Ù Ø´ÙØ¯Ø"
-"groupName" = "ÙØ§Ù Ú¯Ø±ÙÙ"
 "groupChooseInbounds" = "Ø§ÙØªØ®Ø§Ø¨ ÙØ±ÙØ¯ÛâÙØ§"
 "groupSave" = "Ø°Ø®ÛØ±Ù Ú¯Ø±ÙÙ"
 "groupCreate" = "Ø§ÛØ¬Ø§Ø¯ Ú¯Ø±ÙÙ"
 "groupNew" = "Ø¬Ø¯ÛØ¯"
 "inboundMembership" = "ÙØ±ÙØ¯ÛâÙØ§"
 "inboundMembershipDesc" = "ÙØ±ÙØ¯ÛâÙØ§ÛÛ Ú©Ù Ø§ÛÙ Ø­Ø³Ø§Ø¨ Ø±ÙÛ Ø¢ÙâÙØ§ Ø³Ø±ÙÛØ³ ÙÛâÚ¯ÛØ±Ø¯. Ø±ÙÛ ÙÙÙ Ø¢ÙâÙØ§ ÙÙØ§Ù Ø§ÛÙÛÙØ ÙÙØ§Ù Ø­Ø¬Ù Ù ÙÙØ§Ù ØªØ§Ø±ÛØ® Ø§ÙÙØ¶Ø§ Ø±Ø§ Ø¯Ø§Ø±Ø¯. Ø¨Ø±Ø¯Ø§Ø´ØªÙ ØªÛÚ© ÛÚ© ÙØ±ÙØ¯ÛØ Ø­Ø³Ø§Ø¨ Ø±Ø§ Ø§Ø² Ø¢Ù ÙØ±ÙØ¯Û Ø­Ø°Ù ÙÛâÚ©ÙØ¯. ÙØ±ÙØ¯ÛâØ§Û Ú©Ù Ø§ÛÙ ÙØ±Ù Ø§Ø² Ø¢Ù Ø¨Ø§Ø² Ø´Ø¯Ù ÙÙÛØ´Ù ØªÛÚ©âØ®ÙØ±Ø¯Ù ÙÛâÙØ§ÙØ¯."
-"selectAllInbounds" = "Ø§ÙØªØ®Ø§Ø¨ ÙÙÙ"
 "membershipCurrentInbound" = "ÙØ±ÙØ¯Û ÙØ¹ÙÛ"
 "membershipSameProtocol" = "ÙØ± Ø­Ø³Ø§Ø¨ ÙÙØ· ÙÛâØªÙØ§ÙØ¯ Ø±ÙÛ ÛÚ© ÙØ±ÙØ¯Û l2tpØ pptp ÛØ§ ikev2 Ø¨Ø§Ø´Ø¯. Ø§ÛÙ Ù¾Ø±ÙØªÚ©ÙâÙØ§ Ø§Ø² ÛÚ© Ø³Ø±ÙÛØ³ ÙØ´ØªØ±Ú© Ø§Ø­Ø±Ø§Ø² ÙÙÛØª ÙÛâÚ¯ÛØ±ÙØ¯ Ú©Ù ÙØ§Ù ÙØ±ÙØ¯Û Ø±Ø§ ÙÙÛâÙØ±Ø³ØªØ¯Ø Ù¾Ø³ ÙØ±ÙØ¯Û Ø¯ÙÙ ÙÛÚâÙÙØª Ø§Ø³ØªÙØ§Ø¯Ù ÙÙÛâØ´ÙØ¯."
 "membershipOnInbounds" = "Ø±ÙÛ %COUNT% ÙØ±ÙØ¯Û"
@@ -349,34 +300,23 @@
 "opEnable" = "Enable"
 "opDisable" = "Disable"
 "amount" = "Amount"
-"days" = "days"
 "skipFirstUse" = "Skip start-after-first-use accounts"
 "skipUnlimited" = "Skip unlimited accounts"
 "skipDisabled" = "Skip disabled accounts"
 "allTimeTraffic" = "Ú©Ù ØªØ±Ø§ÙÛÚ©"
-"inbound" = "ÙØ±ÙØ¯Û"
-"endpoint" = "ÙØ´Ø§ÙÛ Ø§ØªØµØ§Ù"
 "allTimeShort" = "Ø§Ø² Ø§Ø¨ØªØ¯Ø§"
 "healthy" = "Ø³Ø§ÙÙ"
 "noLimit" = "Ø¨Ø¯ÙÙ ÙØ­Ø¯ÙØ¯ÛØª"
 "allTimeTrafficUsage" = "Ú©Ù Ø§Ø³ØªÙØ§Ø¯Ù Ø¯Ø± ØªÙØ§Ù ÙØ¯Øª"
-"title" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
 "totalDownUp" = "Ø¯Ø±ÛØ§ÙØª/Ø§Ø±Ø³Ø§Ù Ú©Ù"
 "totalUsage" = "âââÙØµØ±Ù Ú©Ù"
-"inboundCount" = "Ú©Ù ÙØ±ÙØ¯ÛâÙØ§"
 "operate" = "Ø¹ÙÙÛØ§Øª"
-"enable" = "ÙØ¹Ø§Ù"
-"remark" = "ÙØ§Ù"
-"protocol" = "Ù¾Ø±ÙØªÚ©Ù"
-"port" = "Ù¾ÙØ±Øª"
 "portMap" = "Ù¾ÙØ±ØªâÙØ§Û ÙØ¸ÛØ±"
-"traffic" = "ØªØ±Ø§ÙÛÚ©"
 "details" = "ØªÙØ¶ÛØ­Ø§Øª"
 "transportConfig" = "ÙØ­ÙÙ Ø§ØªØµØ§Ù"
 "expireDate" = "ÙØ¯Øª Ø²ÙØ§Ù"
 "createdAt" = "Ø§ÛØ¬Ø§Ø¯"
 "updatedAt" = "Ø¨ÙâØ±ÙØ²Ø±Ø³Ø§ÙÛ"
-"resetTraffic" = "Ø±ÛØ³Øª ØªØ±Ø§ÙÛÚ©"
 "opDelete" = "Ø­Ø°Ù"
 "addInbound" = "Ø§ÙØ²ÙØ¯Ù ÙØ±ÙØ¯Û"
 "presets" = "Ù¾ÛØ´âØªÙØ¸ÛÙâÙØ§"
@@ -397,13 +337,10 @@
 "autoRefresh" = "ØªØ§Ø²ÙâØ³Ø§Ø²Û Ø®ÙØ¯Ú©Ø§Ø±"
 "autoRefreshInterval" = "ÙØ§ØµÙÙ"
 "modifyInbound" = "ÙÛØ±Ø§ÛØ´ ÙØ±ÙØ¯Û"
-"deleteInbound" = "Ø­Ø°Ù ÙØ±ÙØ¯Û"
 "deleteInboundContent" = "Ø¢ÛØ§ ÙØ·ÙØ¦Ù Ø¨Ù Ø­Ø°Ù ÙØ±ÙØ¯Û ÙØ³ØªÛØ¯Ø"
-"deleteClient" = "Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø±"
 "deleteClientContent" = "Ø¢ÛØ§ ÙØ·ÙØ¦Ù Ø¨Ù Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø± ÙØ³ØªÛØ¯Ø"
 "resetTrafficContent" = "Ø¢ÛØ§ ÙØ·ÙØ¦Ù Ø¨Ù Ø±ÛØ³Øª ØªØ±Ø§ÙÛÚ© ÙØ³ØªÛØ¯Ø"
 "copyLink" = "Ú©Ù¾Û ÙÛÙÚ©"
-"address" = "Ø¢Ø¯Ø±Ø³"
 "network" = "Ø´Ø¨Ú©Ù"
 "destinationPort" = "Ù¾ÙØ±Øª ÙÙØµØ¯"
 "targetAddress" = "Ø¢Ø¯Ø±Ø³ ÙÙØµØ¯"
@@ -414,7 +351,6 @@
 "noRecommendKeepDefault" = "ØªÙØµÛÙâÙÛâØ´ÙØ¯ Ø¨ÙâØ·ÙØ± Ù¾ÛØ´âÙØ±Ø¶ Ø­ÙØ¸âØ´ÙØ¯"
 "certificatePath" = "ÙØ³ÛØ± ÙØ§ÛÙ"
 "certificateContent" = "ÙØ­ØªÙØ§Û ÙØ§ÛÙ"
-"publicKey" = "Ú©ÙÛØ¯ Ø¹ÙÙÙÛ"
 "privatekey" = "Ú©ÙÛØ¯ Ø®ØµÙØµÛ"
 "clickOnQRcode" = "Ø¨Ø±Ø§Û Ú©Ù¾Û Ø¨Ø± Ø±ÙÛ Ú©Ø¯ØªØµÙÛØ±Û Ú©ÙÛÚ© Ú©ÙÛØ¯"
 "client" = "Ú©Ø§Ø±Ø¨Ø±"
@@ -437,7 +373,6 @@
 "delDepletedClients" = "Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø±Ø§Ù ÙÙÙØ¶Û"
 "delDepletedClientsTitle" = "Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø±Ø§Ù ÙÙÙØ¶Û"
 "delDepletedClientsContent" = "Ø¢ÛØ§ ÙØ·ÙØ¦Ù Ø¨Ù Ø­Ø°Ù ØªÙØ§Ù Ú©Ø§Ø±Ø¨Ø±Ø§Ù ÙÙÙØ¶ÛâØ´Ø¯Ù âÙØ³ØªÛØ¯Ø"
-"email" = "Ø§ÛÙÛÙ"
 "emailDesc" = "Ø¨Ø§ÛØ¯ ÛÚ© Ø§ÛÙÛÙ ÛÚ©ØªØ§ Ø¨Ø§Ø´Ø¯"
 "IPLimit" = "ÙØ­Ø¯ÙØ¯ÛØª Ø¢ÛâÙ¾Û"
 "IPLimitDesc" = "(Ø§Ú¯Ø± ØªØ¹Ø¯Ø§Ø¯ Ø§Ø² ÙÙØ¯Ø§Ø± ØªÙØ¸ÛÙ Ø´Ø¯Ù Ø¨ÛØ´ØªØ± Ø´ÙØ¯Ø ÙØ±ÙØ¯Û Ø±Ø§ ØºÛØ±ÙØ¹Ø§Ù ÙÛ Ú©ÙØ¯. (0 = ØºÛØ±ÙØ¹Ø§Ù"
@@ -447,7 +382,6 @@
 "setDefaultCert" = "Ø§Ø³ØªÙØ§Ø¯Ù Ø§Ø² Ú¯ÙØ§ÙÛ Ù¾ÙÙ"
 "telegramDesc" = "ÙØ·ÙØ§ Ø´ÙØ§Ø³Ù Ú¯ÙØªÚ¯ÙÛ ØªÙÚ¯Ø±Ø§Ù Ø±Ø§ ÙØ§Ø±Ø¯ Ú©ÙÛØ¯. (Ø§Ø² Ø¯Ø³ØªÙØ± '/id' Ø¯Ø± Ø±Ø¨Ø§Øª Ø§Ø³ØªÙØ§Ø¯Ù Ú©ÙÛØ¯) ÛØ§ (@userinfobot)"
 "subscriptionDesc" = "Ø´ÙØ§ ÙÛâØªÙØ§ÙÛØ¯ ÙÛÙÚ© Ø³Ø§Ø¨Ø³Ú©Ø±Ø¨Ù¾Ø´Ù Ø®ÙØ¯Ø±Ø§ Ø¯Ø± 'Ø¬Ø²Ø¦ÛØ§Øª' Ù¾ÛØ¯Ø§ Ú©ÙÛØ¯Ø ÙÙÚÙÛÙ ÙÛâØªÙØ§ÙÛØ¯ Ø§Ø² ÙÙÛÙ ÙØ§Ù Ø¨Ø±Ø§Û ÚÙØ¯ÛÙ Ú©Ø§Ø±Ø¨Ø± Ø§Ø³ØªÙØ§Ø¯ÙâÚ©ÙÛØ¯"
-"info" = "Ø§Ø·ÙØ§Ø¹Ø§Øª"
 "same" = "ÙÙØ³Ø§Ù"
 "inboundData" = "Ø¯Ø§Ø¯ÙâÙØ§Û ÙØ±ÙØ¯Û"
 "exportInbound" = "Ø§Ø³ØªØ®Ø±Ø§Ø¬ ÙØ±ÙØ¯Û"
@@ -478,8 +412,6 @@
 
 "useManagedCert" = "Ú¯ÙØ§ÙÛ"
 [pages.client]
-"add" = "Ú©Ø§Ø±Ø¨Ø± Ø¬Ø¯ÛØ¯"
-"edit" = "ÙÛØ±Ø§ÛØ´ Ú©Ø§Ø±Ø¨Ø±"
 "freeze" = "ØªØ¹ÙÛÙ"
 "unfreeze" = "Ø±ÙØ¹ ØªØ¹ÙÛÙ"
 "frozen" = "ÙØ¹ÙÙ"
@@ -499,23 +431,15 @@
 "copyResultErrors" = "Ø®Ø·Ø§ÙØ§Û Ú©Ù¾Û"
 "copyFlowLabel" = "Flow Ø¨Ø±Ø§Û Ú©Ø§Ø±Ø¨Ø±Ø§Ù Ø¬Ø¯ÛØ¯ (VLESS)"
 "copyFlowHint" = "Ø¨Ø±Ø§Û ÙÙÙ Ú©Ø§Ø±Ø¨Ø±Ø§Ù Ú©Ù¾ÛâØ´Ø¯Ù Ø§Ø¹ÙØ§Ù ÙÛâØ´ÙØ¯. Ø¨Ø±Ø§Û ÙØ§Ø¯ÛØ¯Ù Ú¯Ø±ÙØªÙØ Ø®Ø§ÙÛ Ø¨Ú¯Ø°Ø§Ø±ÛØ¯."
-"selectAll" = "Ø§ÙØªØ®Ø§Ø¨ ÙÙÙ"
 "clearAll" = "Ù¾Ø§Ú© Ú©Ø±Ø¯Ù ÙÙÙ"
-"method" = "Ø±ÙØ´"
-"first" = "Ø§Ø²"
-"last" = "ØªØ§"
 "prefix" = "Ù¾ÛØ´ÙÙØ¯"
 "postfix" = "Ù¾Ø³ÙÙØ¯"
 "delayedStart" = "Ø´Ø±ÙØ¹âÙ¾Ø³âØ§Ø²âØ§ÙÙÛÙâØ§Ø³ØªÙØ§Ø¯Ù"
 "expireDays" = "ÙØ¯Øª Ø²ÙØ§Ù"
-"days" = "(Ø±ÙØ²)"
-"renew" = "ØªÙØ¯ÛØ¯ Ø®ÙØ¯Ú©Ø§Ø±"
-"renewDesc" = "ØªÙØ¯ÛØ¯ Ø®ÙØ¯Ú©Ø§Ø± Ù¾Ø³âØ§Ø² âØ§ÙÙØ¶Ø§. (0 = ØºÛØ±ÙØ¹Ø§Ù)(ÙØ§Ø­Ø¯: Ø±ÙØ²)"
 
 [pages.clients]
 "summaryTarget" = "Inbound"
 "groups" = "Ú¯Ø±ÙÙâÙØ§"
-"allClients" = "ÙÙÙ Ú©ÙØ§ÛÙØªâÙØ§"
 "groupsManage" = "ÙØ¯ÛØ±ÛØª Ú¯Ø±ÙÙâÙØ§"
 "groupsHint" = "Ú©ÙØ§ÛÙØªâÙØ§ØªÙÙ Ø±Ù Ø¯Ø± Ú¯Ø±ÙÙâÙØ§Û ÙØ§ÙâØ¯Ø§Ø± Ø¯Ø³ØªÙâØ¨ÙØ¯Û Ú©ÙÛØ¯. Ø­Ø°Ù Ú¯Ø±ÙÙ ÙÙØ· Ø®ÙØ¯Ù Ú¯Ø±ÙÙ Ø±Ù Ø­Ø°Ù ÙÛâÚ©ÙÙØ Ú©ÙØ§ÛÙØªâÙØ§Û Ø¯Ø§Ø®ÙØ´ Ø¯Ø³ØªâÙØ®ÙØ±Ø¯Ù ÙÛâÙÙÙÙ."
 "newGroup" = "Ú¯Ø±ÙÙ Ø¬Ø¯ÛØ¯"
@@ -566,7 +490,6 @@
 "summaryNever" = "Never"
 "summaryDays" = "days"
 "summaryInbounds" = "inbounds"
-"accountInfo" = "Ø§Ø·ÙØ§Ø¹Ø§Øª Ø­Ø³Ø§Ø¨"
 "nothingToHandOver" = "Ø¨Ø±Ø§Û Ø§ÛÙ Ù¾Ø±ÙØªÚ©Ù ÚÛØ²Û Ø¨Ø±Ø§Û ØªØ­ÙÛÙ ÙØ¬ÙØ¯ ÙØ¯Ø§Ø±Ø¯."
 "subGap" = "GRE ØªÙØ³Ø· Ø§Ø´ØªØ±Ø§Ú© Ù¾ÙØ´Ø´ Ø¯Ø§Ø¯Ù ÙÙÛâØ´ÙØ¯."
 "renewEvery" = "Renew every"
@@ -592,16 +515,11 @@
 "shareLinkShort" = "ÙÛÙÚ©"
 "vpnUsernameShort" = "Ú©Ø§Ø±Ø¨Ø±"
 "passwordShort" = "Ø±ÙØ²"
-"title" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
-"add" = "Ú©Ø§Ø±Ø¨Ø± Ø¬Ø¯ÛØ¯"
 "addTitle" = "Ø§ÙØ²ÙØ¯Ù Ú©Ø§Ø±Ø¨Ø±"
 "editTitle" = "ÙÛØ±Ø§ÛØ´ Ú©Ø§Ø±Ø¨Ø±"
-"email" = "Ø§ÛÙÛÙ"
 "quota" = "Ø­Ø¬Ù Ú©Ù"
 "expiry" = "Ø§ÙÙØ¶Ø§"
 "expiryDays" = "Ø§ÙÙØ¶Ø§ (Ø±ÙØ²)"
-"inbounds" = "ÙØ±ÙØ¯ÛâÙØ§"
-"noInbounds" = "Ø¨Ø¯ÙÙ ÙØ±ÙØ¯Û"
 "noInboundsHint" = "Ø­Ø³Ø§Ø¨ Ø§Ø¹ØªØ¨Ø§Ø±ÙØ§ÙÙâÙØ§Ø Ø³ÙÙÛÙ Ù ØªØ§Ø±ÛØ®ÚÙ ÙØµØ±ÙØ´ Ø±Ø§ ÙÚ¯Ù ÙÛâØ¯Ø§Ø±Ø¯Ø Ø§ÙØ§ ÙÛÚ ÙØ±ÙØ¯ÛâØ§Û Ø¢Ù Ø±Ø§ Ø³Ø±Ù ÙÙÛâÚ©ÙØ¯: ØªØ§ ÙÙØªÛ ÙØ±ÙØ¯Û Ø§ÙØªØ®Ø§Ø¨ ÙØ´ÙØ¯ ÙÙÛâØªÙØ§ÙØ¯ ÙØµÙ Ø´ÙØ¯."
 "searchPlaceholder" = "Ø¬Ø³ØªØ¬Ù Ø¨Ø± Ø§Ø³Ø§Ø³ Ø§ÛÙÛÙØ ØªÙØ¶ÛØ­Ø§Øª ÛØ§ ÙØ±ÙØ¯Û"
 "selected" = "Ø§ÙØªØ®Ø§Ø¨âØ´Ø¯Ù"
@@ -614,7 +532,6 @@
 "partialDeleteTitle" = "Ø§ÛÙ Ú©Ø§Ø±Ø¨Ø± ÙÙÙØ² Ø±ÙÛ Ø¨Ø±Ø®Û ÙØ±ÙØ¯ÛâÙØ§ Ø¨Ø§ÙÛ ÙØ§ÙØ¯Ù Ø§Ø³Øª"
 "bulkDeleteTitle" = "Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
 "bulkDeleteContent" = "Ú©Ø§Ø±Ø¨Ø± Ø§Ø² ØªÙØ§Ù ÙØ±ÙØ¯ÛâÙØ§ÛÛ Ú©Ù Ø¨Ù Ø¢ÙâÙØ§ Ø³Ø±ÙÛØ³ ÙÛâØ¯ÙÙØ¯ Ø­Ø°Ù ÙÛâØ´ÙÙØ¯."
-"ipLimit" = "ÙØ­Ø¯ÙØ¯ÛØª Ø¢ÛâÙ¾Û"
 "comment" = "ØªÙØ¶ÛØ­Ø§Øª"
 "zeroUnlimited" = "0 = ÙØ§ÙØ­Ø¯ÙØ¯ (ÙØ§Ø­Ø¯: Ú¯ÛÚ¯Ø§Ø¨Ø§ÛØª)"
 "zeroNoExpiry" = "0 = Ø¨Ø¯ÙÙ Ø§ÙÙØ¶Ø§"
@@ -669,14 +586,11 @@
 [pages.inbounds.stream.general]
 "request" = "Ø¯Ø±Ø®ÙØ§Ø³Øª"
 "response" = "Ù¾Ø§Ø³Ø®"
-"name" = "ÙØ§Ù"
 "value" = "ÙÙØ¯Ø§Ø±"
 
 [pages.inbounds.stream.tcp]
-"version" = "ÙØ³Ø®Ù"
 "method" = "ÙØªØ¯"
 "path" = "ÙØ³ÛØ±"
-"status" = "ÙØ¶Ø¹ÛØª"
 "statusDescription" = "ØªÙØ¶ÛØ­Ø§Øª ÙØ¶Ø¹ÛØª"
 "requestHeader" = "Ø³Ø±Ø¨Ø±Ú¯ Ø¯Ø±Ø®ÙØ§Ø³Øª"
 "responseHeader" = "Ø³Ø±Ø¨Ø±Ú¯ Ù¾Ø§Ø³Ø®"
@@ -705,8 +619,6 @@
 "serverMaxHeaderBytesNegative" = "Ø§ÛÙ ÙÙØ¯Ø§Ø± ÙÙÛâØªÙØ§ÙØ¯ ÙÙÙÛ Ø¨Ø§Ø´Ø¯. Ø¨Ø±Ø§Û ÙØ§Ú¯Ø°Ø§Ø±Û Ø¨Ù ÙØ³ØªÙØ Û° Ø¨Ú¯Ø°Ø§Ø±ÛØ¯."
 
 [pages.settings]
-"title" = "ØªÙØ¸ÛÙØ§Øª Ù¾ÙÙ"
-"save" = "Ø°Ø®ÛØ±Ù"
 "infoDesc" = "Ø¨Ø±Ø§Û Ø§Ø¹ÙØ§Ù ØªØºÛÛØ±Ø§Øª Ø¯Ø± Ø§ÛÙ Ø¨Ø®Ø´ Ø¨Ø§ÛØ¯ Ù¾Ø³ Ø§Ø² Ø°Ø®ÛØ±Ù Ú©Ø±Ø¯ÙØ Ù¾ÙÙ Ø±Ø§ Ø±ÛØ³ØªØ§Ø±Øª Ú©ÙÛØ¯"
 "restartPanel" = "Ø±ÛØ³ØªØ§Ø±Øª Ù¾ÙÙ"
 "restartPanelDesc" = "Ø¢ÛØ§ ÙØ·ÙØ¦Ù Ø¨Ù Ø±ÛØ³ØªØ§Ø±Øª Ù¾ÙÙ ÙØ³ØªÛØ¯Ø Ø§Ú¯Ø± Ù¾Ø³âØ§Ø² Ø±ÛØ³ØªØ§Ø±Øª ÙÙÛâØªÙØ§ÙÛØ¯ Ø¨Ù Ù¾ÙÙ Ø¯Ø³ØªØ±Ø³Û Ù¾ÛØ¯Ø§ Ú©ÙÛØ¯Ø ÙØ·ÙØ§Ù Ú¯Ø²Ø§Ø±Ø´âÙØ§Û ÙÙØ¬ÙØ¯ Ø¯Ø± Ø§Ø³Ú©Ø±ÛÙ¾Øª Ù¾ÙÙ Ø±Ø§ Ø¨Ø±Ø±Ø³Û Ú©ÙÛØ¯"
@@ -827,10 +739,8 @@
 "telegramBotLanguage" = "Ø²Ø¨Ø§Ù Ø±Ø¨Ø§Øª ØªÙÚ¯Ø±Ø§Ù"
 
 [pages.xray]
-"title" = "Ù¾ÛÚ©Ø±Ø¨ÙØ¯Û Ø§ÛÚ©Ø³âØ±Û"
 "save" = "Ø°Ø®ÛØ±Ù"
 "restart" = "Ø±ÛØ³ØªØ§Ø±Øª Ø§ÛÚ©Ø³âØ±Û"
-"restartSuccess" = "Xray Ø¨Ø§ ÙÙÙÙÛØª Ø±Ø§ÙâØ§ÙØ¯Ø§Ø²Û ÙØ¬Ø¯Ø¯ Ø´Ø¯"
 "stopSuccess" = "Xray Ø¨Ø§ ÙÙÙÙÛØª ÙØªÙÙÙ Ø´Ø¯"
 "restartError" = "Ø®Ø·Ø§ Ø¯Ø± Ø±Ø§ÙâØ§ÙØ¯Ø§Ø²Û ÙØ¬Ø¯Ø¯ Xray."
 "stopError" = "Ø®Ø·Ø§ Ø¯Ø± ØªÙÙÙ Xray."
@@ -894,16 +804,11 @@
 [pages.xray.rules]
 "first" = "Ø§ÙÙÛÙ"
 "last" = "Ø¢Ø®Ø±ÛÙ"
-"up" = "Ø¨Ø§ÙØ§"
-"down" = "Ù¾Ø§ÛÛÙ"
 "source" = "ÙØ¨Ø¯Ø§"
 "dest" = "ÙÙØµØ¯"
-"inbound" = "ÙØ±ÙØ¯Û"
 "outbound" = "Ø®Ø±ÙØ¬Û"
 "balancer" = "Ø¨Ø§ÙØ§ÙØ³Ø±"
 "info" = "Ø§Ø·ÙØ§Ø¹Ø§Øª"
-"add" = "Ø§ÙØ²ÙØ¯Ù ÙØ§ÙÙÙ"
-"edit" = "ÙÛØ±Ø§ÛØ´ ÙØ§ÙÙÙ"
 "useComma" = "ÙÙØ§Ø±Ø¯ Ø¬Ø¯Ø§ Ø´Ø¯Ù Ø¨Ø§ Ú©Ø§ÙØ§"
 
 [pages.xray.outbound]
@@ -921,8 +826,6 @@
 "addReverse" = "Ø§ÙØ²ÙØ¯Ù ÙØ¹Ú©ÙØ³"
 "editOutbound" = "ÙÛØ±Ø§ÛØ´ Ø®Ø±ÙØ¬Û"
 "editReverse" = "ÙÛØ±Ø§ÛØ´ ÙØ¹Ú©ÙØ³"
-"tag" = "Ø¨Ø±ÚØ³Ø¨"
-"tagDesc" = "Ø¨Ø±ÚØ³Ø¨ ÛÚ¯Ø§ÙÙ"
 "address" = "Ø¢Ø¯Ø±Ø³"
 "reverse" = "ÙØ¹Ú©ÙØ³"
 "domain" = "Ø¯Ø§ÙÙÙ"
@@ -935,7 +838,6 @@
 "accountInfo" = "Ø§Ø·ÙØ§Ø¹Ø§Øª Ø­Ø³Ø§Ø¨"
 "outboundStatus" = "ÙØ¶Ø¹ÛØª Ø®Ø±ÙØ¬Û"
 "sendThrough" = "Ø§Ø±Ø³Ø§Ù Ø¨Ø§"
-"test" = "ØªØ³Øª"
 "testResult" = "ÙØªÛØ¬Ù ØªØ³Øª"
 "testing" = "Ø¯Ø± Ø­Ø§Ù ØªØ³Øª Ø§ØªØµØ§Ù..."
 "testSuccess" = "ØªØ³Øª ÙÙÙÙÛØªâØ¢ÙÛØ²"
@@ -955,8 +857,6 @@
 "editBalancer" = "ÙÛØ±Ø§ÛØ´ Ø¨Ø§ÙØ§ÙØ³Ø±"
 "balancerStrategy" = "Ø§Ø³ØªØ±Ø§ØªÚÛ"
 "balancerSelectors" = "Ø§ÙØªØ®Ø§Ø¨âÚ¯Ø±ÙØ§"
-"tag" = "Ø¨Ø±ÚØ³Ø¨"
-"tagDesc" = "Ø¨Ø±ÚØ³Ø¨ ÛÚ¯Ø§ÙÙ"
 "balancerDesc" = "Ø§ÙÚ©Ø§Ù Ø§Ø³ØªÙØ§Ø¯Ù ÙÙØ²ÙØ§Ù balancerTag Ù outboundTag Ø¨Ø§ÙÙ ÙØ¬ÙØ¯ ÙØ¯Ø§Ø±Ø¯. Ø¯Ø±ØµÙØ±Øª Ø§Ø³ØªÙØ§Ø¯Ù ÙÙØ²ÙØ§Ù ÙÙØ· outboundTag Ø¹ÙÙ Ø®ÙØ§ÙØ¯ Ú©Ø±Ø¯."
 
 [pages.xray.mtproto]
@@ -997,7 +897,6 @@
 "userLevelDesc" = "ØªÙØ§Ù Ø§ØªØµØ§ÙØ§Øª Ø§ÙØ¬Ø§ÙâØ´Ø¯Ù Ø§Ø² Ø·Ø±ÛÙ Ø§ÛÙ ÙØ±ÙØ¯Û Ø§Ø² Ø§ÛÙ Ø³Ø·Ø­ Ú©Ø§Ø±Ø¨Ø±Û Ø§Ø³ØªÙØ§Ø¯Ù Ø®ÙØ§ÙÙØ¯ Ú©Ø±Ø¯. ÙÙØ¯Ø§Ø± Ù¾ÛØ´âÙØ±Ø¶ 0 Ø§Ø³Øª"
 
 [pages.xray.dns]
-"enable" = "ÙØ¹Ø§Ù Ú©Ø±Ø¯Ù Ø­Ù Ø¯Ø§ÙÙÙ"
 "enableDesc" = "Ø³Ø±ÙØ± Ø­Ù Ø¯Ø§ÙÙÙ Ø¯Ø§Ø®ÙÛ Ø±Ø§ ÙØ¹Ø§Ù Ú©ÙÛØ¯"
 "tag" = "Ø¨Ø±ÚØ³Ø¨"
 "tagDesc" = "Ø§ÛÙ Ø¨Ø±ÚØ³Ø¨ Ø¯Ø± ÙÙØ§ÙÛÙ ÙØ³ÛØ±ÛØ§Ø¨Û Ø¨Ù Ø¹ÙÙØ§Ù ÛÚ© Ø¨Ø±ÚØ³Ø¨ ÙØ±ÙØ¯Û ÙØ§Ø¨Ù Ø§Ø³ØªÙØ§Ø¯Ù Ø®ÙØ§ÙØ¯ Ø¨ÙØ¯"
@@ -1013,8 +912,6 @@
 "enableParallelQueryDesc" = "ÙØ¹Ø§ÙâØ³Ø§Ø²Û Ù¾Ø±Ø³âÙØ¬ÙÙØ§Û DNS ÙÙØ§Ø²Û Ø¨Ù ÚÙØ¯ÛÙ Ø³Ø±ÙØ± Ø¨Ø±Ø§Û ÙØ¶ÙØ­ Ø³Ø±ÛØ¹âØªØ±"
 "strategy" = "Ø§Ø³ØªØ±Ø§ØªÚÛ Ù¾Ø±Ø³âÙØ¬Ù"
 "strategyDesc" = "Ø§Ø³ØªØ±Ø§ØªÚÛ Ú©ÙÛ Ø¨Ø±Ø§Û Ø­Ù ÙØ§Ù Ø¯Ø§ÙÙÙ"
-"add" = "Ø§ÙØ²ÙØ¯Ù Ø³Ø±ÙØ±"
-"edit" = "ÙÛØ±Ø§ÛØ´ Ø³Ø±ÙØ±"
 "domains" = "Ø¯Ø§ÙÙÙâÙØ§"
 "expectIPs" = "Ø¢ÛâÙ¾ÛâÙØ§Û ÙÙØ±Ø¯ Ø§ÙØªØ¸Ø§Ø±"
 "unexpectIPs" = "Ø¢ÛâÙ¾ÛâÙØ§Û ØºÛØ±ÙÙØªØ¸Ø±Ù"
@@ -1025,8 +922,6 @@
 "dnsPresetFamily" = "Ø®Ø§ÙÙØ§Ø¯Ú¯Û"
 
 [pages.xray.fakedns]
-"add" = "Ø§ÙØ²ÙØ¯Ù Ø¯ÛâØ§ÙâØ§Ø³ Ø¬Ø¹ÙÛ"
-"edit" = "ÙÛØ±Ø§ÛØ´ Ø¯ÛâØ§ÙâØ§Ø³ Ø¬Ø¹ÙÛ"
 "ipPool" = "Ø²ÛØ±Ø´Ø¨Ú©Ù Ø§Ø³ØªØ®Ø± Ø¢ÛâÙ¾Û"
 "poolSize" = "Ø§ÙØ¯Ø§Ø²Ù Ø§Ø³ØªØ®Ø±"
 
@@ -1047,7 +942,6 @@
 "tagSub" = "Ø§Ø´ØªØ±Ø§Ú©"
 "cardMoreNames" = "+{n} ÙØ§Ù Ø¯ÛÚ¯Ø±"
 "deleteProfileDesc" = "Ø¢Ù Ø±Ø§ Ø¨Ø§ ÙÙÙ ÙØ³Ø®ÙâÙØ§Û Ø°Ø®ÛØ±ÙâØ´Ø¯Ù Ø­Ø°Ù ÙÛâÚ©ÙØ¯. ØªØ§ ÙÙØªÛ ÚÛØ²Û Ø§Ø² Ø¢Ù Ø§Ø³ØªÙØ§Ø¯Ù ÙÛâÚ©ÙØ¯ Ø±Ø¯ ÙÛâØ´ÙØ¯."
-"deleteProfile" = "Ø­Ø°Ù Ø§ÛÙ Ú¯ÙØ§ÙÛ"
 "deleteProfileConfirm" = "Ú¯ÙØ§ÙÛ {name} Ù ÙÙÙ ÙØ³Ø®ÙâÙØ§Û Ø°Ø®ÛØ±ÙâØ´Ø¯Ù Ø²ÛØ± Ø¢Ù Ø­Ø°Ù Ø´ÙÙØ¯Ø Ø§ÛÙ Ú©Ø§Ø± Ø¨Ø±Ú¯Ø´ØªâÙ¾Ø°ÛØ± ÙÛØ³Øª."
 "cfToken" = "ØªÙÚ©Ù API Ú©ÙØ§Ø¯ÙÙØ±"
 "cfTokenDesc" = "Ø¨Ù Ø¯Ø³ØªØ±Ø³Û Zone:DNS:Edit Ø±ÙÛ ÙÙÛÙ Ø²ÙÙ Ù Zone:Zone:Read ÙÛØ§Ø² Ø¯Ø§Ø±Ø¯. Ø§ÛÙ ØªÙÚ©Ù Ø§Ø² Ø±Ø§Ù ÙØªØºÛØ±ÙØ§Û ÙØ­ÛØ·Û Ø¨Ù acme.sh Ø¯Ø§Ø¯Ù ÙÛâØ´ÙØ¯Ø Ø¯Ø± ØªÙØ¸ÛÙØ§Øª Ø°Ø®ÛØ±Ù ÙÙÛâØ´ÙØ¯ Ù ÙØ±Ú¯Ø² Ø¨Ù Ø§ÛÙ ØµÙØ­Ù Ø¨Ø±ÙÙÛâÚ¯Ø±Ø¯Ø¯."
@@ -1113,9 +1007,7 @@
 "nicknameAdd" = "Ø§ÙØ²ÙØ¯Ù ÙØ§Ù Ø¯ÙØ®ÙØ§Ù"
 "nicknameEdit" = "ØªØºÛÛØ± ÙØ§Ù Ø¯ÙØ®ÙØ§Ù"
 [pages.settings.ssl.toasts]
-"status" = "ÙØ¶Ø¹ÛØª Ú¯ÙØ§ÙÛ Ø®ÙØ§ÙØ¯Ù ÙØ´Ø¯."
 "consumers" = "ÙÙØ±Ø³Øª Ø³Ø±ÙÛØ³âÙØ§Û Ø§Ø³ØªÙØ§Ø¯ÙâÚ©ÙÙØ¯Ù Ø§Ø² Ø§ÛÙ Ú¯ÙØ§ÙÛ Ø¨Ù Ø¯Ø³Øª ÙÛØ§ÙØ¯."
-"start" = "Ø¹ÙÙÛØ§Øª Ø´Ø±ÙØ¹ ÙØ´Ø¯."
 "adopt" = "Ø§ÙØ²ÙØ¯Ù Ø¢Ù Ú¯ÙØ§ÙÛ ÙÙÚ©Ù ÙØ´Ø¯."
 "deleteProfile" = "Ú¯ÙØ§ÙÛ Ø­Ø°Ù Ø´Ø¯."
 "rollback" = "Ø¨Ù ÙØ³Ø®Ù Ø§ÙØªØ®Ø§Ø¨âØ´Ø¯Ù Ø¨Ø§Ø²Ú¯Ø´Øª Ø§ÙØ¬Ø§Ù Ø´Ø¯."
@@ -1124,10 +1016,8 @@
 "unassign" = "Ø¢Ù Ø´ÙÙÙØ¯Ù Ø¯ÛÚ¯Ø± Ú¯ÙØ§ÙÛ ÙØ¯Ø§Ø±Ø¯."
 "autoAssigned" = "Ú¯ÙØ§ÙÛ ØªØ§Ø²Ù Ø§Ú©ÙÙÙ Ø§Ø±Ø§Ø¦Ù ÙÛâØ´ÙØ¯."
 "autoRenew" = "ØªÙØ¯ÛØ¯ Ø®ÙØ¯Ú©Ø§Ø± Ø¨ÙâØ±ÙØ² Ø´Ø¯."
-"nickname" = "ÙØ§Ù Ø¯ÙØ®ÙØ§Ù Ø°Ø®ÛØ±Ù Ø´Ø¯."
 [pages.settings.security]
 "admin" = "Ø§Ø¹ØªØ¨Ø§Ø±ÙØ§ÙÙâÙØ§Û Ø§Ø¯ÙÛÙ"
-"twoFactor" = "Ø§Ø­Ø±Ø§Ø² ÙÙÛØª Ø¯Ù ÙØ±Ø­ÙÙâØ§Û"
 "twoFactorEnable" = "ÙØ¹Ø§ÙâØ³Ø§Ø²Û 2FA"
 "twoFactorEnableDesc" = "ÛÚ© ÙØ§ÛÙ Ø§Ø¶Ø§ÙÛ Ø§ÙÙÛØªÛ Ø¨Ø±Ø§Û Ø§Ø­Ø±Ø§Ø² ÙÙÛØª ÙØ±Ø§ÙÙ ÙÛâÚ©ÙØ¯."
 "twoFactorModalSetTitle" = "ÙØ¹Ø§ÙâØ³Ø§Ø²Û Ø§Ø­Ø±Ø§Ø² ÙÙÛØª Ø¯Ù ÙØ±Ø­ÙÙâØ§Û"
@@ -1158,20 +1048,12 @@
 "noQuery" = "â Ø¯Ø±Ø®ÙØ§Ø³Øª ÛØ§ÙØª ÙØ´Ø¯! ÙØ·ÙØ§ Ø¯ÙØ¨Ø§Ø±Ù ØªÙØ§Ø´ Ú©ÙÛØ¯!"
 "wentWrong" = "â ÙØ´Ú©ÙÛ Ù¾ÛØ´ Ø¢ÙØ¯!"
 "noIpRecord" = "â Ø±Ú©ÙØ±Ø¯ Ø¢Û Ù¾Û ÙØ¬ÙØ¯ ÙØ¯Ø§Ø±Ø¯!"
-"noInbounds" = "â ÙÛÚ ÙØ±ÙØ¯Û ÛØ§ÙØª ÙØ´Ø¯!"
-"unlimited" = "â¾ ÙØ§ÙØ­Ø¯ÙØ¯(Ø±ÛØ³Øª)"
-"add" = "Ø§ÙØ²ÙØ¯Ù"
 "month" = "ÙØ§Ù"
 "months" = "ÙØ§Ù"
 "day" = "Ø±ÙØ²"
 "days" = "Ø±ÙØ²"
 "hours" = "Ø³Ø§Ø¹Øª"
 "minutes" = "Ø¯ÙÛÙÙ"
-"unknown" = "ÙØ§ÙØ´Ø®Øµ"
-"inbounds" = "ÙØ±ÙØ¯Û ÙØ§"
-"clients" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù"
-"offline" = "ð´ Ø¢ÙÙØ§ÛÙ"
-"online" = "ð¢ Ø¢ÙÙØ§ÛÙ"
 
 [tgbot.commands]
 "unknown" = "â Ø¯Ø³ØªÙØ± ÙØ§Ø´ÙØ§Ø®ØªÙ"
@@ -1216,8 +1098,6 @@
 "udpCount" = "ð¸ UDP: {{ .Count }}\r\n"
 "traffic" = "ð¦ ØªØ±Ø§ÙÛÚ©: {{ .Total }} (â{{ .Upload }},â{{ .Download }})\r\n"
 "xrayStatus" = "â¹ï¸ ÙØ¶Ø¹ÛØªâØ§ÛÚ©Ø³âØ±Û: {{ .State }}\r\n"
-"username" = "ð¤ ÙØ§ÙâÚ©Ø§Ø±Ø¨Ø±Û: {{ .Username }}\r\n"
-"password" = "ð¤ Ø±ÙØ² Ø¹Ø¨ÙØ±: {{ .Password }}\r\n"
 "time" = "â° Ø²ÙØ§Ù: {{ .Time }}\r\n"
 "inbound" = "ð ÙØ§ÙâÙØ±ÙØ¯Û: {{ .Remark }}\r\n"
 "port" = "ð Ù¾ÙØ±Øª: {{ .Port }}\r\n"
@@ -1225,9 +1105,7 @@
 "expireIn" = "ð Ø¨Ø§ÙÛâ ÙØ§ÙØ¯Ùâ ØªØ§ Ø§ÙÙØ¶Ø§: {{ .Time }}\r\n\r\n"
 "active" = "ð¡ ÙØ¹Ø§Ù: {{ .Enable }}\r\n"
 "enabled" = "ð¨ ÙØ¶Ø¹ÛØª: {{ .Enable }}\r\n"
-"online" = "ð ÙØ¶Ø¹ÛØª Ø§ØªØµØ§Ù: {{ .Status }}\r\n"
 "lastOnline" = "ð Ø¢Ø®Ø±ÛÙ ÙØ¹Ø§ÙÛØª: {{ .Time }}\r\n"
-"email" = "ð§ Ø§ÛÙÛÙ: {{ .Email }}\r\n"
 "upload" = "ð¼ Ø¢Ù¾ÙÙØ¯â: {{ .Upload }}\r\n"
 "download" = "ð½ Ø¯Ø§ÙÙÙØ¯â: {{ .Download }}\r\n"
 "total" = "ð Ú©Ù: {{ .UpDown }} / {{ .Total }}\r\n"
@@ -1236,7 +1114,6 @@
 "exhaustedCount" = "ð¨ ØªØ¹Ø¯Ø§Ø¯ {{ .Type }} Ø¨ÙâØ§ØªÙØ§ÙâØ±Ø³ÛØ¯ÙâØ§Ø³Øª:\r\n"
 "onlinesCount" = "ð Ú©Ø§Ø±Ø¨Ø±Ø§ÙâØ¢ÙÙØ§ÛÙ: {{ .Count }}\r\n"
 "disabled" = "ð ØºÛØ±ÙØ¹Ø§Ù: {{ .Disabled }}\r\n"
-"depleteSoon" = "ð Ø¨ÙâØ²ÙØ¯ÛâØ¨ÙâÙ¾Ø§ÛØ§ÙâØ®ÙØ§ÙØ¯Ø±Ø³ÛØ¯: {{ .Deplete }}\r\n\r\n"
 "backupTime" = "ð Ø²ÙØ§ÙâÙ¾Ø´ØªÛØ¨Ø§ÙâÚ¯ÛØ±Û: {{ .Time }}\r\n"
 "refreshedOn" = "\r\nðð ØªØ§Ø²ÙâØ³Ø§Ø²Û Ø´Ø¯Ù Ø¯Ø±: {{ .Time }}\r\n\r\n"
 "yes" = "â Ø¨ÙÙ"
@@ -1251,7 +1128,6 @@
 "comment_prompt" = "ð¬ ÙØ¸Ø± Ù¾ÛØ´âÙØ±Ø¶: {{ .ClientComment }}\n\nÙØ¸Ø± Ø®ÙØ¯ Ø±Ø§ ÙØ§Ø±Ø¯ Ú©ÙÛØ¯."
 "inbound_client_data_id" = "ð ÙØ±ÙØ¯Û: {{ .InboundRemark }}\n\nð Ø´ÙØ§Ø³Ù: {{ .ClientId }}\nð§ Ø§ÛÙÛÙ: {{ .ClientEmail }}\nð ØªØ±Ø§ÙÛÚ©: {{ .ClientTraffic }}\nð ØªØ§Ø±ÛØ® Ø§ÙÙØ¶Ø§: {{ .ClientExp }}\nð ÙØ­Ø¯ÙØ¯ÛØª IP: {{ .IpLimit }}\nð¬ ØªÙØ¶ÛØ­: {{ .ClientComment }}\n\nØ§Ú©ÙÙÙ ÙÛâØªÙÙÛ ÙØ´ØªØ±Û Ø±Ø§ Ø¨Ù ÙØ±ÙØ¯Û Ø§Ø¶Ø§ÙÙ Ú©ÙÛ!"
 "inbound_client_data_pass" = "ð ÙØ±ÙØ¯Û: {{ .InboundRemark }}\n\nð Ø±ÙØ² Ø¹Ø¨ÙØ±: {{ .ClientPass }}\nð§ Ø§ÛÙÛÙ: {{ .ClientEmail }}\nð ØªØ±Ø§ÙÛÚ©: {{ .ClientTraffic }}\nð ØªØ§Ø±ÛØ® Ø§ÙÙØ¶Ø§: {{ .ClientExp }}\nð ÙØ­Ø¯ÙØ¯ÛØª IP: {{ .IpLimit }}\nð¬ ØªÙØ¶ÛØ­: {{ .ClientComment }}\n\nØ§Ú©ÙÙÙ ÙÛâØªÙÙÛ ÙØ´ØªØ±Û Ø±Ø§ Ø¨Ù ÙØ±ÙØ¯Û Ø§Ø¶Ø§ÙÙ Ú©ÙÛ!"
-"cancel" = "â ÙØ±Ø¢ÛÙØ¯ ÙØºÙ Ø´Ø¯! \n\nÙÛâØªÙØ§ÙÛØ¯ ÙØ± Ø²ÙØ§Ù Ú©Ù Ø®ÙØ§Ø³ØªÛØ¯ /start Ø±Ø§ Ø¯ÙØ¨Ø§Ø±Ù Ø§Ø¬Ø±Ø§ Ú©ÙÛØ¯. ð"
 "error_add_client" = "â ï¸ Ø®Ø·Ø§:\n\n {{ .error }}"
 "using_default_value" = "Ø¨Ø§Ø´ÙØ Ø§Ø² ÙÙØ¯Ø§Ø± Ù¾ÛØ´âÙØ±Ø¶ Ø§Ø³ØªÙØ§Ø¯Ù ÙÛâÚ©ÙÙ. ð"
 "incorrect_input" = "ÙØ±ÙØ¯Û Ø´ÙØ§ ÙØ¹ØªØ¨Ø± ÙÛØ³Øª.\nØ¹Ø¨Ø§Ø±ØªâÙØ§ Ø¨Ø§ÛØ¯ Ø¨Ø¯ÙÙ ÙØ§ØµÙÙ Ø¨Ø§Ø´ÙØ¯.\nÙØ«Ø§Ù ØµØ­ÛØ­: aaaaaa\nÙØ«Ø§Ù ÙØ§Ø¯Ø±Ø³Øª: aaa aaa ð«"
@@ -1276,7 +1152,6 @@
 "clientUsage" = "Ø¯Ø±ÛØ§ÙØª Ø¢ÙØ§Ø± Ú©Ø§Ø±Ø¨Ø±"
 "onlines" = "Ú©Ø§Ø±Ø¨Ø±Ø§Ù Ø¢ÙÙØ§ÛÙ"
 "commands" = "Ø¯Ø³ØªÙØ±Ø§Øª"
-"refresh" = "ð ØªØ§Ø²ÙâØ³Ø§Ø²Û"
 "clearIPs" = "â Ù¾Ø§Ú©âØ³Ø§Ø²Û Ø¢Ø¯Ø±Ø³âÙØ§"
 "removeTGUser" = "â Ø­Ø°Ù Ú©Ø§Ø±Ø¨Ø± ØªÙÚ¯Ø±Ø§Ù"
 "selectTGUser" = "ð¤ Ø§ÙØªØ®Ø§Ø¨ Ú©Ø§Ø±Ø¨Ø± ØªÙÚ¯Ø±Ø§Ù"
@@ -1328,26 +1203,12 @@
 "chooseInbound" = "ÛÚ© ÙØ±ÙØ¯Û Ø§ÙØªØ®Ø§Ø¨ Ú©ÙÛØ¯"
 
 [pages.admins]
-"title" = "Ø§Ø¯ÙÛÙâÙØ§"
-"forbidden" = "Ø´ÙØ§ Ø§Ø¬Ø§Ø²Ù Ø§ÙØ¬Ø§Ù Ø§ÛÙ Ú©Ø§Ø± Ø±Ø§ ÙØ¯Ø§Ø±ÛØ¯. Ø§Ú¯Ø± Ø¨Ù Ø¯Ø³ØªØ±Ø³Û ÙÛØ§Ø² Ø¯Ø§Ø±ÛØ¯ Ø§Ø² ÛÚ© Ø³ÙÙ¾Ø± Ø§Ø¯ÙÛÙ Ø¨Ø®ÙØ§ÙÛØ¯."
-"add" = "Ø§ÙØ²ÙØ¯Ù Ø§Ø¯ÙÛÙ"
-"edit" = "ÙÛØ±Ø§ÛØ´ Ø§Ø¯ÙÛÙ"
-"del" = "Ø­Ø°Ù Ø§Ø¯ÙÛÙ"
 "reassign" = "ÙØ§Ú¯Ø°Ø§Ø±Û ÙØ±ÙØ¯ÛâÙØ§"
-"username" = "ÙØ§ÙâÚ©Ø§Ø±Ø¨Ø±Û"
-"password" = "Ø±ÙØ²Ø¹Ø¨ÙØ±"
-"passwordUnchangedHint" = "Ø¨Ø±Ø§Û Ø­ÙØ¸ Ø±ÙØ²Ø¹Ø¨ÙØ± ÙØ¹ÙÛØ Ø®Ø§ÙÛ Ø¨Ú¯Ø°Ø§Ø±ÛØ¯"
-"nickname" = "ÙØ§Ù ÙØ³ØªØ¹Ø§Ø±"
 "superAdmin" = "Ø³ÙÙ¾Ø± Ø§Ø¯ÙÛÙ"
 "superAdminDesc" = "Ø§Ø² ØªÙØ§Ù Ø¯Ø³ØªØ±Ø³ÛâÙØ§ Ø¹Ø¨ÙØ± ÙÛâÚ©ÙØ¯ Ù ØªÙÙØ§ ÙÙØ´Û Ø§Ø³Øª Ú©Ù ÙÛâØªÙØ§ÙØ¯ Ø§Ø¯ÙÛÙâÙØ§ Ø±Ø§ ÙØ¯ÛØ±ÛØª Ú©ÙØ¯."
 "permissions" = "Ø¯Ø³ØªØ±Ø³ÛâÙØ§"
-"inboundAccess" = "ÙØ±ÙØ¯ÛâÙØ§"
-"inboundAccessDesc" = "ÙØ±ÙØ¯ÛâÙØ§ÛÛ Ú©Ù Ø§ÛÙ Ø§Ø¯ÙÛÙ ÙÛâØªÙØ§ÙØ¯ Ø¨Ø¨ÛÙØ¯ Ø±Ø§ ØªÛÚ© Ø¨Ø²ÙÛØ¯. ÙØ± ÙÙØ±Ø¯ Ø¨Ø¯ÙÙ ØªÛÚ© Ø¨Ø±Ø§Û Ø§Ù ÙØ§ÙØ±Ø¦Û Ø§Ø³Øª: Ø¯Ø± ÙÙØ±Ø³Øª Ø§Ù ÙÙØ§ÛØ´ Ø¯Ø§Ø¯Ù ÙÙÛâØ´ÙØ¯ Ù ÙÙÛâØªÙØ§ÙØ¯ Ø¨Ù Ø¢Ù Ø¯Ø³ØªØ±Ø³Û Ù¾ÛØ¯Ø§ Ú©ÙØ¯. ÙØ±ÙØ¯ÛâØ§Û Ú©Ù Ø®ÙØ¯Ø´ Ø¨Ø³Ø§Ø²Ø¯ Ø¨ÙâØ·ÙØ± Ø®ÙØ¯Ú©Ø§Ø± Ø§ÛÙØ¬Ø§ Ø§Ø¶Ø§ÙÙ ÙÛâØ´ÙØ¯."
-"selectAllInbounds" = "Ø§ÙØªØ®Ø§Ø¨ ÙÙÙ"
-"noInbounds" = "ÙÙÙØ² ÙÛÚ ÙØ±ÙØ¯ÛâØ§Û ÙØ¬ÙØ¯ ÙØ¯Ø§Ø±Ø¯. ÙØ± ÙØ±ÙØ¯ÛâØ§Û Ú©Ù Ø§ÛÙ Ø§Ø¯ÙÛÙ Ø¨Ø³Ø§Ø²Ø¯ Ø¨ÙâØ·ÙØ± Ø®ÙØ¯Ú©Ø§Ø± Ø§ÛÙØ¬Ø§ Ø§Ø¶Ø§ÙÙ ÙÛâØ´ÙØ¯."
 "inboundCount" = "ÙØ±ÙØ¯ÛâÙØ§"
 "twoFactor" = "Ø§Ø­Ø±Ø§Ø² ÙÙÛØª Ø¯Ù ÙØ±Ø­ÙÙâØ§Û"
-"deleteConfirm" = "Ø§ÛÙ Ø§Ø¯ÙÛÙ Ø­Ø°Ù Ø´ÙØ¯Ø Ø§ÛÙ Ú©Ø§Ø± ÙØ§Ø¨Ù Ø¨Ø§Ø²Ú¯Ø´Øª ÙÛØ³Øª."
 "reassignDesc" = "ÙÙÙ ÙØ±ÙØ¯ÛâÙØ§Û ÙØªØ¹ÙÙ Ø¨Ù Ø§ÛÙ Ø§Ø¯ÙÛÙ Ø±Ø§ Ø¨Ù Ø§Ø¯ÙÛÙ Ø¯ÛÚ¯Ø±Û ÙÙØªÙÙ Ú©ÙÛØ¯."
 "accessInbounds" = "Ø¯Ø³ØªØ±Ø³Û Ø¨Ù ÙØ±ÙØ¯ÛâÙØ§"
 "createInbound" = "Ø³Ø§Ø®Øª ÙØ±ÙØ¯Û"
@@ -1363,10 +1224,7 @@
 "manageResellers" = "ÙØ¯ÛØ±ÛØª ÙÙØ§ÛÙØ¯ÙâÙØ§"
 
 [pages.resellers]
-"title" = "ÙÙØ§ÛÙØ¯ÙâÙØ§"
 "forbidden" = "Ø´ÙØ§ Ø§Ø¬Ø§Ø²Ù Ø§ÙØ¬Ø§Ù Ø§ÛÙ Ú©Ø§Ø± Ø±Ø§ ÙØ¯Ø§Ø±ÛØ¯. Ø§Ú¯Ø± Ø¨Ù Ø¯Ø³ØªØ±Ø³Û ÙÛØ§Ø² Ø¯Ø§Ø±ÛØ¯ Ø§Ø² ÛÚ© Ø³ÙÙ¾Ø± Ø§Ø¯ÙÛÙ Ø¨Ø®ÙØ§ÙÛØ¯."
-"add" = "Ø§ÙØ²ÙØ¯Ù ÙÙØ§ÛÙØ¯Ù"
-"edit" = "ÙÛØ±Ø§ÛØ´ ÙÙØ§ÛÙØ¯Ù"
 "del" = "Ø­Ø°Ù ÙÙØ§ÛÙØ¯Ù"
 "recharge" = "Ø´Ø§Ø±Ú"
 "username" = "ÙØ§ÙâÚ©Ø§Ø±Ø¨Ø±Û"
@@ -1374,7 +1232,6 @@
 "passwordUnchangedHint" = "Ø¨Ø±Ø§Û Ø­ÙØ¸ Ø±ÙØ²Ø¹Ø¨ÙØ± ÙØ¹ÙÛØ Ø®Ø§ÙÛ Ø¨Ú¯Ø°Ø§Ø±ÛØ¯"
 "nickname" = "ÙØ§Ù ÙØ³ØªØ¹Ø§Ø±"
 "enable" = "ÙØ¹Ø§Ù"
-"accounts" = "Ø­Ø³Ø§Ø¨âÙØ§"
 "totalTraffic" = "ÙÙØ¬ÙØ¯Û ØªØ±Ø§ÙÛÚ©"
 "totalTrafficDesc" = "ÙÙØ¬ÙØ¯Û Ø¨Ù Ú¯ÛÚ¯Ø§Ø¨Ø§ÛØª Ú©Ù Ø§ÛÙ ÙÙØ§ÛÙØ¯Ù Ø§Ø² Ø¢Ù Ø­Ø³Ø§Ø¨ ÙÛâØ³Ø§Ø²Ø¯. Ø³Ø§Ø®Øª ÛÚ© Ø­Ø³Ø§Ø¨ 10 Ú¯ÛÚ¯Ø§Ø¨Ø§ÛØªÛØ 10 Ú¯ÛÚ¯Ø§Ø¨Ø§ÛØª Ø§Ø² Ø¢Ù Ú©Ù ÙÛâÚ©ÙØ¯. Ø¨Ø§ Ø­Ø°Ù ÛÚ© Ø­Ø³Ø§Ø¨ ÛØ§ Ú©Ù Ú©Ø±Ø¯Ù ØªØ±Ø§ÙÛÚ© Ø¢ÙØ ÙÙØ· Ø¨Ø®Ø´Û Ú©Ù ÙØ´ØªØ±Û ÙØ±Ú¯Ø² ÙØµØ±Ù ÙÚ©Ø±Ø¯Ù Ø¨Ø±Ú¯Ø±Ø¯Ø§ÙØ¯Ù ÙÛâØ´ÙØ¯."
 "unlimited" = "ÙØ§ÙØ­Ø¯ÙØ¯"
@@ -1509,3 +1366,367 @@
 
 "pairingHub" = "Ù¾ÙÙ Ø¯Ø±Ø®ÙØ§Ø³ØªâÚ©ÙÙØ¯Ù"
 "pairingWhen" = "Ø²ÙØ§Ù"
+"pages.nodes.latency" = "تاخیر"
+"pages.nodes.speed" = "سرعت تونل"
+"pages.admins.sessions" = "نشست‌ها"
+"pages.admins.sessionNoSessions" = "نشست فعالی وجود ندارد"
+"pages.admins.sessionRevokeAll" = "لغو همه نشست‌ها"
+"pages.inbounds.cloneToNode" = "کپی به نود"
+"pages.inbounds.cloneToNodeNoNode" = "نودی برای کپی انتخاب نشده"
+"pages.inbounds.cloneToNodeOk" = "کپی به نود موفق بود"
+"pages.inbounds.cloneToNodePartial" = "کپی به نود ناقص بود"
+"pages.inbounds.remarkPlaceholder" = "یادداشت"
+"pages.inbounds.renewClient" = "تمدید کلینت"
+"pages.inbounds.toasts.renewClientSuccess" = "تاریخ تمدید کلینت به‌روز شد"
+"pages.core.absent" = "absent"
+"pages.core.actions" = "Actions"
+"pages.core.addCore" = "Add Core"
+"pages.core.alreadyInstalled" = "Already installed on this host."
+"pages.core.availableCoresDesc" = "These cores are not installed on this host yet:"
+"pages.core.availableCoresTitle" = "More cores available"
+"pages.core.backend" = "Backend"
+"pages.core.checkAll" = "Check all"
+"pages.core.consoleTitle" = "setup console"
+"pages.core.cores" = "Cores"
+"pages.core.disabled" = "disabled"
+"pages.core.editConfig" = "Edit config"
+"pages.core.enabled" = "enabled"
+"pages.core.hasInbounds" = "Still used by %d inbound(s). Delete them first."
+"pages.core.hideLog" = "Hide step log"
+"pages.core.inbounds" = "Inbounds"
+"pages.core.initSetup" = "Initialize Setup"
+"pages.core.installedTag" = "Installed"
+"pages.core.ipForward" = "IP forwarding"
+"pages.core.iproute" = "iproute2"
+"pages.core.kernelModules" = "Kernel modules"
+"pages.core.loaded" = "loaded"
+"pages.core.logs" = "Logs"
+"pages.core.missing" = "missing"
+"pages.core.nftables" = "nftables"
+"pages.core.noLogs" = "No logs available yet."
+"pages.core.pickerAddDesc" = "Install more cores on this host. Anything already installed keeps running untouched."
+"pages.core.pickerAddTitle" = "Add cores"
+"pages.core.pickerEmpty" = "Nothing to show here."
+"pages.core.pickerInstall" = "Install selected"
+"pages.core.pickerSetupDesc" = "Pick the VPN cores this server should run. Only what you choose is installed, and you can add or remove cores later at any time. Xray, RADIUS and SSH are built into the panel and are always available."
+"pages.core.pickerSetupTitle" = "Choose the cores to install"
+"pages.core.pickerUninstall" = "Uninstall selected"
+"pages.core.pickerUninstallDesc" = "Remove cores from this host. Requirements shared with a core you keep (IPsec, for instance, is shared by L2TP and IKEv2) are left in place. A core with inbounds cannot be removed until they are deleted."
+"pages.core.pickerUninstallTitle" = "Uninstall cores"
+"pages.core.present" = "present"
+"pages.core.provisionDesc" = "Load the required kernel modules and enable IP forwarding. Safe to run repeatedly."
+"pages.core.reRunSetup" = "Re-run Setup"
+"pages.core.rebootConfirm" = "Reboot the server now? Every connection will drop for about a minute while it restarts."
+"pages.core.rebootDetails" = "Details"
+"pages.core.rebootImpact" = "Xray, OpenVPN, OpenConnect, SSTP and RADIUS are unaffected and keep running. L2TP and PPTP stay offline until you reboot."
+"pages.core.rebootLater" = "Later"
+"pages.core.rebootModulesLabel" = "Loads after reboot"
+"pages.core.rebootNow" = "Reboot now"
+"pages.core.rebootPkgLabel" = "Installed package"
+"pages.core.rebootTitle" = "Reboot required to finish setup"
+"pages.core.rebootWhat" = "This kernel doesn't ship the PPP/L2TP modules that L2TP and PPTP need. Setup installed a kernel that does and set it as the boot default. Linux only loads brand-new modules from a fresh boot, so one reboot is required to finish."
+"pages.core.rebooting" = "Server is rebooting"
+"pages.core.rebootingDesc" = "The panel will be unreachable for about a minute, then come back automatically. This page will reconnect on its own."
+"pages.core.refresh" = "Refresh"
+"pages.core.restart" = "Restart"
+"pages.core.runSetup" = "Run Setup"
+"pages.core.setupDone" = "Setup complete"
+"pages.core.setupNeededDesc" = "Before the VPN cores can run, the host needs a one-time setup. It is safe to run on any Linux distribution and can be repeated at any time."
+"pages.core.setupNeededTitle" = "VPN backend not set up yet"
+"pages.core.setupRunning" = "Setting up the VPN backend…"
+"pages.core.sharesWith" = "Shares host requirements with"
+"pages.core.showLog" = "Show step log"
+"pages.core.stateError" = "Error"
+"pages.core.stateIdle" = "Idle (no inbounds)"
+"pages.core.stateNotInstalled" = "Not installed"
+"pages.core.stateRunning" = "Running"
+"pages.core.stateStopped" = "Stopped"
+"pages.core.status" = "Status"
+"pages.core.stepDaemons" = "Extract bundled daemons"
+"pages.core.stepForward" = "Enable IP forwarding"
+"pages.core.stepIpsec" = "Set up IPsec (charon)"
+"pages.core.stepModules" = "Load kernel modules"
+"pages.core.stop" = "Stop"
+"pages.core.subtitle" = "Status and control of every backend core"
+"pages.core.system" = "System / Provisioning"
+"pages.core.title" = "Core Settings"
+"pages.core.toasts.provisioned" = "Provisioning finished"
+"pages.core.toasts.rebooting" = "Rebooting the server…"
+"pages.core.toasts.restarted" = "Core restarted"
+"pages.core.toasts.stopped" = "Core stopped"
+"pages.core.toasts.uninstalled" = "Core uninstall"
+"pages.core.uncheckAll" = "Uncheck all"
+"pages.core.uninstallConsoleTitle" = "uninstall console"
+"pages.core.uninstallCore" = "Uninstall Core"
+"pages.core.uninstallDone" = "Cores removed"
+"pages.core.uninstallInboundsBody" = "inbound(s) are served by the cores you are removing. Choose what to do with them:"
+"pages.core.uninstallInboundsDelete" = "Delete the inbounds too"
+"pages.core.uninstallInboundsDeleteDesc" = "The inbounds and their clients are removed along with the core."
+"pages.core.uninstallInboundsKeep" = "Keep the inbounds"
+"pages.core.uninstallInboundsKeepDesc" = "They stay in the list but stop working until the core is installed again."
+"pages.core.uninstallInboundsTitle" = "These cores still have inbounds"
+"pages.core.uninstallKept" = "Kept, because a core you still have needs it"
+"pages.core.uninstallRunning" = "Removing cores..."
+"pages.core.version" = "Version"
+"pages.inbounds.bulkAffected" = "Affected"
+"pages.inbounds.bulkDeleteConfirm" = "Permanently delete %INBOUNDS% inbound(s) and %CLIENTS% account(s)? Deleting an inbound removes all of its accounts. This cannot be undone."
+"pages.inbounds.bulkMembershipDesc" = "The selected accounts keep their quota, usage, expiry and credentials. Adding one to a new inbound mints whatever credential that protocol needs. Removing the last inbound is allowed and is not a delete: the account keeps everything and simply serves no traffic until an inbound is added again."
+"pages.inbounds.bulkMembershipNoInbound" = "Select at least one inbound."
+"pages.inbounds.bulkSkipped" = "Skipped"
+"pages.inbounds.opAddInbounds" = "Add to inbounds"
+"pages.inbounds.opFreeze" = "Freeze"
+"pages.inbounds.opRemoveInbounds" = "Remove from inbounds"
+"pages.inbounds.opUnfreeze" = "Unfreeze"
+"pages.inbounds.selectAllClients" = "Select all clients"
+"pages.index.checkUpdate" = "Check for Update"
+"pages.index.geofileAutoUpdate" = "Update automatically"
+"pages.index.geofileAutoUpdateDesc" = "Refresh these files once a day. Left off they keep working, but the categories your routing rules name slowly stop matching what you expect."
+"pages.index.geofileRestarting" = "Restarting Xray"
+"pages.index.geofileRunDone" = "Up to date"
+"pages.index.geofileRunFailed" = "The update did not finish"
+"pages.index.geofileRunStarting" = "Starting"
+"pages.index.importForeignConfirm" = "This replaces the current data with the uploaded 3x-ui backup. This panel's address and certificate stay the same, but its accounts and inbounds are replaced, and you will sign in with the imported panel's username and password. Continue?"
+"pages.index.importForeignDesc" = "Bring inbounds, clients and traffic from a 3x-ui backup database. This panel's port, path and certificate are kept; you sign in with the imported panel's login."
+"pages.index.importForeignTitle" = "Import from 3x-ui"
+"pages.index.manualUpdate" = "Manual Update"
+"pages.index.manualUpdateIntro" = "Install a build you supply yourself instead of the one the panel found. Either way you see both versions and confirm before anything is replaced."
+"pages.index.panelLocation" = "Panel Location"
+"pages.index.panelLocationError" = "Error getting location info"
+"pages.index.panelUpdate" = "Panel Update"
+"pages.index.upToDate" = "Up to date"
+"pages.index.updateAvailable" = "New version available:"
+"pages.index.updateCancel" = "Cancel Update"
+"pages.index.updateCancelling" = "Cancelling..."
+"pages.index.updateChecking" = "Checking the binary"
+"pages.index.updateConfirm" = "Download the latest release, replace the running binary, and restart the panel now?"
+"pages.index.updateDowngradeBody" = "Going back to an older build can cause problems: settings and the database may already have been migrated by the newer one, and an older panel does not know how to read them. A backup of the database is taken before the swap."
+"pages.index.updateDowngradeConfirmLabel" = "To continue, type the version you are installing:"
+"pages.index.updateDowngradeFinal" = "Replace %FROM% with the older %TO%?"
+"pages.index.updateDowngradeNow" = "Downgrade anyway"
+"pages.index.updateDowngradeTitle" = "This is a downgrade"
+"pages.index.updateDownloading" = "Downloading"
+"pages.index.updateFailed" = "The update did not finish"
+"pages.index.updateFetch" = "Download"
+"pages.index.updateFromFile" = "Update from file"
+"pages.index.updateFromFileDesc" = "Pick a binary on this computer. Your browser uploads it to the panel."
+"pages.index.updateFromUrl" = "Update from URL"
+"pages.index.updateFromUrlDesc" = "Give an address and the panel downloads it itself, from the server. Use this when the server can reach the file but you cannot upload it."
+"pages.index.updateFromUrlIntro" = "The panel downloads this itself, so the address has to be reachable from the server. Give the direct link to the vpn-ui binary, not to a page about it."
+"pages.index.updateInstalling" = "Installing"
+"pages.index.updateModalIntro" = "Replaces the running binary and restarts the panel."
+"pages.index.updateModalTitle" = "Update available"
+"pages.index.updateNoNotes" = "This release ships no notes."
+"pages.index.updateNow" = "Update Now"
+"pages.index.updateReleaseNotes" = "Release notes"
+"pages.index.updateRestarting" = "Restarting"
+"pages.index.updateSameVersion" = "This binary is the same version the panel is already running."
+"pages.index.updateStaged" = "Uploaded, waiting for confirmation"
+"pages.index.updateStarted" = "Updating. The panel is restarting, so reload this page in a moment."
+"pages.index.updateUnknownVersion" = "This binary's version could not be compared with the running one."
+"pages.index.updateUploading" = "Uploading"
+"pages.index.virtContainer" = "container"
+"pages.index.virtNo" = "No"
+"pages.index.virtYes" = "Yes"
+"pages.index.virtualized" = "Virtualized"
+"pages.nodes.cpu" = "CPU"
+"pages.nodes.createScopedToken" = "Create scoped token"
+"pages.nodes.mem" = "Memory"
+"pages.nodes.metricCpu" = "CPU %"
+"pages.nodes.metricMem" = "RAM %"
+"pages.nodes.metricNet" = "Net (Mbps)"
+"pages.nodes.metricSrc" = "Source"
+"pages.nodes.metricTs" = "Time"
+"pages.nodes.metrics" = "Metrics"
+"pages.nodes.metricsHistory" = "Metrics history"
+"pages.nodes.rotated" = "Token rotated"
+"pages.nodes.scopeHeartbeat" = "Heartbeat (read-only)"
+"pages.nodes.scopeNodeRead" = "Node (read)"
+"pages.nodes.scopeNodeWrite" = "Node (read + write)"
+"pages.nodes.scopedTokenExpiry" = "Expiry"
+"pages.nodes.scopedTokenName" = "Token name"
+"pages.nodes.scopedTokenOk" = "Scoped token created"
+"pages.nodes.scopedTokenRotated" = "Token rotated (old token now invalid)"
+"pages.nodes.scopedTokens" = "Scoped API tokens"
+"pages.nodes.scopedTokensDesc" = "Grant a hub or operator panel limited access to this node. Each token is scoped to one of the three levels below."
+"pages.nodes.tokenDeleted" = "Token deleted"
+"pages.nodes.updatePanels" = "Update panels"
+"pages.nodes.updateResult" = "Update result"
+"pages.nodes.updateStarted" = "Update started on node"
+"pages.nodes.xrayRunning" = "Xray running"
+"pages.nodes.xrayState" = "Xray state"
+"pages.nodes.xrayStopped" = "Xray stopped"
+"pages.resellers.allowOverviewManage" = "Manage Overview"
+"pages.resellers.allowOverviewManageDesc" = "Whether the overview is theirs to read only, or may also act. Needs Allow Overview, which is the page these controls live on. Note that every one of them (renaming the panel, the Xray buttons, the geo files) also needs a permission the reseller role does not carry, so on its own this switch reveals nothing a reseller can currently use. It is here so the grant already exists the day one of those actions becomes theirs."
+"pages.resellers.deleteCascade" = "Remove the reseller and delete its accounts"
+"pages.resellers.deleteCascadeDesc" = "Every account this reseller created is permanently deleted and its customers stop connecting."
+"pages.resellers.deleteHasAccounts" = "account(s) will be affected. Choose what to do with them:"
+"pages.resellers.deleteKeep" = "Remove the reseller, keep the accounts"
+"pages.resellers.deleteKeepDesc" = "The accounts keep working and move to the admin. They stop counting against any reseller balance."
+"pages.settings.service.apply" = "Apply"
+"pages.settings.service.autoRefresh" = "Auto-refresh"
+"pages.settings.service.enable" = "Start on boot"
+"pages.settings.service.enableDesc" = "Enable the service so the panel starts automatically after a reboot."
+"pages.settings.service.installed" = "installed"
+"pages.settings.service.liveLog" = "Service status"
+"pages.settings.service.liveLogDesc" = "Live output of systemctl status and the unit's journal."
+"pages.settings.service.loadDefault" = "Load default"
+"pages.settings.service.name" = "Service name"
+"pages.settings.service.nameDesc" = "The systemd unit name for the panel (without .service). Default: vpn-ui."
+"pages.settings.service.noLog" = "No status yet."
+"pages.settings.service.noSystemd" = "This host doesn't have systemctl (not a systemd system), so the service can't be managed here."
+"pages.settings.service.onBoot" = "on boot"
+"pages.settings.service.start" = "Run now"
+"pages.settings.service.startDesc" = "Start the service immediately. If the panel is currently running manually on the same port, stop that instance first (or reboot) so the service can take over."
+"pages.settings.service.status" = "Status"
+"pages.settings.service.statusDesc" = "Current state of the unit."
+"pages.settings.service.unit" = "Service unit file"
+"pages.settings.service.unitDesc" = "The systemd unit written to /etc/systemd/system/<name>.service. Edit if you need custom options, then Apply."
+"pages.settings.serviceSettings" = "Systemd Service"
+"pages.tunnels.add" = "Add Tunnel"
+"pages.tunnels.delConfirm" = "Delete this tunnel? Both sides lose the link until it is re-created."
+"pages.tunnels.disable" = "Disable"
+"pages.tunnels.disabled" = "Disabled"
+"pages.tunnels.down" = "Down"
+"pages.tunnels.edit" = "Edit Tunnel"
+"pages.tunnels.enable" = "Enable"
+"pages.tunnels.error" = "Error"
+"pages.tunnels.fallbacks" = "Fallbacks"
+"pages.tunnels.fallbacksPlaceholder" = "Carriers to try if the primary is down"
+"pages.tunnels.fingerprint" = "TLS fingerprint (JA3)"
+"pages.tunnels.fingerprintPlaceholder" = "e.g. a browser or VPN client fingerprint"
+"pages.tunnels.genToken" = "Generate"
+"pages.tunnels.health" = "Health"
+"pages.tunnels.healthHint" = "No health events yet. The watchdog records state changes here once a tunnel starts moving."
+"pages.tunnels.hostPlaceholder" = "Host or IP"
+"pages.tunnels.latency" = "Latency"
+"pages.tunnels.linkHint" = "Run a link test to measure latency and pick the best carrier for this path."
+"pages.tunnels.linkTest" = "Link Test"
+"pages.tunnels.name" = "Name"
+"pages.tunnels.namePlaceholder" = "e.g. node2-tcp"
+"pages.tunnels.peer" = "Peer address"
+"pages.tunnels.pending" = "Pending"
+"pages.tunnels.portPlaceholder" = "Port"
+"pages.tunnels.ports" = "Forwarded ports"
+"pages.tunnels.portsHint" = "Comma-separated. Use /udp for UDP, =backend for port mapping."
+"pages.tunnels.portsPlaceholder" = "e.g. 443, 53/udp, 443=127.0.0.1:2096"
+"pages.tunnels.proxyV2" = "PROXY-protocol v2 header"
+"pages.tunnels.reachable" = "Reachable"
+"pages.tunnels.recommended" = "Recommended carrier"
+"pages.tunnels.refresh" = "Refresh"
+"pages.tunnels.required" = "Name is required"
+"pages.tunnels.role" = "Role"
+"pages.tunnels.roleClient" = "Client"
+"pages.tunnels.roleServer" = "Server"
+"pages.tunnels.speed" = "Throughput"
+"pages.tunnels.stalled" = "Stalled"
+"pages.tunnels.subtitle" = "Lightweight encrypted tunnel pairs between this panel and its peers"
+"pages.tunnels.title" = "Tunnels"
+"pages.tunnels.token" = "Shared token"
+"pages.tunnels.tokenHint" = "Both sides of the tunnel must hold the same token."
+"pages.tunnels.tokenPlaceholder" = "64-hex token (both sides must match)"
+"pages.tunnels.transport" = "Transport"
+"pages.tunnels.tuning" = "Tuning"
+"pages.tunnels.up" = "Up"
+"pages.xray.outbound.interfaceIgnoredByDialerProxy" = "Ignored while a dialer proxy is set: the dialer proxy takes precedence and the interface is never bound."
+"pages.xray.outbound.sshOutAdd" = "Add SSH Outbound"
+"pages.xray.outbound.sshOutAddress" = "SSH Server Address"
+"pages.xray.outbound.sshOutAuth" = "Authentication"
+"pages.xray.outbound.sshOutDown" = "Reconnecting"
+"pages.xray.outbound.sshOutHint" = "Route Xray out through a remote SSH server. The panel keeps a tunnel to it and exposes a local SOCKS5 proxy, and adds a matching 'socks' outbound (with the tag you choose) so routing and reverse can target it. Click Save on the Xray page after adding one to apply the config."
+"pages.xray.outbound.sshOutKeep" = "Leave blank to keep the stored secret"
+"pages.xray.outbound.sshOutKey" = "Private Key"
+"pages.xray.outbound.sshOutKnownHost" = "Host Key Pin"
+"pages.xray.outbound.sshOutNone" = "No SSH outbounds yet."
+"pages.xray.outbound.sshOutPassphrase" = "Key Passphrase"
+"pages.xray.outbound.sshOutPassword" = "Password"
+"pages.xray.outbound.sshOutPort" = "SSH Port"
+"pages.xray.outbound.sshOutSaved" = "Saved. Click Save on the Xray page to apply the outbound."
+"pages.xray.outbound.sshOutSocksPort" = "Local SOCKS Port"
+"pages.xray.outbound.sshOutStatus" = "Status"
+"pages.xray.outbound.sshOutTag" = "Tag"
+"pages.xray.outbound.sshOutUp" = "Connected"
+"pages.xray.outbound.sshOutUsername" = "Username"
+"pages.xray.outbound.trafficUnmeasured" = "Not counted"
+"pages.xray.outbound.trafficUnmeasuredDesc" = "No traffic figure exists for this outbound: the Outbound Upload and Download Statistics switches on the Basics tab are both off, so the core is not counting outbound bytes at all. This is not a measurement of zero."
+"pages.xray.outbound.vpnOutAdd" = "VPN Tunnel"
+"pages.xray.outbound.vpnOutAuthGroup" = "Auth Group"
+"pages.xray.outbound.vpnOutAuthMode" = "Authentication Mode"
+"pages.xray.outbound.vpnOutAuthProto" = "PPP Authentication"
+"pages.xray.outbound.vpnOutAwgHeadersHelp" = "Set all four headers or none: they replace the four packet types together, so a partial set breaks half of them."
+"pages.xray.outbound.vpnOutCaCert" = "CA Certificate"
+"pages.xray.outbound.vpnOutCaCertFile" = "CA Certificate Path"
+"pages.xray.outbound.vpnOutCert" = "Client Certificate"
+"pages.xray.outbound.vpnOutCertFile" = "Client Certificate Path"
+"pages.xray.outbound.vpnOutClear" = "Remove the stored secret"
+"pages.xray.outbound.vpnOutDown" = "Down"
+"pages.xray.outbound.vpnOutEndpoint" = "Endpoint"
+"pages.xray.outbound.vpnOutExtra" = "Extra Directives"
+"pages.xray.outbound.vpnOutExtraHelp" = "Directives appended verbatim. Never paste an inline key, tls-auth or tls-crypt block here: this field is not treated as a secret, so it is readable by anyone who can list the outbounds. Use the fields above."
+"pages.xray.outbound.vpnOutFou" = "FOU Encapsulation"
+"pages.xray.outbound.vpnOutFouPort" = "FOU Port"
+"pages.xray.outbound.vpnOutIkeVersion" = "IKE Version"
+"pages.xray.outbound.vpnOutImport" = "Import From File"
+"pages.xray.outbound.vpnOutImportDone" = "Imported into the form. Nothing is saved until you confirm."
+"pages.xray.outbound.vpnOutImportEmpty" = "That file is empty."
+"pages.xray.outbound.vpnOutImportIgnored" = "Keys the tunnel form has no field for, left out:"
+"pages.xray.outbound.vpnOutImportKept" = "Not in the file, so the stored value is kept:"
+"pages.xray.outbound.vpnOutImportMalformed" = "Not a WireGuard configuration: expected a section or a key = value pair on line"
+"pages.xray.outbound.vpnOutImportNotWg" = "Not a WireGuard configuration: it carries neither an [Interface] PrivateKey nor a [Peer] PublicKey."
+"pages.xray.outbound.vpnOutImportPick" = "Choose a file"
+"pages.xray.outbound.vpnOutImportUnreadable" = "That file could not be read."
+"pages.xray.outbound.vpnOutInsecure" = "Skip Certificate Check"
+"pages.xray.outbound.vpnOutIpsec" = "IPsec"
+"pages.xray.outbound.vpnOutIpsecLocalId" = "IPsec Local ID"
+"pages.xray.outbound.vpnOutIpsecPsk" = "IPsec Pre-Shared Key"
+"pages.xray.outbound.vpnOutIpsecPskHelp" = "The key is the switch: leave it blank for a plain tunnel with no IPsec."
+"pages.xray.outbound.vpnOutIpsecRemoteId" = "IPsec Remote ID"
+"pages.xray.outbound.vpnOutKeep" = "Leave blank to keep the stored secret"
+"pages.xray.outbound.vpnOutKeepAlive" = "Keepalive (seconds)"
+"pages.xray.outbound.vpnOutKey" = "Client Key"
+"pages.xray.outbound.vpnOutKeyFile" = "Client Key Path"
+"pages.xray.outbound.vpnOutKeyPassword" = "Client Key Password"
+"pages.xray.outbound.vpnOutKind" = "Tunnel Type"
+"pages.xray.outbound.vpnOutKindChanged" = "Changing the tunnel type replaces this tunnel. Every field has to be entered again, including the keys and passwords, because the stored ones belong to the previous protocol."
+"pages.xray.outbound.vpnOutLocalAddress" = "Local Address"
+"pages.xray.outbound.vpnOutLocalId" = "Local ID"
+"pages.xray.outbound.vpnOutMppe" = "MPPE Encryption"
+"pages.xray.outbound.vpnOutMppeHelp" = "PPTP without MPPE is a cleartext tunnel. It is also the only setting in which PAP or CHAP work, because the MPPE keys come from the MS-CHAP exchange."
+"pages.xray.outbound.vpnOutNoDriver" = "This build has no driver for it."
+"pages.xray.outbound.vpnOutNoDtls" = "Disable DTLS (TLS only)"
+"pages.xray.outbound.vpnOutOcProtocol" = "Client Protocol"
+"pages.xray.outbound.vpnOutOcProxyHelp" = "Dials the gateway through this proxy, keeping the tunnel's own exit address; OpenConnect never uses DTLS through a proxy, so the tunnel runs on TLS only."
+"pages.xray.outbound.vpnOutOpenCore" = "Open Core Settings"
+"pages.xray.outbound.vpnOutPassword" = "Password"
+"pages.xray.outbound.vpnOutPeerAddress" = "Peer Tunnel Address"
+"pages.xray.outbound.vpnOutPeerKey" = "Peer Public Key"
+"pages.xray.outbound.vpnOutPort" = "Port"
+"pages.xray.outbound.vpnOutPresharedKey" = "Preshared Key"
+"pages.xray.outbound.vpnOutPrivateKey" = "Private Key"
+"pages.xray.outbound.vpnOutProfile" = "OpenVPN Profile (.ovpn)"
+"pages.xray.outbound.vpnOutProto" = "Transport"
+"pages.xray.outbound.vpnOutProxy" = "HTTP Proxy"
+"pages.xray.outbound.vpnOutProxyHelp" = "HTTP CONNECT proxies only: this client ignores the URL scheme, so a SOCKS address here is sent an HTTP request and reported as an unreachable proxy."
+"pages.xray.outbound.vpnOutProxyHost" = "Proxy Host"
+"pages.xray.outbound.vpnOutProxyType" = "Proxy Type"
+"pages.xray.outbound.vpnOutPsk" = "Pre-Shared Key"
+"pages.xray.outbound.vpnOutRemoteCertTls" = "Require Server Certificate EKU"
+"pages.xray.outbound.vpnOutRemoteTs" = "Remote Traffic Selector"
+"pages.xray.outbound.vpnOutSendThroughHelp" = "This outbound is already pinned to the tunnel's device, so leave this empty unless you need a specific source address. It must then be an address the tunnel itself holds; anything else, including a hostname, is ignored and the tunnel is used as it is."
+"pages.xray.outbound.vpnOutServer" = "Server Address"
+"pages.xray.outbound.vpnOutServerCert" = "Server Certificate Pin"
+"pages.xray.outbound.vpnOutServerId" = "Expected Server ID"
+"pages.xray.outbound.vpnOutSocksProxy" = "SOCKS5 Proxy"
+"pages.xray.outbound.vpnOutSocksProxyHelp" = "Dial the VPN server through this proxy. Only the outer connection is proxied; the exit address stays the VPN's. A UDP profile needs the proxy to allow UDP ASSOCIATE - if it does not, use the provider's TCP profile."
+"pages.xray.outbound.vpnOutSocksProxyPass" = "Proxy Password"
+"pages.xray.outbound.vpnOutSocksProxyPort" = "Proxy Port"
+"pages.xray.outbound.vpnOutSocksProxyUser" = "Proxy Username"
+"pages.xray.outbound.vpnOutStatus" = "Tunnel Status"
+"pages.xray.outbound.vpnOutTlsAuth" = "tls-auth Key"
+"pages.xray.outbound.vpnOutTlsCrypt" = "tls-crypt Key"
+"pages.xray.outbound.vpnOutTlsUseFile" = "Certificates From Files"
+"pages.xray.outbound.vpnOutTotpSecret" = "TOTP Secret"
+"pages.xray.outbound.vpnOutTunAddress" = "Tunnel Address"
+"pages.xray.outbound.vpnOutUp" = "Up"
+"pages.xray.outbound.vpnOutUsername" = "Username"
+"pages.xray.outbound.vpnOutWillClear" = "Will be removed when you save"
+"pages.xray.statsOutboundForced" = "Locked on because a VPN tunnel outbound is up: the tunnels need these counters, so the panel enables both in the config it builds. The counters are global, so 'direct' and every hand-written outbound is counted too. Delete the tunnels to get this setting back."

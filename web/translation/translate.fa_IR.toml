@@ -1449,7 +1449,6 @@
 "pages.core.stop" = "Stop"
 "pages.core.subtitle" = "Status and control of every backend core"
 "pages.core.system" = "System / Provisioning"
-"pages.core.title" = "Core Settings"
 "pages.core.toasts.provisioned" = "Provisioning finished"
 "pages.core.toasts.rebooting" = "Rebooting the server…"
 "pages.core.toasts.restarted" = "Core restarted"

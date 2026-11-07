@@ -83,6 +83,7 @@
 "logout" = "Log Out"
 
 [pages.core]
+"title" = "Core Settings"
 "cores" = "Cores"
 "system" = "System / Provisioning"
 "backend" = "Backend"

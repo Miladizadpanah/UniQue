@@ -234,11 +234,18 @@ build_core() {
             ok "core ($goarch) already built from ${srccommit:0:12} — skipping (CORE_FORCE=1 to rebuild)"
             continue
         fi
-        step "go build xray ($goarch, CGO_ENABLED=0, static)"
+        step "go build xray ($goarch, CGO_ENABLED=0, static, GOAMD64=v1)"
         ( cd "$src" && \
-          CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" \
+          CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOAMD64=v1 \
           go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -v -o "$outdir/xray" ./main )
         chmod 0755 "$outdir/xray"
+        # Strip the GNU property note so the xray core also runs on
+        # pre-AVX2 server CPUs (same issue as the panel binary).
+        if command -v patchelf >/dev/null 2>&1; then
+            patchelf --clear-notes "$outdir/xray" 2>/dev/null || true
+        elif command -v objcopy >/dev/null 2>&1; then
+            objcopy --remove-section=.note.gnu.property "$outdir/xray" 2>/dev/null || true
+        fi
         echo "$srccommit" > "$marker"
         file "$outdir/xray" || true
         ok "core: $(ls -lh "$outdir/xray" | awk '{print $5, $9}')"

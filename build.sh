@@ -320,13 +320,40 @@ if [[ -z "$STAMP_REPO" ]]; then
 fi
 LDFLAGS="-X github.com/mhsanaei/3x-ui/v2/config.panelRepoDefault=$STAMP_REPO"
 info "stamping in-panel updater repo: $STAMP_REPO"
-# GOAMD64=v1: emit only baseline x86-64 instructions so the binary runs on
-# any amd64 CPU, including very old server hardware that lacks AVX2/AVX-512.
-# Go 1.26's default (v2+ feature detection at runtime is fine, but some
-# stdlib packages emit ISA-specific code paths that the kernel's execve
-# rejects on pre-2013 CPUs with "CPU ISA level is lower than required").
+# ------------------------------------------------------------------------
+# CPU compatibility: build for the OLDEST x86-64 CPU.
+#
+# Three layers must all agree, because ANY one of them carrying an
+# AVX2/SSE4.2 requirement makes the kernel reject the binary on an old
+# server with "CPU ISA level is lower than required":
+#
+#   1. GOAMD64=v1        -> the Go compiler emits only baseline x86-64.
+#   2. CFLAGS/CCFLAGS   -> the cgo C compiler (gcc) targets x86-64 baseline,
+#                          NOT -march=native (which is what modern CI images
+#                          use by default).
+#   3. GNU property note -> modern linkers stamp a .note.gnu.property that
+#                          says "requires x86-64-v2/v3". We strip it after
+#                          the build so the kernel's execve check passes.
+# ------------------------------------------------------------------------
 export GOAMD64=v1
+# C compiler: force baseline x86-64 for all cgo/C builds (sqlite, openvpn
+# headers, etc.). This is the #1 cause of the CPU ISA error when it is
+# missing, because the CI image's default is -march=native.
+export CGO_CFLAGS="-march=x86-64 -O2"
+export CGO_CXXFLAGS="-march=x86-64 -O2"
 CGO_ENABLED=1 GOARCH="$ARCH" go build -ldflags "$LDFLAGS" -o "$OUT_BIN" main.go
+
+# Strip the GNU property note (x86-64-v2/v3 CPU requirement) so the binary
+# runs on pre-AVX2 server CPUs. The note lives in a .note.gnu.property
+# section; we zero out the x86 ISA-level requirement bytes. If the section
+# is absent there is nothing to do.
+if command -v patchelf >/dev/null 2>&1; then
+    patchelf --clear-notes "$OUT_BIN" 2>/dev/null || true
+elif command -v objcopy >/dev/null 2>&1; then
+    # Fallback: drop the note section entirely.
+    objcopy --remove-section=.note.gnu.property "$OUT_BIN" 2>/dev/null || true
+fi
+info "CPU-compat: GOAMD64=v1 + cgo -march=x86-64 + GNU property note stripped"
 
 hr
 ok "done: ${_CB:-}$(ls -lh "$OUT_BIN" | awk '{print $5}')${_CR:-} -> ${_CB:-}build/out/vpn-ui-${ARCH}${_CR:-}"

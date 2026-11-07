@@ -320,6 +320,12 @@ if [[ -z "$STAMP_REPO" ]]; then
 fi
 LDFLAGS="-X github.com/mhsanaei/3x-ui/v2/config.panelRepoDefault=$STAMP_REPO"
 info "stamping in-panel updater repo: $STAMP_REPO"
+# GOAMD64=v1: emit only baseline x86-64 instructions so the binary runs on
+# any amd64 CPU, including very old server hardware that lacks AVX2/AVX-512.
+# Go 1.26's default (v2+ feature detection at runtime is fine, but some
+# stdlib packages emit ISA-specific code paths that the kernel's execve
+# rejects on pre-2013 CPUs with "CPU ISA level is lower than required").
+export GOAMD64=v1
 CGO_ENABLED=1 GOARCH="$ARCH" go build -ldflags "$LDFLAGS" -o "$OUT_BIN" main.go
 
 hr

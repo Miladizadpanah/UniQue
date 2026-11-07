@@ -1,4 +1,9 @@
-# Phase 7 — UI Redesign (زیباتر از Sanaei)
+# Phase 7 — UI Redesign (زیباتر از Sanaei) → **v2.9.0**
+
+## Version
+- `config/version` → `2.9.0`
+- GitHub tag → `v2.9.0`
+- Release → `v2.9.0` با asset `vpn-ui-amd64`
 
 ## Design Direction
 
@@ -38,5 +43,11 @@
 - اطمینان که i18n کلیدها در همه pages کار می‌کند
 
 ## Status
-- [ ] Phase 7a: design system + index/inbounds/clients
-- [ ] Phase 7b: remaining 7 pages
+- [x] Phase 7a step 1: tokens.css v2 (dark-first + dual accent) — commit 7df8885
+- [x] Phase 7a step 2: components.css v2 (modern component set) — WIP
+- [ ] Phase 7a step 3: rebuild index.html (stat cards + charts)
+- [ ] Phase 7a step 4: rebuild inbounds.html (modern data grid + preset wizard)
+- [ ] Phase 7a step 5: rebuild clients.html (modern table + bulk ops)
+- [ ] Phase 7b: 7 remaining pages (nodes, tunnels, settings, xray, admins, resellers, core)
+- [ ] Bump config/version to 2.9.0
+- [ ] Tag v2.9.0 + push → CI build + publish

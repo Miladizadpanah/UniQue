@@ -44,16 +44,12 @@ func TestPanelPagesRenderCleanly(t *testing.T) {
 		t.Fatalf("load templates: %v", err)
 	}
 
-	// Every page the panel serves from a controller. settings/* and the
-	// subscription pages are excluded on purpose: they are rendered with their
-	// own data by another controller and would report this test's data as
-	// missing, not their own.
-	pages := []string{
-		"index.html", "inbounds.html", "clients.html", "admins.html",
-		"resellers.html", "core.html", "xray.html", "settings.html",
-	}
-
-	for _, page := range pages {
+	// panelPages holds every page the panel serves from a controller; the list
+	// is shared with TestModalsOutsideAppMountThemselves so the two guards
+	// cannot drift apart. settings/* and the subscription pages are excluded on
+	// purpose: they are rendered with their own data by another controller and
+	// would report this test's data as missing, not their own.
+	for _, page := range panelPages {
 		var buf bytes.Buffer
 		if err := tpl.ExecuteTemplate(&buf, page, pageRenderData()); err != nil {
 			t.Errorf("%s: render failed: %v", page, err)

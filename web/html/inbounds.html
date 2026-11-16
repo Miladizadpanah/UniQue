@@ -119,26 +119,26 @@
                     <a-modal v-model="presetModal.visible" :title="presetModal.name"
                       :confirm-loading="presetModal.saving" :mask-closable="false"
                       @ok="submitPreset"
-                      :ok-text="{{ i18n "confirm" }}" :cancel-text="{{ i18n "cancel" }}"
+                      :ok-text="presetLabels.confirm" :cancel-text="presetLabels.cancel"
                       :overlay-class-name="themeSwitcher.currentTheme">
                       <a-form layout="vertical" :style="{ marginTop: '12px' }">
-                        <a-form-item :label="{{ i18n "remark" }}">
+                        <a-form-item :label="presetLabels.remark">
                           <a-input v-model.trim="presetModal.remark" :placeholder="presetModal.name"></a-input>
                         </a-form-item>
-                        <a-form-item :label="{{ i18n "presetSni" }}"
+                        <a-form-item :label="presetLabels.presetSni"
                           v-if="presetModal.security === 'tls' || presetModal.security === 'reality'">
                           <a-input v-model.trim="presetModal.sni" placeholder="example.com"></a-input>
                           <div :style="{ color: 'var(--text-3)', fontSize: '12px', marginTop: '4px' }">
                             {{ i18n "presetSniHint" }}
                           </div>
                         </a-form-item>
-                        <a-form-item :label="{{ i18n "presetCdnEndpoint" }}" v-if="presetModal.security === 'tls'">
+                        <a-form-item :label="presetLabels.presetCdnEndpoint" v-if="presetModal.security === 'tls'">
                           <a-input v-model.trim="presetModal.cdn" placeholder="cdn.example.com:443"></a-input>
                           <div :style="{ color: 'var(--text-3)', fontSize: '12px', marginTop: '4px' }">
                             {{ i18n "presetCdnHint" }}
                           </div>
                         </a-form-item>
-                        <a-form-item :label="{{ i18n "pages.inbounds.port" }}">
+                        <a-form-item :label="presetLabels.port">
                           <a-input-number v-model="presetModal.port" :min="1" :max="65535"
                             style="width: 160px"></a-input-number>
                           <a-button size="small" :style="{ marginLeft: '8px' }" @click="presetModal.port = 0">
@@ -791,6 +791,49 @@
       </div>
     </a-modal>
 
+    <!-- Clone-to-node: the operator picks a target node and a remark; the hub
+         asks the node's panel to create a sibling inbound there (same protocol
+         + stream settings, the node's own free port and node-minted
+         credentials) and provisions every account on this inbound onto the
+         node's new inbound, tracking each as a NodeAccount the hub owns. A node
+         whose operator has not approved this panel's connection request answers
+         with the pairing hint; the operator requests pairing from the Nodes
+         page.
+
+         This lives INSIDE #app on purpose. Modal markup emitted after
+         page/shell_end is outside the Vue root: its [[ ]] placeholders render
+         literally and its v-model/@click directives never bind, which made the
+         whole clone flow dead while the API behind it worked. -->
+    <a-modal v-model="cloneNode.visible" :title="'{{ i18n "pages.inbounds.cloneToNode" }}'"
+      :width="480" :footer="null" :class="themeSwitcher.currentTheme">
+      <a-form layout="vertical">
+        <a-form-item :label="'{{ i18n "pages.nodes.name" }}'">
+          <a-select v-model="cloneNode.nodeId" :placeholder="'{{ i18n "pages.nodes.namePlaceholder" }}'"
+            allow-clear>
+            <a-select-option v-for="n in cloneNode.nodes" :key="n.id" :value="n.id">
+              [[ n.name ]]
+              <a-tag v-if="n.pairingApproved" color="green" :style="{ marginLeft: '6px' }">
+                {{ i18n "pages.nodes.pairingConnected" }}
+              </a-tag>
+              <a-tag v-else color="orange" :style="{ marginLeft: '6px' }">
+                {{ i18n "pages.nodes.pairingPending" }}
+              </a-tag>
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="'{{ i18n "pages.inbounds.remark" }}'">
+          <a-input v-model="cloneNode.remark" :placeholder="'{{ i18n "pages.inbounds.remarkPlaceholder" }}'">
+          </a-input>
+        </a-form-item>
+      </a-form>
+      <a-space :style="{ width: '100%', justifyContent: 'flex-end', marginTop: '16px' }">
+        <a-button @click="cloneNode.visible = false">{{ i18n "cancel" }}</a-button>
+        <a-button type="primary" :loading="cloneNode.saving" @click="doCloneToNode">
+          {{ i18n "confirm" }}
+        </a-button>
+      </a-space>
+    </a-modal>
+
 {{template "page/shell_end" . }}
 <script
   src="{{ .base_path }}assets/qrcode/qrious2.min.js?{{ .asset_ver }}"></script>
@@ -821,42 +864,6 @@
 {{template "modals/textModal"}}
 {{template "modals/inboundInfoModal"}}
 
-<!-- Clone-to-node: the operator picks a target node and a remark; the hub
-     asks the node's panel to create a sibling inbound there (same protocol +
-     stream settings, the node's own free port and node-minted credentials)
-     and provisions every account on this inbound onto the node's new
-     inbound, tracking each as a NodeAccount the hub owns. A node whose
-     operator has not approved this panel's connection request answers with
-     the pairing hint; the operator requests pairing from the Nodes page. -->
-<a-modal v-model="cloneNode.visible" :title="'{{ i18n "pages.inbounds.cloneToNode" }}'"
-  :width="480" :footer="null" :class="themeSwitcher.currentTheme">
-  <a-form layout="vertical">
-    <a-form-item :label="'{{ i18n "pages.nodes.name" }}'">
-      <a-select v-model="cloneNode.nodeId" :placeholder="'{{ i18n "pages.nodes.namePlaceholder" }}'"
-        allow-clear>
-        <a-select-option v-for="n in cloneNode.nodes" :key="n.id" :value="n.id">
-          [[ n.name ]]
-          <a-tag v-if="n.pairingApproved" color="green" :style="{ marginLeft: '6px' }">
-            {{ i18n "pages.nodes.pairingConnected" }}
-          </a-tag>
-          <a-tag v-else color="orange" :style="{ marginLeft: '6px' }">
-            {{ i18n "pages.nodes.pairingPending" }}
-          </a-tag>
-        </a-select-option>
-      </a-select>
-    </a-form-item>
-    <a-form-item :label="'{{ i18n "pages.inbounds.remark" }}'">
-      <a-input v-model="cloneNode.remark" :placeholder="'{{ i18n "pages.inbounds.remarkPlaceholder" }}'">
-      </a-input>
-    </a-form-item>
-  </a-form>
-  <a-space style="width: 100%; justifyContent: 'flex-end'; marginTop: '16px'">
-    <a-button @click="cloneNode.visible = false">{{ i18n "cancel" }}</a-button>
-    <a-button type="primary" :loading="cloneNode.saving" @click="doCloneToNode">
-      {{ i18n "confirm" }}
-    </a-button>
-  </a-space>
-</a-modal>
 <script>
   // Five columns of content, plus the checkbox and the menu.
   //
@@ -1046,6 +1053,20 @@
       presetModal: {
         visible: false, name: '', security: '', remark: '', sni: '', cdn: '',
         port: 0, saving: false,
+      },
+      // Preset modal labels: baked in at render time as plain strings, because a
+      // template `i18n "..."` call inside a Vue binding attribute would nest
+      // double quotes and the browser's JS parser would reject it.
+      presetLabels: {
+        confirm: '{{ i18n "confirm" }}',
+        cancel: '{{ i18n "cancel" }}',
+        remark: '{{ i18n "remark" }}',
+        presetSni: '{{ i18n "presetSni" }}',
+        presetSniHint: '{{ i18n "presetSniHint" }}',
+        presetCdnEndpoint: '{{ i18n "presetCdnEndpoint" }}',
+        presetCdnHint: '{{ i18n "presetCdnHint" }}',
+        presetRandomPort: '{{ i18n "presetRandomPort" }}',
+        port: '{{ i18n "pages.inbounds.port" }}',
       },
     },
     created() {

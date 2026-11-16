@@ -311,6 +311,24 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	s.panel = controller.NewXUIController(g)
 	s.api = controller.NewAPIController(g, s.customGeoService)
 	s.node = controller.NewNodeController(g)
+	// The service worker lives at the panel's own <basePath>/sw.js, which is
+	// the narrowest scope a browser allows for a worker whose script URL is
+	// under the base path. Registering it from /assets/sw.js with a scope of
+	// <basePath>/ is rejected with a SecurityError, so the worker would never
+	// run and the PWA cache would silently never fill.
+	g.GET("/sw.js", func(c *gin.Context) {
+		f, err := assetsFS.Open("assets/sw.js")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+		c.Data(http.StatusOK, "application/javascript; charset=utf-8", func() []byte {
+			b, _ := io.ReadAll(f)
+			return b
+		}())
+	})
+
 	// The native tunnel engine's UI: the wizard page + the /panel/api/tunnels
 	// routes. Mounted on the same basePath group as the rest of the panel.
 	s.tunnel = controller.NewTunnelController(g)

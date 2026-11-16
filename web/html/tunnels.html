@@ -25,55 +25,82 @@
         </a-card>
       </a-col>
 
-      <!-- Tunnel table -->
+      <!-- Tunnel cards. A tunnel is a thing with a name, two ends and a health
+           story; the table it replaced scattered those across seven columns and
+           made the actions the widest cell on the screen. Each card carries its
+           own state and the five things an operator does to it. -->
       <a-col :span="24">
-        <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden' }">
-          <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
-            :scroll="isMobile ? {} : { x: 980 }" :pagination="false" bordered
-            :locale='{ emptyText: `{{ i18n "noData"}}` }'>
+        <div class="bo-tile" :style="{ padding: 'var(--sp-4)' }">
+          <div class="bo-tile-head">
+            <div class="bo-tile-title">
+              [[ labels.title ]]
+              <span class="bo-tile-meta">[[ rows.length ]]</span>
+            </div>
+          </div>
 
-            <template slot="status" slot-scope="text, row">
-              <a-badge :status="statusBadge(row)" :text="statusLabel(row)"></a-badge>
-            </template>
+          <div v-if="!rows.length" :style="{ color: 'var(--text-3)', padding: 'var(--sp-4) 0' }">
+            {{ i18n "noData" }}
+          </div>
 
-            <template slot="transport" slot-scope="text, row">
-              <a-tag :color="row.enable ? 'blue' : 'default'">[[ row.transport ]]</a-tag>
-              <span :style="{ color: 'var(--text-3)' }">·</span>
-              [[ row.role ]]
-            </template>
+          <div v-else class="bo-node-grid">
+            <article v-for="row in rows" :key="row.id" class="bo-node-card"
+              :class="{ 'bo-node-card--off': !row.enable }">
+              <header class="bo-node-head">
+                <div class="bo-node-name">
+                  <span class="bo-lamp"
+                    :class="!row.enable ? 'bo-lamp--off' : (row.status === 'up' ? 'bo-lamp--ok' : row.status === 'error' ? 'bo-lamp--error' : row.status === 'stalled' ? 'bo-lamp--warn' : 'bo-lamp--idle')"></span>
+                  <span class="bo-node-title">[[ row.name ]]</span>
+                </div>
+                <span class="bo-node-role">[[ row.role === 'server' ? labels.roleServer : labels.roleClient ]]</span>
+              </header>
 
-            <template slot="ports" slot-scope="text, row">
-              [[ portSummary(row) ]]
-            </template>
+              <div class="bo-node-url" :title="row.serverAddr ? row.serverAddr.host + ':' + row.serverAddr.port : ''">
+                [[ row.serverAddr ? row.serverAddr.host + ':' + row.serverAddr.port : '—' ]]
+              </div>
 
-            <template slot="peer" slot-scope="text, row">
-              <span :style="{ fontFamily: 'monospace', fontSize: '11px' }">[[ row.serverAddr ? row.serverAddr.host + ':' + row.serverAddr.port : '—' ]]</span>
-            </template>
+              <dl class="bo-node-kv">
+                <div>
+                  <dt>[[ labels.transport ]]</dt>
+                  <dd><a-tag :color="row.enable ? 'blue' : 'default'">[[ row.transport ]]</a-tag></dd>
+                </div>
+                <div>
+                  <dt>[[ labels.health ]]</dt>
+                  <dd><a-badge :status="statusBadge(row)" :text="statusLabel(row)"></a-badge></dd>
+                </div>
+                <div>
+                  <dt>[[ labels.ports ]]</dt>
+                  <dd class="num">[[ portSummary(row) ]]</dd>
+                </div>
+                <div>
+                  <dt>[[ labels.speed ]]</dt>
+                  <dd class="num">[[ fmtBytes(row.bytesUp) ]] ↑ / [[ fmtBytes(row.bytesDown) ]] ↓</dd>
+                </div>
+              </dl>
 
-            <template slot="speed" slot-scope="text, row">
-              <span class="num">[[ fmtBytes(row.bytesUp) ]] ↑ / [[ fmtBytes(row.bytesDown) ]] ↓</span>
-            </template>
-
-            <template slot="action" slot-scope="text, row">
-              <a @click="openEdit(row)">{{ i18n "edit" }}</a>
-              <a-divider type="vertical"></a-divider>
-              <a @click="runLinkTest(row)" :style="{ color: 'var(--accent)' }">{{ i18n "pages.tunnels.linkTest" }}</a>
-              <a-divider type="vertical"></a-divider>
-              <a @click="openHealth(row)" :style="{ color: 'var(--text-2)' }">{{ i18n "pages.tunnels.health" }}</a>
-              <a-divider type="vertical"></a-divider>
-              <a @click="toggleEnable(row)" :style="{ color: row.enable ? 'var(--error)' : 'var(--ok)' }">
-                [[ row.enable ? i18n "pages.tunnels.disable" : i18n "pages.tunnels.enable" ]]
-              </a>
-              <a-divider type="vertical"></a-divider>
-              <a-popconfirm title="{{ i18n "pages.tunnels.delConfirm" }}"
-                ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
-                @confirm="del(row)">
-                <a style="color: var(--error)">{{ i18n "delete" }}</a>
-              </a-popconfirm>
-            </template>
-          </a-table>
+              <footer class="bo-node-foot">
+                <div class="bo-row-actions">
+                  <a @click="openEdit(row)">{{ i18n "edit" }}</a>
+                  <a-divider type="vertical"></a-divider>
+                  <a @click="runLinkTest(row)" :style="{ color: 'var(--accent)' }">[[ labels.linkTest ]]</a>
+                  <a-divider type="vertical"></a-divider>
+                  <a @click="openHealth(row)" :style="{ color: 'var(--text-2)' }">[[ labels.health ]]</a>
+                  <a-divider type="vertical"></a-divider>
+                  <a @click="toggleEnable(row)" :style="{ color: row.enable ? 'var(--error)' : 'var(--ok)' }">
+                    [[ row.enable ? labels.disable : labels.enable ]]
+                  </a>
+                  <a-divider type="vertical"></a-divider>
+                  <a-popconfirm title="{{ i18n "pages.tunnels.delConfirm" }}"
+                    ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
+                    @confirm="del(row)">
+                    <a style="color: var(--error)">{{ i18n "delete" }}</a>
+                  </a-popconfirm>
+                </div>
+              </footer>
+            </article>
+          </div>
         </div>
       </a-col>
+
     </a-row>
   </transition>
 </a-spin>
@@ -171,7 +198,7 @@
         </a-form-item>
       </a-col>
       <a-col :span="24">
-        <a-checkbox v-model="modal.proxyV2">[[ labels.proxyV2 ]]</checkbox>
+        <a-checkbox v-model="modal.proxyV2">[[ labels.proxyV2 ]]</a-checkbox>
       </a-col>
     </a-row>
 
@@ -232,17 +259,27 @@
     delimiters: ['[[', ']]'],
     mixins: [MediaQueryMixin],
     el: '#app',
-    data: {
+    // data is a function, not an object literal: blankModal() lives under
+    // methods, and methods only exist on the instance. As a literal the call ran
+    // before Vue existed, threw "blankModal is not defined", and took the whole
+    // page down with it.
+    data() {
+      return {
       themeSwitcher,
       pageTitle: '{{ i18n "pages.tunnels.title" }}',
+      // pageClass is read by the shell in page.html (:class="[…, pageClass]").
+      // Vue 2 throws a ReferenceError for a name the instance does not define,
+      // which is what blanked the page after the blankModal fix.
+      pageClass: 'tunnels-page',
       spinning: false,
       refreshing: false,
       genTok: false,
       rows: [],
-      modal: blankModal(),
+      modal: this.blankModal(),
       ltModal: { visible: false, result: null },
       healthModal: { visible: false, loading: false, events: [] },
       labels: {
+        title: '{{ i18n "pages.tunnels.title" }}',
         add: '{{ i18n "pages.tunnels.add" }}',
         edit: '{{ i18n "pages.tunnels.edit" }}',
         refresh: '{{ i18n "pages.tunnels.refresh" }}',
@@ -277,16 +314,11 @@
         required: '{{ i18n "pages.tunnels.required" }}',
         health: '{{ i18n "pages.tunnels.health" }}',
         healthHint: '{{ i18n "pages.tunnels.healthHint" }}',
+        roleServer: '{{ i18n "pages.tunnels.roleServer" }}',
+        roleClient: '{{ i18n "pages.tunnels.roleClient" }}',
+        speed: '{{ i18n "pages.tunnels.speed" }}',
       },
-      columns: [
-        { title: '{{ i18n "pages.tunnels.name" }}', dataIndex: 'name', align: 'left', width: 150 },
-        { title: '{{ i18n "pages.tunnels.transport" }}', align: 'center', width: 150, scopedSlots: { customRender: 'transport' } },
-        { title: '{{ i18n "pages.tunnels.peer" }}', align: 'left', width: 170, scopedSlots: { customRender: 'peer' } },
-        { title: '{{ i18n "pages.tunnels.ports" }}', align: 'left', width: 140, scopedSlots: { customRender: 'ports' } },
-        { title: '{{ i18n "status" }}', align: 'center', width: 110, scopedSlots: { customRender: 'status' } },
-        { title: '{{ i18n "pages.tunnels.speed" }}', align: 'left', width: 180, scopedSlots: { customRender: 'speed' } },
-        { title: '', align: 'center', width: 220, scopedSlots: { customRender: 'action' } },
-      ],
+      };
     },
     methods: {
       blankModal() {

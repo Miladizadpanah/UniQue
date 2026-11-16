@@ -2,7 +2,10 @@ package web
 
 import (
 	"io/fs"
+	"os"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
@@ -12,7 +15,6 @@ import (
 // malformed key (e.g. a bad bulk-ops i18n insertion) fails here instead of silently
 // breaking i18n at runtime.
 func TestTranslationsAreValidToml(t *testing.T) {
-	t.Skip("isolation: i18n")
 	entries, err := fs.ReadDir(i18nFS, "translation")
 	if err != nil {
 		t.Fatal(err)
@@ -297,6 +299,100 @@ func TestTranslationKeyParity(t *testing.T) {
 			t.Errorf("%s: %d en_US key(s) missing and not baselined "+
 				"(translate them or add to knownMissing): %v",
 				e.Name(), len(newlyMissing), newlyMissing)
+		}
+	}
+}
+
+// templateI18nKeyRe matches the keys templates hand to the i18n func. The
+// character class deliberately excludes punctuation so a documented example such
+// as `i18n "..."` inside a script comment is not mistaken for a real key.
+var templateI18nKeyRe = regexp.MustCompile(`i18n\s+"([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"`)
+
+// testTemplateKeys returns every key the panel's templates ask for, walking the
+// html directory on disk so nested modals are included.
+func testTemplateKeys(t *testing.T) map[string]bool {
+	t.Helper()
+	keys := map[string]bool{}
+	err := fs.WalkDir(os.DirFS("html"), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".html") {
+			return nil
+		}
+		raw, err := fs.ReadFile(os.DirFS("html"), path)
+		if err != nil {
+			return err
+		}
+		for _, m := range templateI18nKeyRe.FindAllStringSubmatch(string(raw), -1) {
+			keys[m[1]] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk html: %v", err)
+	}
+	if len(keys) < 1000 {
+		t.Fatalf("only %d template keys found; the walk is not seeing the templates", len(keys))
+	}
+	return keys
+}
+
+// TestTemplateKeysAreTranslated is the guard that was missing when the panel
+// shipped pages whose labels rendered as the literal key ("pages.tunnels.add")
+// in every language. Parity between locale files cannot catch that: a key can be
+// absent from every file at once. This walks the templates themselves and
+// requires each key in the locales the release ships translated (en_US and
+// fa_IR), which is what the panel falls back to before giving up and printing
+// the raw key.
+func TestTemplateKeysAreTranslated(t *testing.T) {
+	keys := testTemplateKeys(t)
+	releaseLocales := []string{"translate.en_US.toml", "translate.fa_IR.toml"}
+	for _, name := range releaseLocales {
+		loc := loadTranslationKeys(t, name)
+		var missing []string
+		for k := range keys {
+			if !loc[k] {
+				missing = append(missing, k)
+			}
+		}
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			t.Errorf("%s: %d key(s) used by templates are missing, so the UI "+
+				"renders the raw key: %v", name, len(missing), missing)
+		}
+	}
+}
+
+// TestTranslationsHaveNoMojibake fails if a locale file has been re-encoded
+// through the wrong codepage. The fa_IR file did exactly that once: every Persian
+// character became a Latin-1 lookalike ("ÙˆØ±ÙˆØ¯" for "ورود"), which parses as
+// valid TOML and renders as gibberish with no error anywhere.
+func TestTranslationsHaveNoMojibake(t *testing.T) {
+	checks := []struct {
+		file     string
+		minRunes int
+	}{
+		{"translate.fa_IR.toml", 100},
+	}
+	for _, c := range checks {
+		raw, err := i18nFS.ReadFile("translation/" + c.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", c.file, err)
+		}
+		text := string(raw)
+		native := 0
+		for _, r := range text {
+			if r >= 0x0600 && r <= 0x06FF {
+				native++
+			}
+		}
+		if native < c.minRunes {
+			t.Errorf("%s: only %d native-script runes found, expected at least %d", c.file, native, c.minRunes)
+		}
+		// The double-encoded form of Persian always contains these two letters.
+		if strings.ContainsAny(text, "ØÙ") {
+			t.Errorf("%s: contains Latin-1 lookalikes (Ø/Ù); the file was re-encoded through the wrong codepage", c.file)
 		}
 	}
 }

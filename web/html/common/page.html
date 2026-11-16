@@ -257,10 +257,12 @@
      only /subs/assets/... and never the host's other documents. -->
 <script>
   if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
-    // The worker's URL is the base path's own /sw.js, which the panel's
-    // StaticFS route serves under the panel's base path. A base path of
-    // "/" registers /sw.js; a base path of "/subs/" registers /subs/sw.js.
-    var swUrl = '{{ .base_path }}assets/sw.js';
+    // The worker lives at the panel's own <basePath>/sw.js, which is the
+    // narrowest scope a browser allows for a script URL under the base path.
+    // A base path of "/" registers /sw.js; a base path of "/subs/" registers
+    // /subs/sw.js with scope /subs/. (An older build served the script from
+    // /assets/sw.js, which browsers refuse to register with a broader scope.)
+    var swUrl = '{{ .base_path }}sw.js';
     window.addEventListener('load', function () {
       navigator.serviceWorker.register(swUrl, {
         scope: '{{ .base_path }}',

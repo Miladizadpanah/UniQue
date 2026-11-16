@@ -6100,10 +6100,28 @@ func (s *InboundService) CloneInboundToNode(req NodeInboundCloneRequest) (*NodeI
 	if err != nil {
 		return res, common.NewError("reading source inbound's accounts: ", err.Error())
 	}
+	needRestart := false
 	for i := range clients {
 		c := clients[i]
 		if !c.Enable {
 			continue // a disabled source account does not clone; it stays on the hub.
+		}
+		// The subscription link is keyed on the hub client's subId: the node
+		// account is only served through /sub/<subId>, so an account cloned with
+		// an empty one would exist on the node and never appear for the customer.
+		// Mint it on the hub first — the same write-back the in-panel clone
+		// does — so the cloned account's config and share link work immediately.
+		if c.SubID == "" {
+			newSubID := uuid.NewString()
+			subNeedRestart, subErr := s.writeBackClientSubID(source.Id, source.Protocol, c, newSubID)
+			if subErr != nil {
+				res.Failed = append(res.Failed, c.Email+" (subId: "+subErr.Error()+")")
+				continue
+			}
+			if subNeedRestart {
+				needRestart = true
+			}
+			c.SubID = newSubID
 		}
 		// The node's client create mints the credential THERE and answers with
 		// it; the hub records the NodeAccount row so the subscription layer can
@@ -6148,6 +6166,12 @@ func (s *InboundService) CloneInboundToNode(req NodeInboundCloneRequest) (*NodeI
 			continue
 		}
 		res.Cloned = append(res.Cloned, c.Email)
+	}
+	if needRestart {
+		// A subId minted above could not be hot-applied; flag the core so the
+		// next visitor reloads the config rather than serving a client the hub
+		// has already updated.
+		(&XrayService{}).SetToNeedRestart()
 	}
 	return res, nil
 }

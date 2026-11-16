@@ -17,116 +17,116 @@
           </div>
         </div>
 
-        <!-- Actions -->
-        <div class="bo-tile" :style="{ marginBottom: 'var(--gap-md)', padding: 'var(--sp-4)' }">
-          <div :style="{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }">
-            <a-button type="primary" icon="plus" @click="openAdd()">[[ labels.add ]]</a-button>
-            <a-button icon="sync" :loading="refreshing" @click="refreshAll">[[ labels.refresh ]]</a-button>
-            <a-button icon="cloud-upload" :loading="updating" @click="updatePanels()" :disabled="!updating">
-              [[ labels.updatePanels ]]
-            </a-button>
+        <!-- Node cards. One card per panel in the fleet: this panel first, then
+             every registered node. The table this replaced said the same things
+             but only as twelve narrow columns, so the identity of a node was a
+             row number and its health was a glyph three columns away from its
+             name. A card keeps the name, the state and the way into the node in
+             one block, and the grid reflows to one column on a phone. -->
+        <div class="bo-tile" :style="{ padding: 'var(--sp-4)' }">
+          <div class="bo-tile-head">
+            <div class="bo-tile-title">
+              [[ labels.nodes ]]
+              <span class="bo-tile-meta">[[ rows.length ]]</span>
+            </div>
+            <div class="bo-node-actions">
+              <a-button icon="sync" :loading="refreshing" @click="refreshAll">[[ labels.refresh ]]</a-button>
+              <a-button icon="cloud-upload" :loading="updating" @click="updatePanels()" :disabled="updating">
+                [[ labels.updatePanels ]]
+              </a-button>
+              <a-button type="primary" icon="plus" @click="openAdd()">[[ labels.add ]]</a-button>
+            </div>
           </div>
-        </div>
 
-        <!-- Node table -->
-        <div class="bo-tile" :style="{ padding: '0', overflow: 'hidden' }">
-          <a-table :columns="columns" :row-key="r => r.id" :data-source="rows"
-            :scroll="isMobile ? {} : { x: 860 }" :pagination="false" bordered
-            :locale='{ emptyText: `{{ i18n "noData" }}` }'>
+          <div class="bo-node-grid">
+            <article v-for="row in rows" :key="row.id" class="bo-node-card"
+              :class="{ 'bo-node-card--master': row.this, 'bo-node-card--off': !row.this && !row.online }">
+              <header class="bo-node-head">
+                <div class="bo-node-name">
+                  <span class="bo-lamp"
+                    :class="row.this ? 'bo-lamp--live' : (row.online ? 'bo-lamp--ok' : 'bo-lamp--error')"></span>
+                  <span class="bo-node-title">[[ row.name ]]</span>
+                </div>
+                <span class="bo-node-role">[[ row.this ? labels.master : labels.node ]]</span>
+              </header>
 
-            <template slot="status" slot-scope="text, row">
-              <a-badge :status="row.this ? 'processing' : (row.online ? 'success' : 'error')"
-                :text="row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline)">
-              </a-badge>
-            </template>
+              <div class="bo-node-url" :title="row.baseUrl">[[ row.baseUrl || '—' ]]</div>
 
-            <!-- The pairing handshake: what the node's operator has decided for
-                 this panel. "—" on this panel's own row; the hub row shows the
-                 live state, updated by every poll. -->
-            <template slot="pairing" slot-scope="text, row">
-              <template v-if="row.this"><span :style="{ color: 'var(--text-3)' }">—</span></template>
-              <template v-else>
-                <a-badge :status="row.pairingApproved ? 'success' : 'warning'"
-                  :text="row.pairingApproved ? labels.pairingConnected : labels.pairingPending">
-                </a-badge>
-              </template>
-            </template>
+              <dl class="bo-node-kv">
+                <div>
+                  <dt>[[ labels.cardStatus ]]</dt>
+                  <dd>
+                    <a-badge :status="row.this ? 'processing' : (row.online ? 'success' : 'error')"
+                      :text="row.this ? labels.thisPanel : (row.online ? labels.online : labels.offline)">
+                    </a-badge>
+                  </dd>
+                </div>
+                <div>
+                  <dt>[[ labels.lastSeen ]]</dt>
+                  <dd>
+                    <span v-if="row.lastSeen">[[ IntlUtil.formatDate(row.lastSeen / 1000000) ]]</span>
+                    <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.neverPolled ]]</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>[[ labels.cardAgent ]]</dt>
+                  <dd class="num">[[ row.version || '—' ]]</dd>
+                </div>
+                <div>
+                  <dt>[[ labels.cardSync ]]</dt>
+                  <dd>
+                    <template v-if="row.this"><span :style="{ color: 'var(--text-3)' }">—</span></template>
+                    <a-badge v-else :status="row.pairingApproved ? 'success' : 'warning'"
+                      :text="row.pairingApproved ? labels.pairingConnected : labels.pairingPending">
+                    </a-badge>
+                  </dd>
+                </div>
+                <div>
+                  <dt>[[ labels.cardInbounds ]]</dt>
+                  <dd class="num">
+                    [[ row.inboundCount ]]
+                    <span :style="{ color: 'var(--text-3)' }"> / [[ row.accountCount ]] [[ labels.accounts ]]</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>[[ labels.metrics ]]</dt>
+                  <dd>
+                    <template v-if="row.lastHeartbeat > 0">
+                      <span class="num">[[ fmtPct(row.cpuPct) ]] / [[ fmtPct(row.memPct) ]]</span>
+                      <span :style="{ color: 'var(--text-3)' }"> · </span>
+                      <span class="num">[[ fmtBytesPerSec(netRate(row)) ]]</span>
+                    </template>
+                    <span v-else :style="{ color: 'var(--text-3)' }">—</span>
+                  </dd>
+                </div>
+              </dl>
 
-            <!-- Write path availability: a node with an API port is manageable;
-                 without one it stays read-only monitoring. -->
-            <template slot="api" slot-scope="text, row">
-              <template v-if="row.this">—</template>
-              <template v-else-if="row.xrayApiPort > 0">
-                <a-badge status="success"><span slot="text">: [[ row.xrayApiPort ]]</span></a-badge>
-              </template>
-              <template v-else>
-                <a-badge status="default"><span slot="text">[[ labels.readOnlyShort ]]</span></a-badge>
-              </template>
-            </template>
-
-            <template slot="counts" slot-scope="text, row">
-              <span>[[ row.inboundCount ]]</span>
-              <span :style="{ color: 'var(--text-3)' }"> / </span>
-              <span>[[ row.accountCount ]]</span>
-              <span :style="{ color: 'var(--text-3)' }"> / </span>
-              <span>[[ row.onlineCount ]]</span>
-            </template>
-
-            <!-- Live gauges pushed by the node's 30s heartbeat: CPU, RAM and the
-                 aggregate net speed (the tunnel's real throughput). Zero values
-                 mean the node predates heartbeats: render "—" instead of 0. -->
-            <template slot="metrics" slot-scope="text, row">
-              <template v-if="row.lastHeartbeat > 0">
-                <a-tooltip :title="labels.cpu + ' / ' + labels.mem">
-                  <span>[[ fmtPct(row.cpuPct) ]] / [[ fmtPct(row.memPct) ]]</span>
-                </a-tooltip>
-                <span :style="{ color: 'var(--text-3)' }"> · </span>
-                <a-tooltip :title="labels.up + ' / ' + labels.down">
-                  <span class="num">[[ fmtBytesPerSec(netRate(row)) ]]</span>
-                </a-tooltip>
-              </template>
-              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
-            </template>
-
-            <!-- The node's xray core state: running / stopped / the error that
-                 stopped it. The hub can see a crashed core on the node without
-                 opening the node's own dashboard. -->
-            <template slot="xrayState" slot-scope="text, row">
-              <template v-if="row.lastHeartbeat > 0">
-                <a-badge :status="row.xrayState === 'running' ? 'success' : 'error'"
-                  :text="row.xrayState === 'running' ? labels.xrayRunning : (labels.xrayStopped + (row.xrayError ? ' · ' + row.xrayError : ''))">
-                </a-badge>
-              </template>
-              <span v-else :style="{ color: 'var(--text-3)' }">—</span>
-            </template>
-
-            <template slot="lastSeen" slot-scope="text, row">
-              <span v-if="row.lastSeen">[[ IntlUtil.formatDate(row.lastSeen / 1000000000) ]]</span>
-              <span v-else :style="{ color: 'var(--text-3)' }">[[ labels.neverPolled ]]</span>
-            </template>
-
-            <template slot="action" slot-scope="text, row">
-              <template v-if="!row.this">
-                <a @click="openManage(row)">[[ labels.manage ]]</a>
-                <a-divider type="vertical"></a-divider>
-                <a @click="testNode(row)"><b class="bo-accent">[[ labels.test ]]</b></a>
-                <a-divider type="vertical"></a-divider>
-                <a @click="openEdit(row)">{{ i18n "edit" }}</a>
-                <a-divider type="vertical"></a-divider>
-                <a-popconfirm title="{{ i18n "pages.nodes.delConfirm" }}"
-                  ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
-                  @confirm="del(row)">
-                  <a style="color: var(--error)">{{ i18n "delete" }}</a>
-                </a-popconfirm>
-                <a-divider type="vertical" v-if="!row.pairingApproved"></a-divider>
-                <!-- The hub's half of the handshake: ask this node's operator to
-                     approve, and the node's decision lands on the pairing column
-                     on the next poll. -->
-                <a v-if="!row.pairingApproved" @click="requestPairing(row)"
-                  :style="{ color: 'var(--accent)' }">[[ labels.requestPairing ]]</a>
-              </template>
-            </template>
-          </a-table>
+              <footer class="bo-node-foot">
+                <template v-if="!row.this">
+                  <a-button size="small" type="primary" ghost @click="openManage(row)">[[ labels.nodeInfo ]]</a-button>
+                  <div class="bo-row-actions">
+                    <a @click="testNode(row)"><b class="bo-accent">[[ labels.test ]]</b></a>
+                    <a-divider type="vertical"></a-divider>
+                    <a @click="openEdit(row)">{{ i18n "edit" }}</a>
+                    <a-divider type="vertical"></a-divider>
+                    <a-popconfirm title="{{ i18n "pages.nodes.delConfirm" }}"
+                      ok-text="{{ i18n "confirm" }}" cancel-text="{{ i18n "cancel" }}"
+                      @confirm="del(row)">
+                      <a style="color: var(--error)">{{ i18n "delete" }}</a>
+                    </a-popconfirm>
+                  </div>
+                  <!-- The hub's half of the handshake: ask this node's operator to
+                       approve; the decision lands here on the next poll. -->
+                  <a v-if="!row.pairingApproved" @click="requestPairing(row)"
+                    :style="{ color: 'var(--accent)', fontSize: '12px' }">[[ labels.requestPairing ]]</a>
+                </template>
+                <template v-else>
+                  <a-button size="small" type="primary" ghost @click="openManage(row)">[[ labels.nodeInfo ]]</a-button>
+                  <span :style="{ color: 'var(--text-3)', fontSize: '12px' }">[[ labels.thisPanel ]]</span>
+                </template>
+              </footer>
+            </article>
+          </div>
         </div>
 
         <!-- This panel's side: the connection requests other panels have made
@@ -411,7 +411,7 @@
           <span>[[ manageModal.node.online ? labels.online : labels.offline ]]</span>
         </a-badge>
         <span :style="{ color: 'var(--text-3)' }">
-          [[ manageModal.node.lastSeen ? labels.lastSeen + ': ' + IntlUtil.formatDate(manageModal.node.lastSeen / 1000000000) : labels.neverPolled ]]
+          [[ manageModal.node.lastSeen ? labels.lastSeen + ': ' + IntlUtil.formatDate(manageModal.node.lastSeen / 1000000) : labels.neverPolled ]]
         </span>
       </div>
       <div class="bo-cf-kv" :style="{ marginTop: '10px' }">
@@ -646,20 +646,15 @@
         pairingStatusCol: '{{ i18n "pages.nodes.pairing" }}',
         pairingHub: '{{ i18n "pages.nodes.pairingHub" }}',
         pairingWhen: '{{ i18n "pages.nodes.pairingWhen" }}',
+        master: '{{ i18n "pages.nodes.master" }}',
+        node: '{{ i18n "pages.nodes.node" }}',
+        nodeInfo: '{{ i18n "pages.nodes.nodeInfo" }}',
+        cardStatus: '{{ i18n "status" }}',
+        cardAgent: '{{ i18n "version" }}',
+        cardSync: '{{ i18n "pages.nodes.pairing" }}',
+        cardInbounds: '{{ i18n "pages.nodes.inbounds" }}',
+        updateNoneEligible: '{{ i18n "pages.nodes.updateNoneEligible" }}',
       },
-      columns: [
-        { title: '{{ i18n "pages.nodes.name" }}', dataIndex: 'name', align: 'left', width: 130 },
-        { title: '{{ i18n "pages.nodes.baseUrl" }}', dataIndex: 'baseUrl', align: 'left', width: 150, ellipsis: true },
-        { title: '{{ i18n "version" }}', dataIndex: 'version', align: 'center', width: 80 },
-        { title: '{{ i18n "status" }}', align: 'center', width: 90, scopedSlots: { customRender: 'status' } },
-        { title: '{{ i18n "pages.nodes.apiCol" }}', align: 'center', width: 100, scopedSlots: { customRender: 'api' } },
-        { title: '{{ i18n "pages.nodes.pairing" }}', align: 'center', width: 120, scopedSlots: { customRender: 'pairing' } },
-        { title: '{{ i18n "pages.nodes.counts" }}', align: 'center', width: 130, scopedSlots: { customRender: 'counts' } },
-        { title: '{{ i18n "pages.nodes.metrics" }}', align: 'center', width: 150, scopedSlots: { customRender: 'metrics' } },
-        { title: '{{ i18n "pages.nodes.xrayState" }}', align: 'center', width: 90, scopedSlots: { customRender: 'xrayState' } },
-        { title: '{{ i18n "pages.nodes.lastSeen" }}', align: 'center', width: 140, scopedSlots: { customRender: 'lastSeen' } },
-        { title: '', align: 'center', width: 180, scopedSlots: { customRender: 'action' } },
-      ],
       accountCols: [
         { title: 'node', align: 'left', width: 120, scopedSlots: { customRender: 'accNode' } },
         { title: 'email', dataIndex: 'email', align: 'left', ellipsis: true },

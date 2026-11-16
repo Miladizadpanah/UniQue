@@ -29,12 +29,15 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -173,7 +176,8 @@ var pages = map[string]string{
 	"core":      "core.html",
 	"xray":      "xray.html",
 	"settings":  "settings.html",
-	"tunnel":    "tunnel.html",
+	"tunnels":   "tunnels.html",
+	"nodes":     "nodes.html",
 	"login":     "login.html",
 }
 
@@ -186,7 +190,8 @@ var pageTitles = map[string]string{
 	"core.html":      "Xray Core",
 	"xray.html":      "Xray",
 	"settings.html":  "Settings",
-	"tunnel.html":    "Tunnel",
+	"tunnels.html":   "Tunnels",
+	"nodes.html":     "Nodes",
 	"login.html":     "Login",
 }
 
@@ -350,40 +355,144 @@ func (s *store) defaultSettings() map[string]any {
 }
 
 func (s *store) tunnelList() []map[string]any {
+	// Shaped like model.TunnelPair's JSON: transport, serverAddr, the
+	// forwardedPorts blob as a JSON STRING, status and the byte gauges. The
+	// tunnels page renders these fields directly, so a fixture in the old
+	// hub/spoke shape drew empty cards and hid real binding mistakes.
 	return []map[string]any{
 		{
-			"id": 1, "name": "tehran-hub", "role": "direct", "protocol": "xhttp",
-			"hubHost": "hub.example.com", "hubPort": 443, "enable": true, "remark": "Iran → Germany",
-			"certExp": 0,
-			"spokes": []map[string]any{
-				{"host": "de1.example.com", "port": 443, "lastSeen": 1760000000, "latencyMs": 78},
-				{"host": "nl1.example.com", "port": 443, "lastSeen": 0, "latencyMs": 0},
-			},
+			"id": 1, "name": "tehran-hub", "role": "client", "transport": "wss",
+			"serverAddr":     map[string]any{"host": "de1.example.com", "port": 443},
+			"forwardedPorts": `[{"local":443,"backend":"127.0.0.1:2096"},{"local":53,"udp":true}]`,
+			"enable":         true, "status": "up", "remark": "Iran → Germany",
+			"bytesUp": 734003200, "bytesDown": 12884901888, "connections": 12,
+			"upSince": 1794700000000, "tuning": "balance",
+			"tlsFingerprint": "www.microsoft.com", "token": "abcd", "proxyProtoV2": true,
+			"fallbackTransports": `["tcp-tls","ws"]`,
 		},
 		{
-			"id": 2, "name": "backup-spoke", "role": "reverse", "protocol": "tuic",
-			"hubHost": "hub2.example.com", "hubPort": 8443, "enable": false, "remark": "",
-			"certExp": 0, "spokes": []map[string]any{},
+			"id": 2, "name": "backup-spoke", "role": "server", "transport": "tcp",
+			"serverAddr":     map[string]any{"host": "nl1.example.com", "port": 8443},
+			"forwardedPorts": `[]`,
+			"enable":         false, "status": "down", "remark": "",
+			"bytesUp": 0, "bytesDown": 0, "connections": 0,
+			"upSince": 0, "tuning": "turbo",
+			"fallbackTransports": `[]`,
 		},
 	}
 }
 
-func (s *store) tunnelStatus() []map[string]any {
-	out := s.tunnelList()
-	// Every spoke is probed here; one is deliberately offline so the online/offline
-	// styling on the page is visible. lastSeen is read through fmt.Sprint rather
-	// than a type assertion: the value crosses encoding/json, so its Go type is
-	// whatever JSON chose, and an assertion would panic on a live probe.
-	for _, t := range out {
-		spokes, ok := t["spokes"].([]map[string]any)
-		if !ok {
-			continue
-		}
-		for _, sp := range spokes {
-			sp["online"] = atoi(fmt.Sprint(sp["lastSeen"])) != 0
-		}
+
+// ------------------------------------------------------------------- nodes
+// The fixtures below mirror the JSON shapes web/controller/node.go answers with:
+// /list returns []model.Node (with the last poll's snapshot fields), /summary
+// returns NodeService.ComputeSummary()'s NodeSummary, /token the panel's own
+// status token + base url, /metrics a []NodeMetrics slice, and /nodeOptions
+// NodeService.NodeInboundOptions() ([]NodeOption{node, inbounds}).
+
+func (s *store) nodes() []map[string]any {
+	now := int64(time.Now().UnixNano())
+	older := int64(time.Now().Add(-2 * time.Minute).UnixNano())
+	return []map[string]any{
+		{
+			"id": 1, "name": "tehran-01", "baseUrl": "https://tehran-01.example.com:2096",
+			"token": "node-token-tehran", "enable": true, "remark": "Primary spoke",
+			"lastSeen": now, "latencyMs": 42,
+			"version": "2.8.0", "inboundCount": 4, "accountCount": 12, "onlineCount": 5,
+			"online": true, "pairingApproved": true, "lastError": "",
+			"xrayApiHost": "", "xrayApiPort": 10085, "apiTlsMode": "insecure", "apiCaPem": "",
+			"lastHeartbeat": now, "cpuPct": 12.4, "memPct": 58.1, "uptimeSecs": 360000,
+			"netUp": 4294967296, "netDown": 17179869184, "xrayState": "running", "xrayError": "",
+		},
+		{
+			"id": 2, "name": "frankfurt-02", "baseUrl": "https://fra-02.example.com:2096",
+			"token": "node-token-fra", "enable": true, "remark": "EU exit",
+			"lastSeen": older, "latencyMs": 180,
+			"version": "2.8.0", "inboundCount": 2, "accountCount": 6, "onlineCount": 2,
+			"online": true, "pairingApproved": true, "lastError": "",
+			"xrayApiHost": "", "xrayApiPort": 0, "apiTlsMode": "insecure", "apiCaPem": "",
+			"lastHeartbeat": older, "cpuPct": 3.1, "memPct": 41.7, "uptimeSecs": 792000,
+			"netUp": 1073741824, "netDown": 5368709120, "xrayState": "running", "xrayError": "",
+		},
+		{
+			"id": 3, "name": "ams-legacy", "baseUrl": "https://ams-legacy.example.com:2096",
+			"token": "node-token-ams", "enable": false, "remark": "Decommissioned",
+			"lastSeen": int64(time.Now().Add(-48 * time.Hour).UnixNano()), "latencyMs": 0,
+			"version": "2.6.0", "inboundCount": 1, "accountCount": 0, "onlineCount": 0,
+			"online": false, "pairingApproved": false,
+			"lastError": "status endpoint returned 401",
+			"xrayApiHost": "", "xrayApiPort": 0, "apiTlsMode": "insecure", "apiCaPem": "",
+			"lastHeartbeat": 0, "cpuPct": 0, "memPct": 0, "uptimeSecs": 0,
+			"netUp": 0, "netDown": 0, "xrayState": "stopped", "xrayError": "",
+		},
+	}
+}
+
+func (s *store) nodeSummary() map[string]any {
+	return map[string]any{
+		"thisInbounds": 3, "thisAccounts": 4, "thisOnline": 2,
+		"nodeCount": 2, "onlineCount": 2,
+		"totalInbounds": 9, "totalAccounts": 22, "totalOnline": 9,
+	}
+}
+
+// nodeMetrics returns two dozen samples of the last "24h" for one node, the
+// shape web/service.ListNodeMetricsHistory answers with ([]model.NodeMetrics).
+func (s *store) nodeMetrics(nodeID int) []map[string]any {
+	out := make([]map[string]any, 0, 24)
+	base := int64(time.Now().Add(-24 * time.Hour).UnixMilli())
+	for i := 0; i < 24; i++ {
+		out = append(out, map[string]any{
+			"id": nodeID*100 + i, "nodeId": nodeID, "source": "heartbeat",
+			"cpuPct": 10.0 + float64(i%5), "memPct": 55.0 + float64(i%7),
+			"netUp": uint64(1073741824 * i), "netDown": uint64(5368709120 * i),
+			"ts":  base + int64(i*3600000),
+		})
 	}
 	return out
+}
+
+// nodeOptions is the /nodeOptions payload: per approved node, the inbounds that
+// node can carry accounts on RIGHT NOW (what the client form's Inbounds tab lists).
+func (s *store) nodeOptions() []map[string]any {
+	return []map[string]any{
+		{
+			"node": s.nodes()[0],
+			"inbounds": []map[string]any{
+				{"id": 11, "remark": "vless reality", "enable": true, "port": 443, "protocol": "vless",
+					"settings":       `{"clients":[],"decryption":"none","fallbacks":[]}`,
+					"streamSettings": `{"network":"tcp","security":"reality","realitySettings":{"dest":"www.example.com:443","serverNames":["www.example.com"],"shortIds":["aa11"]}}`,
+					"sniffing":       `{"enabled":true,"destOverride":["http","tls"]}`},
+				{"id": 12, "remark": "vmess ws", "enable": true, "port": 8443, "protocol": "vmess",
+					"settings":       `{"clients":[],"decryption":"none","fallbacks":[]}`,
+					"streamSettings": `{"network":"ws","security":"tls","wsSettings":{"path":"/ws"},"tlsSettings":{"serverName":"v.example.com"}}`,
+					"sniffing":       `{"enabled":true,"destOverride":["http"]}`},
+			},
+		},
+		{
+			"node": s.nodes()[1],
+			"inbounds": []map[string]any{
+				{"id": 21, "remark": "vless grpc", "enable": true, "port": 2096, "protocol": "vless",
+					"settings":       `{"clients":[],"decryption":"none","fallbacks":[]}`,
+					"streamSettings": `{"network":"grpc","security":"tls","grpcSettings":{"multiMode":false}}`,
+					"sniffing":       `{"enabled":true,"destOverride":["http"]}`},
+			},
+		},
+	}
+}
+
+// nodeInboundsFor is one node's own inbound list (the /:id/inbounds payload).
+func (s *store) nodeInboundsFor(nodeID int) []map[string]any {
+	for _, opt := range s.nodeOptions() {
+		nm, _ := opt["node"].(map[string]any)
+		if nm == nil {
+			continue
+		}
+		if int(nm["id"].(float64)) == nodeID {
+			return opt["inbounds"].([]map[string]any)
+		}
+	}
+	return []map[string]any{}
 }
 
 // ------------------------------------------------------------- group handlers
@@ -486,38 +595,40 @@ func (s *store) reorderGroups(ids []int) []inboundGroup {
 // -------------------------------------------------------------------- request
 
 type reqBody struct {
-	ID       int             `json:"id"`
-	Name     string          `json:"name"`
-	ParentID json.RawMessage `json:"parentId"`
-	Data     string          `json:"data"`
+	ID        int             `json:"id"`
+	Name      string          `json:"name"`
+	ParentID  json.RawMessage `json:"parentId"`
+	Data      string          `json:"data"`
+	InboundID int             `json:"inboundId"`
+	NodeID    int             `json:"nodeId"`
+	Remark    string          `json:"remark"`
 }
 
 // readBody accepts either the JSON body the pages post or urlencoded fields.
+//
+// The urlencoded case is the normal one, not the fallback: axios-init.js
+// re-encodes every non-FormData body with Qs.stringify, so pages always post
+// `inboundId=1&nodeId=3`. r.ParseForm() cannot be used for it — this function
+// has already consumed the body — so the query string is parsed from the bytes.
 func readBody(r *http.Request) reqBody {
 	var b reqBody
 	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if len(bytes.TrimSpace(raw)) > 0 {
-		if json.Unmarshal(raw, &b) == nil {
-			return b
-		}
-		_ = r.ParseForm()
-		if r.PostForm != nil {
-			b.Name = r.PostForm.Get("name")
-			b.ID = atoi(r.PostForm.Get("id"))
-			b.Data = r.PostForm.Get("data")
-			return b
-		}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return b
 	}
-	_ = r.ParseForm()
-	if r.PostForm != nil {
-		b.Name = b.Name + r.PostForm.Get("name")
-		if b.ID == 0 {
-			b.ID = atoi(r.PostForm.Get("id"))
-		}
-		if b.Data == "" {
-			b.Data = r.PostForm.Get("data")
-		}
+	if json.Unmarshal(raw, &b) == nil {
+		return b
 	}
+	form, err := url.ParseQuery(string(raw))
+	if err != nil {
+		return b
+	}
+	b.Name = form.Get("name")
+	b.ID = atoi(form.Get("id"))
+	b.Data = form.Get("data")
+	b.InboundID = atoi(form.Get("inboundId"))
+	b.NodeID = atoi(form.Get("nodeId"))
+	b.Remark = form.Get("remark")
 	return b
 }
 
@@ -599,6 +710,23 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 	// ---- inbounds -----------------------------------------------------------
 	case path == "/panel/api/inbounds/list":
 		writeJSON(w, s.inbounds(), true, "")
+
+	case path == "/panel/api/inbounds/cloneToNode" && r.Method == http.MethodPost:
+		// The clone picker's submit. Shaped like service.NodeInboundCloneResult:
+		// doCloneToNode reports len(cloned) as the success count and warns when
+		// len(failed) is non-zero, so a single email is left out on purpose to
+		// keep the partial-result branch reachable from the preview.
+		b := readBody(r)
+		if b.NodeID == 0 {
+			writeJSON(w, nil, false, "pages.nodes.pairingPending")
+			return
+		}
+		writeJSON(w, map[string]any{
+			"nodeInboundId":  20 + b.NodeID,
+			"nodeInboundTag": fmt.Sprintf("clone-%d-%d", b.InboundID, b.NodeID),
+			"cloned":         []string{"ali@tehran", "sara@tehran"},
+			"failed":         []string{"expired@tehran"},
+		}, true, "")
 
 	case path == "/panel/api/inbounds/groups":
 		if r.Method == http.MethodPost {
@@ -718,11 +846,71 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 		path == "/panel/api/server/cpuHistory/2":
 		writeJSON(w, map[string]any{"running": false}, true, "")
 
-	// ---- tunnel -------------------------------------------------------------
-	case path == "/panel/tunnel/list":
+	// ---- tunnels ----------------------------------------------------------
+	// The panel registers these under /panel/api/tunnels (see
+	// web/controller/tunnel.go); an older revision of this harness answered
+	// /panel/tunnel/... which nothing on the page ever calls.
+	case path == "/panel/api/tunnels/list":
 		writeJSON(w, s.tunnelList(), true, "")
-	case path == "/panel/tunnel/status":
-		writeJSON(w, s.tunnelStatus(), true, "")
+	case strings.HasPrefix(path, "/panel/api/tunnels/"):
+		// health / del / enable / linkTest: the page reads only the list, so
+		// any other tunnel API call gets an empty-but-successful envelope.
+		rest := strings.TrimPrefix(path, "/panel/api/tunnels/")
+		if strings.Contains(rest, "/health") {
+			writeJSON(w, []map[string]any{}, true, "")
+			return
+		}
+		writeJSON(w, nil, true, "")
+
+	// ---- nodes ------------------------------------------------------------
+	case path == "/panel/api/nodes/list":
+		writeJSON(w, s.nodes(), true, "")
+	case path == "/panel/api/nodes/summary":
+		writeJSON(w, s.nodeSummary(), true, "")
+	case path == "/panel/api/nodes/token" && r.Method == http.MethodGet:
+		writeJSON(w, map[string]any{
+			"token":   "panel-node-token-preview",
+			"baseUrl": "http://" + *addr,
+		}, true, "")
+	case path == "/panel/api/nodes/token/generate":
+		writeJSON(w, map[string]any{"token": "panel-node-token-preview"}, true, "")
+	case path == "/panel/api/nodes/nodeOptions":
+		writeJSON(w, s.nodeOptions(), true, "")
+	case path == "/panel/api/nodes/nodeAccounts":
+		writeJSON(w, []map[string]any{
+			{
+				"id": 1, "nodeId": 1, "node": s.nodes()[0],
+				"remoteInboundId": 11, "email": "ali@tehran", "clientId": "7d3e2f1a-0000-4000-8000-000000000001",
+				"subId": "sub-ali", "createdAt": 1760000000000,
+			},
+		}, true, "")
+	case path == "/panel/api/nodes/scopedTokens":
+		writeJSON(w, []map[string]any{
+			{"id": 1, "name": "fra-spoke", "secret": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", "scope": 3, "expiresAt": 0, "remark": "", "createdAt": 1760000000000},
+		}, true, "")
+	case path == "/panel/api/nodes/pairings":
+		writeJSON(w, []map[string]any{
+			{"id": 9, "hubName": "ams-legacy-hub", "hubUrl": "https://ams-legacy.example.com:2096", "status": "pending", "createdAt": 1760000000000, "decidedAt": 0},
+		}, true, "")
+	case strings.HasPrefix(path, "/panel/api/nodes/"):
+		rest := strings.TrimPrefix(path, "/panel/api/nodes/")
+		if m := regexp.MustCompile(`^(\d+)/inbounds$`).FindStringSubmatch(rest); m != nil {
+			writeJSON(w, s.nodeInboundsFor(atoi(m[1])), true, "")
+			return
+		}
+		if m := regexp.MustCompile(`^(\d+)/metrics\??$`).FindStringSubmatch(rest); m != nil {
+			writeJSON(w, s.nodeMetrics(atoi(m[1])), true, "")
+			return
+		}
+		// Everything else (add / update / del / refresh / test / pullTraffic /
+		// ensureInbounds / addClient / pairings/decide / scopedTokens ...): the
+		// preview only exercises the read paths, so a mutating call that a screen
+		// fires gets a success envelope and is logged below.
+		if r.Method == http.MethodPost {
+			_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+		}
+		log.Printf("nodes (unmodelled): %s %s", r.Method, path)
+		writeJSON(w, nil, true, "")
 	}
 
 	// Anything the switch did not recognise: answer the envelope, empty. A page
@@ -779,6 +967,13 @@ func (p *preview) routes() *http.ServeMux {
 	// Real front-end assets, straight off disk: the same files the panel embeds.
 	assets := http.FileServer(http.Dir(filepath.Join(p.root, "web", "assets")))
 	mux.Handle("/assets/", http.StripPrefix("/assets/", assets))
+	// The panel serves sw.js from the asset bundle at the ROOT, because a service
+	// worker's scope is its own directory and /assets/ would scope it to the
+	// assets path (see web/web.go). Mirror that here so the preview does not
+	// report a registration failure the real server does not have.
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(p.root, "web", "assets", "sw.js"))
+	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path

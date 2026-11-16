@@ -1,9 +1,4 @@
-# Phase 7 — UI Redesign (زیباتر از Sanaei) → **v2.9.0**
-
-## Version
-- `config/version` → `2.9.0`
-- GitHub tag → `v2.9.0`
-- Release → `v2.9.0` با asset `vpn-ui-amd64`
+# Phase 7 — UI Redesign (زیباتر از Sanaei)
 
 ## Design Direction
 
@@ -43,11 +38,20 @@
 - اطمینان که i18n کلیدها در همه pages کار می‌کند
 
 ## Status
-- [x] Phase 7a step 1: tokens.css v2 (dark-first + dual accent) — commit 7df8885
-- [x] Phase 7a step 2: components.css v2 (modern component set) — WIP
-- [ ] Phase 7a step 3: rebuild index.html (stat cards + charts)
-- [ ] Phase 7a step 4: rebuild inbounds.html (modern data grid + preset wizard)
-- [ ] Phase 7a step 5: rebuild clients.html (modern table + bulk ops)
-- [ ] Phase 7b: 7 remaining pages (nodes, tunnels, settings, xray, admins, resellers, core)
-- [ ] Bump config/version to 2.9.0
-- [ ] Tag v2.9.0 + push → CI build + publish
+
+Release: **2.8.0** (`config/version`, tag `v2.8.0`, asset `vpn-ui-amd64`).
+
+- [x] Phase 7a: design system (tokens + components restored, no orphan `bo-*`
+      class left unstyled) + index / inbounds / clients
+- [x] Phase 7b: nodes and tunnels rebuilt as card grids; settings, xray,
+      admins, resellers and core on the same shell
+- [x] Guards that would have caught this phase's regressions:
+      `web/i18n_toml_test.go` (real TOML, template-key coverage, mojibake),
+      `web/page_render_test.go` (every page executes),
+      `web/page_outside_app_test.go` + `web/htmlscan` (a dialog outside `#app`
+      is never compiled — the clone-to-node bug), `web/assets_css_test.go` +
+      `web/csscheck` (a template class no stylesheet defines)
+- [x] Clone-to-node: an inbound's menu clones it onto a registered node, and
+      the cloned accounts keep the hub client's `subId`, so their configs and
+      share links are served by the same `/sub/<subId>` as local accounts
+

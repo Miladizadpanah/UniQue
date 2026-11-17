@@ -320,6 +320,34 @@ func (s *store) inbounds() []map[string]any {
 	}
 }
 
+// assignable is the /panel/api/clients/assignable payload: the inbounds an
+// account may be put on, as model.AccountMembershipView (web/service/accountlist.go).
+//
+// Derived from the inbound fixtures rather than hand-written, because an empty
+// answer here is indistinguishable in the browser from "the checklist is broken":
+// the Add Client form's Inbounds tab renders its alert and no rows. Deriving it
+// also keeps this list honest when a fixture inbound is added or renamed.
+func (s *store) assignable() []map[string]any {
+	out := make([]map[string]any, 0, len(s.inbounds()))
+	for _, ib := range s.inbounds() {
+		// The service only offers an inbound whose settings can hold clients, and
+		// wireguard is special-cased there (settingsHoldClients).
+		settings, _ := ib["settings"].(string)
+		var root map[string]any
+		_ = json.Unmarshal([]byte(settings), &root)
+		protocol, _ := ib["protocol"].(string)
+		if _, ok := root["clients"].([]any); !ok && protocol != "wireguard" {
+			continue
+		}
+		method, _ := root["method"].(string)
+		out = append(out, map[string]any{
+			"inboundId": ib["id"], "protocol": protocol, "remark": ib["remark"],
+			"port": ib["port"], "enable": ib["enable"], "method": method,
+		})
+	}
+	return out
+}
+
 // status is the /panel/api/server/status payload, carrying the keys
 // web/service.Status marshals (see server.go), so the overview renders numbers
 // rather than empty tiles.
@@ -811,7 +839,7 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/panel/api/clients/list":
 		writeJSON(w, map[string]any{"rows": p.clientRows(), "total": 4, "sort": "newest"}, true, "")
 	case path == "/panel/api/clients/assignable":
-		writeJSON(w, []any{}, true, "")
+		writeJSON(w, s.assignable(), true, "")
 
 	// ---- overview / core ----------------------------------------------------
 	case path == "/panel/api/server/status":
@@ -823,6 +851,18 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	case path == "/panel/setting/getDefaultJsonConfig":
 		writeJSON(w, `{"inbounds":[],"outbounds":[],"log":{"loglevel":"warning"},"inbounds":[]}`, true, "")
+
+	// POST /panel/xray/ is how the Xray Configs page loads its template. It is a
+	// JSON STRING carrying {xraySetting, inboundTags, outboundTestUrl}, not an
+	// object — the page calls JSON.parse(msg.obj). Left unhandled, the request
+	// fell through to the page handler and answered with HTML, which surfaced as
+	// an "unknown data:" toast and a blank page.
+	case path == "/panel/xray/" || path == "/panel/xray":
+		writeJSON(w, `{"xraySetting":{"inbounds":[],"outbounds":[],"routing":{"rules":[]},"log":{"loglevel":"warning"}},"inboundTags":["inbound-443","inbound-8080","inbound-51820"],"outboundTestUrl":"https://www.google.com/generate_204"}`, true, "")
+	case path == "/panel/xray/getOutboundsTraffic":
+		writeJSON(w, map[string]any{
+			"inbound-443": map[string]any{"up": 3 << 30, "down": 21 << 30},
+		}, true, "")
 
 	case path == "/panel/core/status":
 		writeJSON(w, []map[string]any{{"name": "xray", "state": "running", "version": "26.1.1", "errorMsg": ""}}, true, "")
@@ -986,9 +1026,16 @@ func (p *preview) routes() *http.ServeMux {
 			return
 		case strings.HasPrefix(path, "/panel/"):
 			rest := strings.TrimPrefix(path, "/panel/")
-			if name, ok := pages[strings.TrimSuffix(rest, "/")]; ok {
-				p.handlePage(w, r, name)
-				return
+			// A page is a GET only. Several pages share a path with an API call
+			// their own script makes (the Xray Configs page GETs /panel/xray and
+			// then POSTs /panel/xray/ for the template), and matching the page
+			// route regardless of method answered that POST with HTML: the page
+			// then sat blank and toasted "unknown data:".
+			if r.Method == http.MethodGet {
+				if name, ok := pages[strings.TrimSuffix(rest, "/")]; ok {
+					p.handlePage(w, r, name)
+					return
+				}
 			}
 			// API-ish paths are anything the page fetches, which the panel serves
 			// from several controllers rather than one prefix.

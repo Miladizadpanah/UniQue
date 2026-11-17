@@ -148,8 +148,11 @@
               </a-badge>
             </template>
             <template slot="pairingWhen" slot-scope="text, row">
-              <span v-if="row.decidedAt">[[ IntlUtil.formatDate(row.decidedAt / 1000) ]]</span>
-              <span v-else :style="{ color: 'var(--text-3)' }">[[ IntlUtil.formatDate(row.createdAt / 1000) ]]</span>
+              <!-- createdAt/decidedAt are UnixMILLI (NodePairingRequest), and
+                   formatDate already takes milliseconds. Dividing by 1000 here
+                   put every request in January 1970. -->
+              <span v-if="row.decidedAt">[[ IntlUtil.formatDate(row.decidedAt) ]]</span>
+              <span v-else :style="{ color: 'var(--text-3)' }">[[ IntlUtil.formatDate(row.createdAt) ]]</span>
             </template>
             <template slot="pairingAction" slot-scope="text, row">
               <template v-if="row.status === 'pending'">
@@ -218,7 +221,8 @@
               <span v-if="!row.scope" :style="{ color: 'var(--text-3)' }">—</span>
             </template>
             <template slot="expiry" slot-scope="text, row">
-              <span v-if="row.expiresAt > 0">[[ IntlUtil.formatDate(row.expiresAt / 1000) ]]</span>
+              <!-- ApiToken.ExpiresAt is UnixMilli, like createdAt above. -->
+              <span v-if="row.expiresAt > 0">[[ IntlUtil.formatDate(row.expiresAt) ]]</span>
               <span v-else :style="{ color: 'var(--text-3)' }">—</span>
             </template>
             <template slot="secret" slot-scope="text, row">
@@ -470,7 +474,7 @@
             <span class="num">[[ fmtBytesPerSec(netDelta(manageModal.metrics, row)) ]]</span>
           </template>
           <template slot="metricTs" slot-scope="text, row">
-            [[ row.ts ? IntlUtil.formatDate(row.ts / 1000) : '—' ]]
+            [[ row.ts ? IntlUtil.formatDate(row.ts) : '—' ]]
           </template>
           <template slot="metricSrc" slot-scope="text, row">[[ row.source ]]</template>
         </a-table>

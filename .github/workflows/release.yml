@@ -54,7 +54,33 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go test ./... 2>&1 | tee go-test.log
+
+      # Same reasoning as .github/workflows/test.yml: a failed step's annotation
+      # only says "exit code 1", and downloading the raw log needs repo admin
+      # rights. Emit the failing packages/tests as annotations + a job summary so a
+      # blocked release says WHY on the run page.
+      - name: Summarize test failures
+        if: failure()
+        run: |
+          set -euo pipefail
+          if [ ! -f go-test.log ]; then
+            echo "::error::the test step produced no log (build failure before any test ran)"
+            exit 1
+          fi
+          grep -E '^(--- FAIL|FAIL[[:space:]]|panic:|# )' go-test.log > failures.txt || true
+          {
+            echo "### Test failures"
+            echo '```'
+            head -200 failures.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            echo "::error::$line"
+          done < <(head -50 failures.txt)
+          exit 1
 
   build:
     needs: test

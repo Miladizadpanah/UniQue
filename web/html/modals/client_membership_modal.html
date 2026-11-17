@@ -256,8 +256,16 @@
              one is a decision: the account keeps everything and serves nobody.
              Node groups below count as a selection, so the warning only shows
              when BOTH are empty. -->
-        <a-alert v-if="!clientMembershipModal.selected.length && !clientMembershipModal.nodeSelected.length" type="warning" show-icon
-          :style="{ marginTop: '12px' }"
+        <!-- Two different empty states, said differently because the fix is
+             different. "Nothing exists yet" is about the panel and means go make
+             an inbound; "nothing ticked" is about this account and is a legal
+             choice. The old single warning used the first sentence for both, so a
+             form holding three inbounds still said there were none. -->
+        <a-alert v-if="!clientMembershipModal.assignable.length && !clientMembershipModal.nodeOptions.length"
+          type="info" show-icon :style="{ marginTop: '12px' }"
+          message='{{ i18n "pages.clients.noInboundsExist" }}'></a-alert>
+        <a-alert v-else-if="!clientMembershipModal.selected.length && !clientMembershipModal.nodeSelected.length"
+          type="warning" show-icon :style="{ marginTop: '12px' }"
           message='{{ i18n "pages.clients.noInbounds" }}'
           description='{{ i18n "pages.clients.noInboundsHint" }}'></a-alert>
 

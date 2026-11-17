@@ -1,0 +1,73 @@
+name: Test
+
+# Runs the suite on every push and pull request.
+#
+# Why this exists next to release.yml: the panel only builds and runs on Linux
+# (web/service uses unix.*, syscall.Ucred and netlink), so the suite cannot be
+# executed on a Windows dev host at all. Until now the FIRST place it ran was the
+# `test` job of a release tag — a stale unit test then blocked a release after the
+# tag had already been pushed. This workflow makes `go test ./...` a plain push
+# gate: breakage is caught on the commit that caused it.
+#
+# Read failures without repo admin rights: the raw job log requires admin, so the
+# test output is printed to the job summary and every failing test becomes an
+# annotation (::error::), which anyone can read from the run page and the API.
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: |
+          set -o pipefail
+          go test ./... 2>&1 | tee go-test.log
+
+      # A failed step only reports "exit code 1" in the run annotations. Echo the
+      # failing package/test lines as annotations and into the job summary so the
+      # failure is readable from the run page without downloading the log.
+      - name: Summarize test failures
+        if: failure()
+        run: |
+          set -euo pipefail
+          if [ ! -f go-test.log ]; then
+            echo "::error::the test step produced no log (build failure before any test ran)"
+            exit 1
+          fi
+          grep -E '^(--- FAIL|FAIL[[:space:]]|panic:|# )' go-test.log > failures.txt || true
+          {
+            echo "### Test failures"
+            echo '```'
+            head -200 failures.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            echo "::error::$line"
+          done < <(head -50 failures.txt)
+          exit 1

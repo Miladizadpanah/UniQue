@@ -1299,6 +1299,9 @@
           okText: '{{ i18n "pages.client.bulk" }}',
           groups: this.inboundGroups,
           assignable: this.assignable,
+          // The same node groups the single form draws: a batch is not a
+          // per-inbound act either, so the operator picks them here too.
+          nodeOptions: this.nodeOptions,
           // Every email in use anywhere, so the form can say which generated names
           // are already taken. One of them fails the whole POST server-side
           // (AddInboundClient rejects the request, not the offending client), so
@@ -1358,12 +1361,21 @@
       // the same work four times. The inbound in the path is only what the
       // ownership check is made against, which is why it can be any membership.
       async resetAccountTraffic(row) {
-        const first = (row.memberships || [])[0];
-        if (!first) return;
+        // Addressed by EMAIL, not by an inbound: the account may be hosted only on
+        // nodes, in which case it has no local membership to name. The route
+        // zeroes the counters, restores the account on every local inbound
+        // serving it and resets its copies on the nodes.
         this.loading();
         try {
-          await HttpUtil.post(
-            `/panel/api/inbounds/${first.inboundId}/resetClientTraffic/${encodeURIComponent(row.email)}`);
+          const msg = await HttpUtil.post(
+            `/panel/api/inbounds/resetAccountTraffic/${encodeURIComponent(row.email)}`);
+          // No success toast here: HttpUtil already shows the server's own message,
+          // which names any node that could not be reset. A fixed string on top
+          // would duplicate it and hide that half. Only the silent-404 case needs a
+          // fallback, since HttpUtil swallows that one.
+          if (!msg || (!msg.success && !msg.msg)) {
+            this.$message.error('{{ i18n "somethingWentWrong" }}');
+          }
           await this.getDBInbounds();
           await this.refreshResellerBalance();
         } finally {

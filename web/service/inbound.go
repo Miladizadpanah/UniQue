@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -4707,95 +4708,180 @@ func (s *InboundService) ResetClientTrafficLimitByEmail(clientEmail string, tota
 }
 
 func (s *InboundService) ResetClientTrafficByEmail(clientEmail string) error {
-	db := database.GetDB()
-
-	// Reset traffic stats in ClientTraffic table
-	result := db.Model(xray.ClientTraffic{}).
-		Where("email = ?", clientEmail).
-		Updates(map[string]any{"enable": true, "up": 0, "down": 0})
-
-	err := result.Error
+	// Same semantics as the panel's per-inbound button: zero the counters AND put
+	// the account back on every inbound that serves it. The Telegram bot's reset
+	// used to update only the traffic row, leaving the core's user list short of
+	// the account the sweep had removed — so the bot said "reset" and the
+	// customer stayed cut off.
+	needRestart, err := s.ResetClientTraffic(0, clientEmail)
 	if err != nil {
 		return err
 	}
-
-	// The per-inbound breakdown of the row just zeroed. Left behind, it would keep
-	// claiming bytes the account no longer has, so the split would total more than
-	// the account itself.
-	resetMembershipUsage(db, []string{clientEmail})
-
+	if needRestart {
+		(&XrayService{}).SetToNeedRestart()
+	}
 	return nil
 }
 
+// settingsClientByEmail returns one account's entry out of an inbound's settings
+// blob, or nil. The entry is the raw posted map — the shape the core's AddUser
+// expects per protocol — rather than the typed client, which drops the keys
+// (a shadowssocks `password`, a hysteria `auth`, a wireguard `id`) that only the
+// blob carries.
+func settingsClientByEmail(settings, email string) map[string]any {
+	clients, ok := parseSettingsClients(settings)
+	if !ok {
+		return nil
+	}
+	want := accountKey(email)
+	for _, entry := range clients {
+		if got, _ := entry["email"].(string); accountKey(got) == want {
+			return entry
+		}
+	}
+	return nil
+}
+
+// ResetClientTraffic zeroes one account's counters and puts it back in service
+// on every inbound that serves it.
+//
+// `id` is the inbound the operator's click was addressed to. It is deliberately
+// no longer the only one touched: an account with memberships on several
+// inbounds is served by all of them, and the depletion sweep removes its core
+// user from every tag. Re-adding it to just the addressed inbound left the rest
+// holding no user, so the customer's subscription kept handing out links to
+// endpoints that refused their credential — which reads as "the reset did
+// nothing, make a new client". The core is re-synchronised for all of them.
 func (s *InboundService) ResetClientTraffic(id int, clientEmail string) (bool, error) {
+	db := database.GetDB()
+	if db == nil {
+		return false, common.NewError("database not available")
+	}
 	needRestart := false
 
-	traffic, err := s.GetClientTrafficByEmail(clientEmail)
+	// The counter row, read DIRECTLY rather than through GetClientTrafficByEmail.
+	//
+	// That helper resolves the account through an inbound it serves, and a
+	// node-only account — one whose every inbound lives on a remote node, which
+	// the client form can create — has no local inbound to resolve. Its reset
+	// therefore failed with "client not found" before the node half below ever
+	// ran, which is the one case this route was added for.
+	//
+	// Identity is folded the same way the enforcement paths fold it, so a stray
+	// case or a trailing space cannot make the row look absent.
+	var traffic xray.ClientTraffic
+	hasTraffic := true
+	terr := db.Model(xray.ClientTraffic{}).
+		Where("LOWER(TRIM(email)) = ?", accountKey(clientEmail)).
+		First(&traffic).Error
+	if errors.Is(terr, gorm.ErrRecordNotFound) {
+		hasTraffic = false
+	} else if terr != nil {
+		return false, terr
+	}
+
+	// Every local inbound that actually carries this account, resolved before
+	// anything is written. Identity is folded (accountKey), the same way the
+	// enforcement paths fold it, so a stray case or a trailing space cannot make
+	// a served account look unserved.
+	served, err := s.inboundsServingEmails(db, []string{clientEmail})
 	if err != nil {
 		return false, err
 	}
-
-	if !traffic.Enable {
-		inbound, err := s.GetInbound(id)
-		if err != nil {
-			return false, err
-		}
-		clients, err := s.GetClients(inbound)
-		if err != nil {
-			return false, err
-		}
-		for _, client := range clients {
-			if client.Email == clientEmail && client.Enable {
-				s.xrayApi.Init(p.GetAPIPort())
-				cipher := ""
-				if string(inbound.Protocol) == "shadowsocks" {
-					var oldSettings map[string]any
-					err = json.Unmarshal([]byte(inbound.Settings), &oldSettings)
-					if err != nil {
-						return false, err
-					}
-					cipher = oldSettings["method"].(string)
-				}
-				err1 := s.xrayApi.AddUser(string(inbound.Protocol), inbound.Tag, map[string]any{
-					"email":    client.Email,
-					"id":       client.ID,
-					"auth":     client.Auth,
-					"security": client.Security,
-					"flow":     client.Flow,
-					"password": client.Password,
-					"username": client.Username,
-					"cipher":   cipher,
-				})
-				if err1 == nil {
-					logger.Debug("Client enabled due to reset traffic:", clientEmail)
-				} else {
-					logger.Debug("Error in enabling client by api:", err1)
-					needRestart = true
-				}
-				s.xrayApi.Close()
-				break
-			}
+	// An account whose settings entry cannot be found (a row only the accounts
+	// layer knows about, or an inbound addressed by an id the blob no longer
+	// matches) still has its counters zeroed; the addressed inbound is the
+	// fallback so the restore below is not skipped entirely.
+	if len(served) == 0 && id > 0 {
+		if inbound, ierr := s.GetInbound(id); ierr == nil && inbound != nil {
+			served = []inboundServingEmail{{
+				Id:       inbound.Id,
+				Tag:      inbound.Tag,
+				Remark:   inbound.Remark,
+				Protocol: string(inbound.Protocol),
+				Email:    clientEmail,
+			}}
 		}
 	}
 
-	// Targeted update, not db.Save(traffic): `traffic` was read at the top of this
+	// Re-add the account to every tag that should serve it. Done regardless of
+	// the traffic row's `enable`: that flag is the panel's opinion, while the
+	// core's own user list is what accepts a connection. A reset on a client
+	// whose user a core restart (or a failed hot-add) dropped would otherwise
+	// report success and stay dead. "already exists" is the healthy path's answer
+	// and is not a failure.
+	if p != nil && len(served) > 0 {
+		if ierr := s.xrayApi.Init(p.GetAPIPort()); ierr != nil {
+			needRestart = true
+		} else {
+			for _, row := range served {
+				inbound, ierr := s.GetInbound(row.Id)
+				if ierr != nil || inbound == nil || !inbound.Enable {
+					continue
+				}
+				entry := settingsClientByEmail(inbound.Settings, clientEmail)
+				if entry == nil {
+					continue
+				}
+				// A client the operator switched off by hand is not re-enabled by
+				// a traffic reset: the two switches are separate on purpose.
+				if enabled, ok := entry["enable"].(bool); ok && !enabled {
+					continue
+				}
+				if inbound.Protocol == model.Shadowsocks {
+					// The cipher is an INBOUND setting, not part of the client
+					// row, and AddUser needs it to build the account.
+					var root map[string]any
+					if json.Unmarshal([]byte(inbound.Settings), &root) == nil {
+						if method, _ := root["method"].(string); method != "" {
+							entry["cipher"] = method
+						}
+					}
+				}
+				if aerr := s.xrayApi.AddUser(string(inbound.Protocol), inbound.Tag, entry); aerr != nil {
+					if strings.Contains(aerr.Error(), "already exists") {
+						continue
+					}
+					logger.Debug("reset client: re-adding", clientEmail, "to", inbound.Tag, "failed:", aerr)
+					needRestart = true
+				} else {
+					logger.Debug("Client re-enabled after traffic reset:", clientEmail, "on", inbound.Tag)
+				}
+			}
+			s.xrayApi.Close()
+		}
+	}
+
+	// Targeted update, not db.Save(traffic): the row was read at the top of this
 	// function, so saving the whole struct would also write back the all_time and
 	// last_online it held then, discarding whatever the 10s accounting job committed
 	// meanwhile. A reset zeroes up/down and re-enables; it must not rewind the lifetime
 	// counter. Mirrors ResetClientTrafficByEmail, which already updates by column.
-	db := database.GetDB()
-	err = db.Model(xray.ClientTraffic{}).Where("id = ?", traffic.Id).Updates(map[string]any{
-		"up":     0,
-		"down":   0,
-		"enable": true,
-	}).Error
-	if err != nil {
-		return false, err
+	//
+	// An account with no row here is not a failure: it is a node-hosted account the
+	// hub only bookkeeps. There is nothing local to zero and the node reset that
+	// follows is the reset.
+	if hasTraffic {
+		err := db.Model(xray.ClientTraffic{}).Where("id = ?", traffic.Id).Updates(map[string]any{
+			"up":     0,
+			"down":   0,
+			"enable": true,
+		}).Error
+		if err != nil {
+			return false, err
+		}
 	}
-	// Same zeroing on the per-inbound breakdown, see ResetClientTrafficByEmail.
-	resetMembershipUsage(db, []string{traffic.Email})
+	// Same zeroing on the per-inbound breakdown.
+	resetMembershipUsage(db, []string{clientEmail})
 
 	return needRestart, nil
+}
+
+// ResetClientTrafficForEmail is the node-side entry point: a node handles an
+// account by email, with no inbound to address, because the hub only knows that
+// the account exists somewhere on it.
+func (s *InboundService) ResetClientTrafficForEmail(clientEmail string) (bool, error) {
+	return s.ResetClientTraffic(0, clientEmail)
 }
 
 func (s *InboundService) ResetAllClientTraffics(id int) error {
@@ -5993,13 +6079,11 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 	if err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	// A DB-aware free port: scan the inbounds table then ask the kernel, so two
-	// back-to-back fed inbounds (a vless and a vmess) never land on the same
-	// port the way the old findFreeTCPPort occasionally could.
-	port, err := s.presetInboundPort()
-	if err != nil {
-		return nil, err
-	}
+	// A DB-aware free port: the preset picker consults every inbound, the
+	// panel's own listeners and the host, so two back-to-back fed inbounds (a
+	// vless and a vmess) never land on the same port the way the old
+	// findFreeTCPPort occasionally could. It runs AFTER the row is built
+	// because the transport decides which socket family must be free.
 	var inbound *model.Inbound
 	switch p {
 	case model.VLESS:
@@ -6010,7 +6094,6 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 		// NodeAddClient).
 		inbound = &model.Inbound{
 			Listen:         "0.0.0.0",
-			Port:           port,
 			Protocol:       p,
 			Tag:            NodeFedTagPrefix + protocol,
 			Settings:       `{"clients":[],"decryption":"none"}`,
@@ -6020,7 +6103,6 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 	case model.VMESS:
 		inbound = &model.Inbound{
 			Listen:         "0.0.0.0",
-			Port:           port,
 			Protocol:       p,
 			Tag:            NodeFedTagPrefix + protocol,
 			Settings:       `{"clients":[]}`,
@@ -6028,6 +6110,11 @@ func (s *InboundService) CreateNodeFedInbound(protocol string) (*model.Inbound, 
 			Enable:         true,
 		}
 	}
+	port, err := s.presetInboundPort(inbound)
+	if err != nil {
+		return nil, err
+	}
+	inbound.Port = port
 	saved, needRestart, err := s.AddInbound(inbound)
 	if err != nil {
 		return nil, err
@@ -6200,11 +6287,8 @@ func (s *InboundService) CreateNodeClonedInbound(req NodeInboundClone) (*model.I
 	}
 	// A DB-aware free port: the same scanner CreateNodeFedInbound uses, so a
 	// clone and a dedicated federation inbound made back-to-back never land
-	// on the same port.
-	port, err := s.presetInboundPort()
-	if err != nil {
-		return nil, err
-	}
+	// on the same port. Picked after the stream is known, because the
+	// transport decides which socket family the port must be free on.
 	// The settings blob is normalized: the hub's accounts do not belong on the
 	// node's inbound verbatim (their credentials were minted on the hub), so
 	// the blob's clients array is emptied and the credential is minted per
@@ -6223,7 +6307,6 @@ func (s *InboundService) CreateNodeClonedInbound(req NodeInboundClone) (*model.I
 	// that is exactly the "clone" the operator asked for.
 	inbound := &model.Inbound{
 		Listen:         "0.0.0.0",
-		Port:           port,
 		Protocol:       p,
 		Tag:            NodeFedTagPrefix + string(p) + "-clone",
 		Settings:       settings,
@@ -6231,6 +6314,11 @@ func (s *InboundService) CreateNodeClonedInbound(req NodeInboundClone) (*model.I
 		Remark:         req.Remark,
 		Enable:         true,
 	}
+	port, err := s.presetInboundPort(inbound)
+	if err != nil {
+		return nil, err
+	}
+	inbound.Port = port
 	saved, needRestart, err := s.AddInbound(inbound)
 	if err != nil {
 		return nil, err
@@ -6244,14 +6332,9 @@ func (s *InboundService) CreateNodeClonedInbound(req NodeInboundClone) (*model.I
 // fedRealityStream builds the streamSettings blob for a federation VLESS+REALITY
 // inbound: a freshly generated x25519 key pair and a multi-SNI camouflage
 // serverNames list so DPI has no clean fingerprint. It reuses the preset
-// machinery (one exec of xray x25519) so the crypto path has one home.
+// machinery so the crypto path has one home.
 func (s *InboundService) fedRealityStream() string {
-	priv, pub, err := s.presetX25519Pair()
-	if err != nil {
-		logger.Warning("fed REALITY x25519 generation failed; using static pair:", err)
-		priv, pub = "0000000000000000000000000000000000000000000000000000000000000000",
-			"0000000000000000000000000000000000000000000000000000000000000000"
-	}
+	priv, pub := s.presetX25519Pair()
 	return fmt.Sprintf(
 		`{"network":"tcp","security":"reality","realitySettings":{"dest":"1.1.1.1:443","serverNames":["www.microsoft.com","www.google.com","cloudflare.com","www.bing.com","apple.com"],"privateKey":"%s","publicKey":"%s","shortIds":["","3a7bd3f2"],"fingerprint":"chrome"}}`,
 		priv, pub,

@@ -38,6 +38,9 @@ type InboundController struct {
 	// The inbound -> client-group scope (an inbound "available to" specific client
 	// groups). Owns the auto-projection of a scoped inbound onto its groups' accounts.
 	inboundClientGroupService service.InboundClientGroupService
+	// The hub's federation side: a reset has to reach the node that meters the
+	// account, or the node's own quota sweep cuts the customer off again.
+	nodeService service.NodeService
 }
 
 // NewInboundController creates a new InboundController and sets up its routes.
@@ -115,6 +118,12 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	// bits and the reason the bits are still the ones its served twin uses.
 	g.POST("/saveAccount", requirePerm(model.PermCreateClient), a.saveAccountClient)
 	g.POST("/delAccount/:email", requirePerm(model.PermDeleteClient), a.delAccountClient)
+	// Reset traffic addressed by EMAIL only, for an account whose inbounds all
+	// live on remote nodes: the per-inbound route below needs an inbound id to
+	// name, and such an account has none on this panel. ownsClient is enough —
+	// there is no inbound in the path to own-check, and the service resolves the
+	// account by email anyway.
+	g.POST("/resetAccountTraffic/:email", requirePerm(model.PermEditClient), ownsClient, a.resetAccountTraffic)
 	// Switch one account on or off on ONE inbound. Deliberately not a shape of
 	// updateClient: `enable` inside a posted client entry means the ACCOUNT's flag
 	// to every existing caller, so the per-inbound intent needs its own route or it
@@ -2247,6 +2256,18 @@ func (a *InboundController) resetClientTraffic(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundUpdateSuccess"), err)
 		return
 	}
+	a.resetClientTrafficFor(c, id)
+}
+
+// resetAccountTraffic is the same reset addressed by EMAIL alone. It exists for
+// an account whose inbounds are all on remote nodes: the per-inbound route needs
+// an inbound id to name, and a node-only account has none on this panel, so the
+// Clients page had no way to reset one at all.
+func (a *InboundController) resetAccountTraffic(c *gin.Context) {
+	a.resetClientTrafficFor(c, 0)
+}
+
+func (a *InboundController) resetClientTrafficFor(c *gin.Context, id int) {
 	email := c.Param("email")
 
 	// Allowed for a reseller, and never free. Zeroing the counters lets the account
@@ -2268,7 +2289,18 @@ func (a *InboundController) resetClientTraffic(c *gin.Context) {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
 	}
-	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.resetInboundClientTrafficSuccess"), nil)
+	// A node-hosted copy of the account has its own counters and its own
+	// depletion sweep. Reset those too, or the hub reports success while the
+	// node has already switched the customer off again. Run BEFORE the response,
+	// so a node that could not be reached is named in the toast rather than only
+	// in a log nobody reads: the local reset stands, and naming the node is what
+	// lets the operator fix it.
+	msg := I18nWeb(c, "pages.inbounds.toasts.resetInboundClientTrafficSuccess")
+	if failed := a.nodeService.ResetClientTrafficOnNodes(email); len(failed) > 0 {
+		logger.Warning("reset client traffic: node resets failed for ", email, ": ", strings.Join(failed, "; "))
+		msg += " — " + I18nWeb(c, "pages.inbounds.toasts.resetNodePartial") + ": " + strings.Join(failed, "; ")
+	}
+	jsonMsg(c, msg, nil)
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}

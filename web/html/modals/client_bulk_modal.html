@@ -35,7 +35,7 @@
         </div>
         <div class="bo-cf-kv">
           <span>{{ i18n "pages.clients.inbounds" }}</span>
-          <b>[[ clientsBulkModal.selected.length ]]</b>
+          <b>[[ clientsBulkModal.selected.length + clientsBulkModal.nodeSelected.length ]]</b>
         </div>
       </div>
 
@@ -232,6 +232,70 @@
             </a-checkbox>
           </div>
         </a-checkbox-group>
+
+        <!-- A save that did not reach every node keeps the form open with the
+             reason here. The local accounts already exist by then, so pressing
+             the button again retries ONLY the node half (createdAccounts). -->
+        <a-alert v-if="clientsBulkModal.nodeSyncError" type="error" show-icon
+          :style="{ marginTop: '12px' }"
+          :message="clientsBulkModal.nodeSyncError"
+          description='{{ i18n "pages.clients.nodeSyncPartial" }}'></a-alert>
+
+        <!-- Remote nodes: the same groups the single-client form draws. A batch
+             is not a per-inbound act either, so ticking node inbounds here puts
+             every generated account on them. Every node is listed whatever its
+             state, with the action that moves it forward — a node missing from
+             this list is indistinguishable from one that was never added. -->
+        <div v-if="clientsBulkModal.nodeOptions.length" :style="{ marginTop: '14px' }">
+          <div :style="{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }">
+            <a-icon type="deployment-unit"></a-icon>
+            <b>{{ i18n "pages.clients.nodesSection" }}</b>
+          </div>
+          <div v-for="opt in clientsBulkModal.nodeOptions" :key="opt.node.id"
+            class="bo-cf-node" :class="{ 'bo-cf-node-off': opt.state !== 'ready' }">
+            <div class="bo-cf-node-head">
+              <a-icon type="global"></a-icon>
+              <b>{{ i18n "pages.clients.nodeLabel" }}: [[ opt.node.name ]]</b>
+              <span class="bo-dim" v-if="clientsBulkModal.nodeHost(opt.node)">
+                [[ clientsBulkModal.nodeHost(opt.node) ]]
+              </span>
+              <a-tag :color="clientsBulkModal.nodeStateColor(opt)">
+                [[ clientsBulkModal.nodeStateText(opt) ]]
+              </a-tag>
+            </div>
+            <!-- Deliberately NOT an a-checkbox-group: every node block would bind
+                 the same array, and the group emits only the values of ITS OWN
+                 children, so ticking a box on one node silently threw away the
+                 ticks on every other node. One checkbox with an explicit
+                 add/remove keeps all nodes' selections in one list. -->
+            <div v-if="opt.state === 'ready'" :style="{ width: '100%' }">
+              <div class="bo-cf-ib" v-for="ib in opt.inbounds" :key="opt.node.id + '-' + ib.id"
+                :class="{ on: clientsBulkModal.nodeSelected.includes(opt.node.id + ':' + ib.id) }">
+                <a-checkbox :checked="clientsBulkModal.nodeSelected.includes(opt.node.id + ':' + ib.id)"
+                  @change="e => clientsBulkModal.toggleNodeRef(opt.node.id + ':' + ib.id, e.target.checked)">
+                  [[ ib.remark || ib.tag || ('#' + ib.id) ]]
+                  <a-tag>[[ ib.protocol ]]</a-tag>
+                  <span class="bo-dim">:[[ ib.port ]]</span>
+                </a-checkbox>
+              </div>
+            </div>
+            <div v-else-if="opt.state === 'empty'" class="bo-cf-node-note">
+              <span>{{ i18n "pages.clients.nodeEmptyHint" }}</span>
+              <a-button size="small" type="primary" ghost
+                :loading="clientsBulkModal.nodePreparing === opt.node.id"
+                @click="clientsBulkModal.prepareNode(opt)">
+                {{ i18n "pages.clients.nodePrepare" }}
+              </a-button>
+            </div>
+            <div v-else class="bo-cf-node-note">
+              <span class="bo-dim">
+                [[ opt.error || clientsBulkModal.nodeStateText(opt) ]]
+              </span>
+            </div>
+          </div>
+          <a-alert type="info" show-icon :style="{ marginTop: '10px' }"
+            message='{{ i18n "pages.clients.nodeMemberHint" }}'></a-alert>
+        </div>
         <a-alert v-if="clientsBulkModal.protocolClash" type="error" show-icon
           :style="{ marginTop: '12px' }"
           message='{{ i18n "pages.clients.sameProtocolRefused" }}'></a-alert>
@@ -253,7 +317,8 @@
         </a-alert>
         <a-alert v-if="!clientsBulkModal.count" type="warning" show-icon
           message='{{ i18n "pages.clients.previewEmpty" }}'></a-alert>
-        <a-alert v-if="!clientsBulkModal.selected.length" type="warning" show-icon
+        <a-alert v-if="!clientsBulkModal.selected.length && !clientsBulkModal.nodeSelected.length"
+          type="warning" show-icon
           :style="{ marginTop: '8px' }"
           message='{{ i18n "pages.clients.bulkNoInbound" }}'></a-alert>
 
@@ -310,6 +375,24 @@
     // read them, in which case no chips render and the checklist is unchanged.
     groups: [],
     selected: [],
+    // The federation groups: per node, the inbounds it serves. Same payload the
+    // single-client form consumes, and empty on a panel with no nodes.
+    nodeOptions: [],
+    // Ticks in the node groups, as "nodeId:remoteInboundId" keys.
+    nodeSelected: [],
+    nodePreparing: null,
+    // A node-sync failure, shown in the inbounds tab. The local batch has
+    // already landed by then, so the message and the retry live together.
+    nodeSyncError: '',
+    // Accounts this form created locally, kept so a retry after a node failure
+    // re-runs ONLY the node half: posting the batch again would be refused as
+    // duplicate emails.
+    createdAccounts: [],
+    nodeSynced: {},
+    // The batch's generated identities, planned on the first attempt and reused
+    // by every retry. Rebuilding them would ask the server to create a second,
+    // different set of emails while the first may already be half-written.
+    batchAccounts: [],
     quantity: 1,
     emailMethod: 0,
     firstNum: 1,
@@ -378,6 +461,72 @@
     },
     toggleAll(e) {
       this.selected = e.target.checked ? this.assignable.map(i => i.inboundId) : [];
+    },
+
+    // --- remote nodes -------------------------------------------------------
+    // The node's public host, for the "exits through here" line: the hostname
+    // of the node's base url. The port is deliberately not shown — it is the
+    // panel's management port, not the inbound's.
+    nodeHost(node) {
+      try {
+        return new URL(node.baseUrl).hostname;
+      } catch (e) {
+        return (node && node.baseUrl) || '';
+      }
+    },
+    // ready / empty / offline / approval / disabled, straight from
+    // service.NodeOption. A missing state is an older answer and reads ready.
+    nodeStateText(opt) {
+      switch (opt && opt.state) {
+        case 'empty': return '{{ i18n "pages.clients.nodeStateEmpty" }}';
+        case 'offline': return '{{ i18n "pages.clients.nodeStateOffline" }}';
+        case 'approval': return '{{ i18n "pages.clients.nodeStateApproval" }}';
+        case 'disabled': return '{{ i18n "pages.clients.nodeStateDisabled" }}';
+        default: return '{{ i18n "pages.clients.nodeStateReady" }}';
+      }
+    },
+    nodeStateColor(opt) {
+      switch (opt && opt.state) {
+        case 'empty': return 'orange';
+        case 'offline': return 'red';
+        case 'approval': return 'orange';
+        case 'disabled': return '';
+        default: return 'green';
+      }
+    },
+    // Ask the node to create its federation inbounds, then refresh the groups in
+    // place, so an empty node becomes tickable without reopening the form.
+    async prepareNode(opt) {
+      if (!opt || !opt.node || this.nodePreparing) return;
+      this.nodePreparing = opt.node.id;
+      try {
+        const msg = await HttpUtil.post('/panel/api/nodes/' + opt.node.id + '/ensureInbounds');
+        if (!msg || !msg.success) {
+          opt.error = (msg && msg.msg) ? String(msg.msg) : String(msg || '');
+          return;
+        }
+        const list = await HttpUtil.get('/panel/api/nodes/nodeOptions');
+        if (list && list.success && Array.isArray(list.obj)) {
+          this.nodeOptions = list.obj;
+        }
+      } finally {
+        this.nodePreparing = null;
+      }
+    },
+    // "nodeId:remoteInboundId" -> the ref objects the hub's sync endpoint takes.
+    get nodeRefs() {
+      return this.nodeSelected.map(key => {
+        const i = key.indexOf(':');
+        return { nodeId: Number(key.slice(0, i)), remoteInboundId: Number(key.slice(i + 1)) };
+      });
+    },
+    // Add/remove one node inbound. Replaces a checkbox-group per node, which
+    // could not share one array: each group emits only its own children, so a
+    // tick on one node cleared the ticks on every other.
+    toggleNodeRef(key, on) {
+      const at = this.nodeSelected.indexOf(key);
+      if (on && at === -1) this.nodeSelected.push(key);
+      if (!on && at !== -1) this.nodeSelected.splice(at, 1);
     },
 
     // --- the batch, as the settings currently describe it -------------------
@@ -609,7 +758,8 @@
       // $message, and window.alert() wedges the whole renderer under headless
       // chromium, where nothing ever dismisses it.
       if (!this.count || this.clashCount) { this.tab = 'preview'; return; }
-      if (!this.selected.length || this.protocolClash) { this.tab = 'inbounds'; return; }
+      if (!this.selected.length && !this.nodeSelected.length) { this.tab = 'inbounds'; return; }
+      if (this.protocolClash) { this.tab = 'inbounds'; return; }
 
       // A NEGATIVE expiry is not a date. It is "this many days from first use",
       // and the server starts the clock on the first connection.
@@ -619,31 +769,108 @@
 
       const ids = this.selected.slice().sort((a, b) => a - b);
       const first = this.assignable.find(x => x.inboundId === ids[0]);
-      const accounts = this.buildAccounts();
-      const clients = accounts.map(a => this.entryFor(first ? first.protocol : '', a, expiryTime));
 
-      // ONE request for the whole batch, addressed to the first inbound and
-      // carrying the rest as the membership set. The server puts every posted
-      // email on all of them and mints whatever each protocol additionally needs
-      // (addInboundClient -> applyClientMemberships). Posting per inbound instead
-      // would charge a reseller once per inbound for one set of accounts, and the
-      // second request would be refused outright for duplicate emails.
+      // The batch is planned ONCE and kept across attempts. Generated emails are
+      // random, so re-planning on a retry would ask the server to create a
+      // second, different set while the first may already be half-written.
+      if (!this.batchAccounts.length) this.batchAccounts = this.buildAccounts();
+      const accounts = this.batchAccounts;
+
       this.confirmLoading = true;
-      const msg = await HttpUtil.post('/panel/api/inbounds/addClient',
-        { id: ids[0], inboundIds: ids, settings: JSON.stringify({ clients }) });
-      this.confirmLoading = false;
-      if (msg && msg.success) {
-        this.close();
-        if (this.onDone) this.onDone();
+
+      // First pass: the local accounts. Only the ones that do not exist yet, so a
+      // retry after a partial failure finishes the batch instead of being
+      // refused as duplicate emails.
+      if (ids.length) {
+        if (!this.createdAccounts.length) {
+          // ONE request for the whole batch, addressed to the first inbound and
+          // carrying the rest as the membership set. The server puts every posted
+          // email on all of them and mints whatever each protocol additionally needs
+          // (addInboundClient -> applyClientMemberships). Posting per inbound instead
+          // would charge a reseller once per inbound for one set of accounts, and the
+          // second request would be refused outright for duplicate emails.
+          const clients = accounts.map(a => this.entryFor(first ? first.protocol : '', a, expiryTime));
+          const msg = await HttpUtil.post('/panel/api/inbounds/addClient',
+            { id: ids[0], inboundIds: ids, settings: JSON.stringify({ clients }) });
+          this.confirmLoading = false;
+          if (!msg || !msg.success) return;
+          this.createdAccounts = accounts.slice();
+          this.nodeSyncError = '';
+        }
+      } else {
+        // Node-only batch: no local inbound addresses these accounts, so the
+        // addressed route has nothing to splice into. saveAccount creates the
+        // account with no membership; the node sync below is what gives it an
+        // exit. One request per account because that route takes one entry, and
+        // each success is recorded so a retry does not repeat it.
+        const already = {};
+        for (const a of this.createdAccounts) already[a.email] = true;
+        for (const a of accounts) {
+          if (already[a.email]) continue;
+          const one = this.entryFor('', a, expiryTime);
+          const r = await HttpUtil.post('/panel/api/inbounds/saveAccount',
+            { settings: JSON.stringify({ clients: [one] }), noInbounds: true });
+          if (!r || !r.success) {
+            this.confirmLoading = false;
+            return;
+          }
+          this.createdAccounts.push(a);
+        }
+        this.confirmLoading = false;
+        this.nodeSyncError = '';
       }
+
+      // Second pass: the node-hosted accounts, one per generated account. They
+      // ride on top of the local row and are created through each node's own
+      // panel, which is what makes the node's own subscription link work.
+      const refs = this.nodeRefs;
+      if (refs.length) {
+        const failed = [];
+        for (const a of this.createdAccounts) {
+          if (this.nodeSynced[a.email]) continue;
+          const r = await HttpUtil.post('/panel/api/nodes/nodeMemberships', {
+            email: a.email,
+            subId: a.subId || '',
+            // BYTES: the sync endpoint speaks the same unit the local save
+            // uses, so sending the form's GB value would make the node quota
+            // 2^30 times too small.
+            totalGb: (this.totalGb || 0) * 1073741824,
+            expiryTime: expiryTime,
+            enable: true,
+            refs: refs,
+          });
+          if (r && r.success) {
+            this.nodeSynced[a.email] = true;
+          } else {
+            failed.push(a.email + ': ' + ((r && r.msg) ? String(r.msg) : String(r || '')));
+          }
+        }
+        if (failed.length) {
+          this.confirmLoading = false;
+          this.nodeSyncError = failed.join(' · ');
+          this.tab = 'inbounds';
+          return;
+        }
+      }
+
+      this.confirmLoading = false;
+      this.close();
+      if (this.onDone) this.onDone();
     },
 
     show({ title = '', okText = '{{ i18n "sure" }}', assignable = [], groups = [], existing = {},
-           onDone = null }) {
+           nodeOptions = [], onDone = null }) {
       this.title = title;
       this.okText = okText;
       this.assignable = assignable;
       this.groups = groups || [];
+      this.nodeOptions = nodeOptions || [];
+      this.nodeSelected = [];
+      this.nodePreparing = null;
+      this.nodeSyncError = '';
+      this.createdAccounts = [];
+      this.nodeSynced = {};
+      this.batchAccounts = [];
       this.existing = existing || {};
       this.onDone = onDone;
       this.tab = 'identity';

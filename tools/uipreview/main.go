@@ -485,7 +485,8 @@ func (s *store) nodeMetrics(nodeID int) []map[string]any {
 func (s *store) nodeOptions() []map[string]any {
 	return []map[string]any{
 		{
-			"node": s.nodes()[0],
+			"node":  s.nodes()[0],
+			"state": "ready",
 			"inbounds": []map[string]any{
 				{"id": 11, "remark": "vless reality", "enable": true, "port": 443, "protocol": "vless",
 					"settings":       `{"clients":[],"decryption":"none","fallbacks":[]}`,
@@ -498,13 +499,40 @@ func (s *store) nodeOptions() []map[string]any {
 			},
 		},
 		{
-			"node": s.nodes()[1],
-			"inbounds": []map[string]any{
-				{"id": 21, "remark": "vless grpc", "enable": true, "port": 2096, "protocol": "vless",
-					"settings":       `{"clients":[],"decryption":"none","fallbacks":[]}`,
-					"streamSettings": `{"network":"grpc","security":"tls","grpcSettings":{"multiMode":false}}`,
-					"sniffing":       `{"enabled":true,"destOverride":["http"]}`},
+			// A SECOND ready node on purpose: the node checklist lives in one
+			// shared list, so two tickable nodes are what catches a per-node
+			// checkbox group overwriting the other node's ticks.
+			"node": map[string]any{
+				"id": 4, "name": "hamburg-03", "baseUrl": "https://ham-03.example.com:2096",
+				"token": "node-token-ham", "enable": true, "remark": "EU entry",
+				"lastSeen": int64(time.Now().UnixNano()), "latencyMs": 61,
+				"version": "2.8.0", "inboundCount": 1, "accountCount": 3, "onlineCount": 1,
+				"online": true, "pairingApproved": true, "lastError": "",
+				"xrayApiHost": "", "xrayApiPort": 10086, "apiTlsMode": "insecure", "apiCaPem": "",
+				"lastHeartbeat": int64(time.Now().UnixNano()), "cpuPct": 7.2, "memPct": 33.4, "uptimeSecs": 120000,
+				"netUp": 536870912, "netDown": 1073741824, "xrayState": "running", "xrayError": "",
 			},
+			"state": "ready",
+			"inbounds": []map[string]any{
+				{"id": 21, "remark": "trojan tls", "enable": true, "port": 2087, "protocol": "trojan",
+					"settings":       `{"clients":[]}`,
+					"streamSettings": `{"network":"tcp","security":"tls","tlsSettings":{"serverName":"h.example.com"}}`,
+					"sniffing":       `{"enabled":true,"destOverride":["http","tls"]}`},
+			},
+		},
+		{
+			// Reachable, but nothing an account can be attached to: the group
+			// renders its "prepare this node" action instead of checkboxes.
+			"node":     s.nodes()[1],
+			"state":    "empty",
+			"inbounds": []map[string]any{},
+		},
+		{
+			// Not approved yet: listed so the operator can see WHY it is missing
+			// from the tickable groups, which is what the old filter hid.
+			"node":     s.nodes()[2],
+			"state":    "approval",
+			"inbounds": []map[string]any{},
 		},
 	}
 }
@@ -902,6 +930,63 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, nil, true, "")
 
+	// ---- admins -----------------------------------------------------------
+	// The Admins page fetches three sibling routes under /panel/admins (not
+	// /panel/api/): the list itself, the canonical permission slugs and every
+	// inbound for the access checklist. Without them the table rendered "No
+	// data." and the page reported three 404s — a harness gap that looks
+	// exactly like a broken page.
+	case path == "/panel/admins/list":
+		writeJSON(w, []map[string]any{
+			{
+				"id": 1, "username": "admin", "nickname": "Owner",
+				"enable": true, "isSuperAdmin": true, "twoFactorEnable": true,
+				"permissions": []string{}, "inboundIds": []int{}, "inboundCount": 0,
+			},
+			{
+				"id": 2, "username": "ops", "nickname": "Ops Desk",
+				"enable": true, "isSuperAdmin": false, "twoFactorEnable": false,
+				// In AllPermissions order, which is render order.
+				"permissions": []string{"accessInbounds", "createClient", "editClient"},
+				"inboundIds":  []int{1, 2}, "inboundCount": 2,
+			},
+		}, true, "")
+	case path == "/panel/admins/permissions":
+		// The real list is model.AllPermissions; keep the slugs in the same order
+		// so the modal's checklist looks like production.
+		slugs := []string{
+			"accessInbounds", "createInbound", "editInbound", "deleteInbound",
+			"createClient", "editClient", "deleteClient", "bulkOperation",
+			"accessCoreSettings", "accessXraySettings", "accessPanelSettings",
+			"manageResellers", "accessOverview", "manageOverview",
+		}
+		defs := make([]map[string]any, 0, len(slugs))
+		for _, slug := range slugs {
+			defs = append(defs, map[string]any{"slug": slug})
+		}
+		writeJSON(w, defs, true, "")
+	case path == "/panel/admins/inbounds":
+		// {id, remark, protocol, port}, as AllInboundsBrief returns them.
+		brief := make([]map[string]any, 0, len(s.inbounds()))
+		for _, ib := range s.inbounds() {
+			brief = append(brief, map[string]any{
+				"id": ib["id"], "remark": ib["remark"],
+				"protocol": ib["protocol"], "port": ib["port"],
+			})
+		}
+		writeJSON(w, brief, true, "")
+	case strings.HasPrefix(path, "/panel/admins/") && strings.HasSuffix(path, "/sessions"):
+		// One signed-in browser for the super admin, none for ops: enough to show
+		// the badge, its tooltip and the revoke-all action.
+		if strings.HasPrefix(path, "/panel/admins/1/") {
+			writeJSON(w, []map[string]any{
+				{"id": 1, "fingerprint": "preview00a1", "ip": "203.0.113.10",
+					"userAgent": "Chrome · Windows", "lastSeen": time.Now().UnixMilli()},
+			}, true, "")
+			return
+		}
+		writeJSON(w, []map[string]any{}, true, "")
+
 	// ---- nodes ------------------------------------------------------------
 	case path == "/panel/api/nodes/list":
 		writeJSON(w, s.nodes(), true, "")
@@ -1042,7 +1127,7 @@ func (p *preview) routes() *http.ServeMux {
 			if strings.Contains(rest, "api/") || strings.HasPrefix(rest, "tunnel/") ||
 				strings.HasPrefix(rest, "core/") || strings.HasPrefix(rest, "setting/") ||
 				strings.HasPrefix(rest, "xray/") || strings.HasPrefix(rest, "server/") ||
-				strings.HasPrefix(rest, "resellers/") {
+				strings.HasPrefix(rest, "resellers/") || strings.HasPrefix(rest, "admins/") {
 				p.handleAPI(w, r)
 				return
 			}

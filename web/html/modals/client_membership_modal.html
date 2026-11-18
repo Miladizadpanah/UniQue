@@ -269,36 +269,67 @@
           message='{{ i18n "pages.clients.noInbounds" }}'
           description='{{ i18n "pages.clients.noInboundsHint" }}'></a-alert>
 
-        <!-- Remote node groups: one block per APPROVED node, drawn from the
-             hub's federation registry. Ticking an inbound attaches this client
-             to that node — its traffic exits through the node's own IP, and
-             the link rides the hub's subscription. Unapproved or unreachable
-             nodes are absent by design, not hidden. -->
+        <!-- Remote node groups: one block per node the panel knows, drawn from
+             the hub's federation registry. Ticking an inbound attaches this
+             client to that node — its traffic exits through the node's own IP,
+             and the link rides the hub's subscription.
+             EVERY node is listed, whatever its state, and the state says what
+             to do next. Filtering to the usable ones is what made "the node I
+             just added is missing here" a support question: a hidden node looks
+             exactly like a node that was never added, and the fix for each is
+             different. -->
         <div v-if="clientMembershipModal.nodeOptions.length" :style="{ marginTop: '14px' }">
           <div :style="{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }">
             <a-icon type="deployment-unit"></a-icon>
             <b>{{ i18n "pages.clients.nodesSection" }}</b>
           </div>
           <div v-for="opt in clientMembershipModal.nodeOptions" :key="opt.node.id"
-            class="bo-cf-node">
+            class="bo-cf-node" :class="{ 'bo-cf-node-off': opt.state !== 'ready' }">
             <div class="bo-cf-node-head">
               <a-icon type="global"></a-icon>
               <b>{{ i18n "pages.clients.nodeLabel" }}: [[ opt.node.name ]]</b>
               <span class="bo-dim" v-if="clientMembershipModal.nodeHost(opt.node)">
                 [[ clientMembershipModal.nodeHost(opt.node) ]]
               </span>
-              <a-tag color="green">{{ i18n "pages.nodes.pairingConnected" }}</a-tag>
+              <a-tag :color="clientMembershipModal.nodeStateColor(opt)">
+                [[ clientMembershipModal.nodeStateText(opt) ]]
+              </a-tag>
             </div>
-            <a-checkbox-group v-model="clientMembershipModal.nodeSelected" :style="{ width: '100%' }">
+            <!-- Ready: the node's inbounds, each tickable.
+                 NOT an a-checkbox-group per node: every node block would bind the
+                 same array, and a group emits only the values of ITS OWN
+                 children, so ticking a box on one node silently discarded the
+                 ticks on every other. One checkbox with an explicit add/remove
+                 keeps a single cross-node selection list. -->
+            <div v-if="opt.state === 'ready'" :style="{ width: '100%' }">
               <div class="bo-cf-ib" v-for="ib in opt.inbounds" :key="opt.node.id + '-' + ib.id"
                 :class="{ on: clientMembershipModal.nodeSelected.includes(opt.node.id + ':' + ib.id) }">
-                <a-checkbox :value="opt.node.id + ':' + ib.id">
+                <a-checkbox :checked="clientMembershipModal.nodeSelected.includes(opt.node.id + ':' + ib.id)"
+                  @change="e => clientMembershipModal.toggleNodeRef(opt.node.id + ':' + ib.id, e.target.checked)">
                   [[ ib.remark || ib.tag || ('#' + ib.id) ]]
                   <a-tag>[[ ib.protocol ]]</a-tag>
                   <span class="bo-dim">:[[ ib.port ]]</span>
                 </a-checkbox>
               </div>
-            </a-checkbox-group>
+            </div>
+            <!-- Empty: reachable, but nothing on it can hold an account yet. One
+                 click asks the node to create its federation inbounds and then
+                 reloads this list, so the node becomes tickable in place. -->
+            <div v-else-if="opt.state === 'empty'" class="bo-cf-node-note">
+              <span>{{ i18n "pages.clients.nodeEmptyHint" }}</span>
+              <a-button size="small" type="primary" ghost
+                :loading="clientMembershipModal.nodePreparing === opt.node.id"
+                @click="clientMembershipModal.prepareNode(opt)">
+                {{ i18n "pages.clients.nodePrepare" }}
+              </a-button>
+            </div>
+            <!-- Offline / approval / disabled: the reason, in the node's own
+                 words where it gave one. -->
+            <div v-else class="bo-cf-node-note">
+              <span class="bo-dim">
+                [[ opt.error || clientMembershipModal.nodeStateText(opt) ]]
+              </span>
+            </div>
           </div>
           <a-alert type="info" show-icon :style="{ marginTop: '10px' }"
             message='{{ i18n "pages.clients.nodeMemberHint" }}'></a-alert>
@@ -482,6 +513,9 @@
     nodeOptions: [],
     // Ticks in the node groups, as "nodeId:remoteInboundId" keys.
     nodeSelected: [],
+    // The node id whose "prepare" call is in flight, so only that group's
+    // button spins.
+    nodePreparing: null,
     // The account's CURRENT node memberships as fetched on open: the diff base
     // for the save, and the reason a sync must run even when no node group is
     // visible (a node-only client whose hub lists the options elsewhere).
@@ -1180,6 +1214,57 @@
         return u.hostname;
       } catch (e) {
         return node.baseUrl || '';
+      }
+    },
+    // The state label for a node group. `state` is the hub's own answer (see
+    // service.NodeOption): ready / empty / offline / approval / disabled, and a
+    // node from an older answer carries none, which reads as ready because that
+    // is what it used to mean to be listed at all.
+    nodeStateText(opt) {
+      switch (opt && opt.state) {
+        case 'empty': return '{{ i18n "pages.clients.nodeStateEmpty" }}';
+        case 'offline': return '{{ i18n "pages.clients.nodeStateOffline" }}';
+        case 'approval': return '{{ i18n "pages.clients.nodeStateApproval" }}';
+        case 'disabled': return '{{ i18n "pages.clients.nodeStateDisabled" }}';
+        default: return '{{ i18n "pages.clients.nodeStateReady" }}';
+      }
+    },
+    nodeStateColor(opt) {
+      switch (opt && opt.state) {
+        case 'empty': return 'orange';
+        case 'offline': return 'red';
+        case 'approval': return 'orange';
+        case 'disabled': return '';
+        default: return 'green';
+      }
+    },
+    // Add/remove one node inbound. Replaces a checkbox-group per node, which
+    // could not share one array: each group emits only its own children, so a
+    // tick on one node cleared the ticks on every other.
+    toggleNodeRef(key, on) {
+      const at = this.nodeSelected.indexOf(key);
+      if (on && at === -1) this.nodeSelected.push(key);
+      if (!on && at !== -1) this.nodeSelected.splice(at, 1);
+    },
+    // Ask the node to create its federation inbounds, then refresh this list in
+    // place so the node turns into tickable groups without reopening the form.
+    // Failure is shown on the group itself (opt.error) rather than a toast: the
+    // reason is usually per-node and the operator is looking right at it.
+    async prepareNode(opt) {
+      if (!opt || !opt.node || this.nodePreparing) return;
+      this.nodePreparing = opt.node.id;
+      try {
+        const msg = await HttpUtil.post('/panel/api/nodes/' + opt.node.id + '/ensureInbounds');
+        if (!msg || !msg.success) {
+          opt.error = (msg && msg.msg) ? String(msg.msg) : String(msg || '');
+          return;
+        }
+        const list = await HttpUtil.get('/panel/api/nodes/nodeOptions');
+        if (list && list.success && Array.isArray(list.obj)) {
+          this.nodeOptions = list.obj;
+        }
+      } finally {
+        this.nodePreparing = null;
       }
     },
     // The account's node-hosted memberships, as "nodeId:remoteInboundId" keys.

@@ -1614,6 +1614,17 @@ a section that does exceed it scrolls
 
 .bo-cf-node .bo-cf-ib:last-child { margin-bottom:0; }
 
+/* A node group that cannot carry an account right now: muted, with the reason
+   and (for an empty node) the button that fixes it. It stays listed on purpose
+   — a hidden node is indistinguishable from one that was never added. */
+.bo-cf-node-off { opacity:0.85; }
+.bo-cf-node-off .bo-cf-node-head { background:transparent; }
+
+.bo-cf-node-note {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:10px; font-size:13px; flex-wrap:wrap;
+}
+
 /* The bulk form reuses the shell above, and adds three things to it.
 
    A rail value that is a name rather than a figure (the target inbound) can be

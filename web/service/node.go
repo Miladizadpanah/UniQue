@@ -761,6 +761,7 @@ const (
 	nodeInboundClonePath = "/panel/node/inbounds/clone"
 	nodeClientsPath      = "/panel/node/clients"
 	nodeDelClientPath    = "/panel/node/delClient"
+	nodeResetClientPath  = "/panel/node/resetClient"
 	nodePurgePath        = "/panel/node/purge"
 )
 
@@ -972,6 +973,46 @@ func (s *NodeService) RemoteCreateClient(n *model.Node, req NodeClientCreate) (*
 func (s *NodeService) RemoteDeleteClient(n *model.Node, inboundId int, email string) error {
 	body := map[string]any{"inboundId": inboundId, "email": email}
 	return nodeAPIRoundTrip(n, http.MethodPost, nodeDelClientPath, body, nil)
+}
+
+// RemoteResetClient zeroes one account's traffic on a node. The node resolves
+// the account by email across all of its inbounds, because the hub only knows
+// the customer exists somewhere on it.
+func (s *NodeService) RemoteResetClient(n *model.Node, email string) error {
+	body := map[string]any{"email": email}
+	return nodeAPIRoundTrip(n, http.MethodPost, nodeResetClientPath, body, nil)
+}
+
+// ResetClientTrafficOnNodes resets one client's counters on EVERY node it is
+// hosted on, one call per node. Returns the nodes that could not be reached;
+// those accounts keep their exhausted counters there, which is exactly the state
+// that made a hub-side reset look like it did nothing.
+func (s *NodeService) ResetClientTrafficOnNodes(email string) []string {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return nil
+	}
+	accounts, err := s.ListNodeAccountsByEmail(email)
+	if err != nil {
+		return []string{"database: " + err.Error()}
+	}
+	var failed []string
+	done := map[int]bool{}
+	for _, na := range accounts {
+		if done[na.NodeId] {
+			continue
+		}
+		done[na.NodeId] = true
+		node, gerr := s.Get(na.NodeId)
+		if gerr != nil {
+			failed = append(failed, fmt.Sprintf("node #%d: %v", na.NodeId, gerr))
+			continue
+		}
+		if rerr := s.RemoteResetClient(node, email); rerr != nil {
+			failed = append(failed, node.Name+": "+rerr.Error())
+		}
+	}
+	return failed
 }
 
 // RemotePurgeByHub tells the node to drop every account the hub provisioned on
@@ -1207,18 +1248,36 @@ func (s *NodeService) RemotePairingStatus(n *model.Node, hubName string) (string
 // accounts.
 // ---------------------------------------------------------------------------
 
-// NodeOption is one APPROVED node with the inbounds it is serving: a
-// "Node: <name>" group in the client form. Unapproved or unreachable nodes do
-// not appear — the form only offers what can actually carry the traffic.
+// The states a NodeOption can be in. The client form renders EVERY node the
+// panel knows and says why one cannot be ticked, instead of dropping it: a
+// hidden node is indistinguishable from a node that was never added, and the
+// operator's next move is different in each case (approve it, enable it, make
+// inbounds, or just retry). Returning only the usable ones is what made "my
+// other nodes are missing" a support question.
+const (
+	NodeOptionReady    = "ready"    // paired, answering, has inbounds to tick
+	NodeOptionEmpty    = "empty"    // paired and answering, but no inbound can carry an account
+	NodeOptionOffline  = "offline"  // paired, but the panel did not answer just now
+	NodeOptionApproval = "approval" // not paired/approved yet (or no token to call it with)
+	NodeOptionDisabled = "disabled" // switched off on the Nodes page
+)
+
+// NodeOption is one node and the inbounds it is serving, as a
+// "Node: <name>" group in the client form. Inbounds is empty unless State is
+// ready; State says what the operator has to do to make the node usable.
 type NodeOption struct {
 	Node     model.Node      `json:"node"`
 	Inbounds []model.Inbound `json:"inbounds"`
+	State    string          `json:"state"`
+	// Error carries the node's own answer when it could not be reached, so the
+	// form can show the reason rather than a generic "offline".
+	Error string `json:"error,omitempty"`
 }
 
-// NodeInboundOptions lists the client form's remote groups: per enabled
-// APPROVED node, the inbounds it can actually carry accounts on right now. A
-// node that is down at this moment is skipped, not an error: the group comes
-// back with the next load.
+// NodeInboundOptions lists the client form's remote groups: every node the panel
+// knows, with the inbounds it can carry accounts on right now. A node that is
+// disabled, unapproved, down, or empty is still listed — with State set — so the
+// form can offer the next step instead of silently hiding it.
 //
 // The fetch is parallel (bounded) because the client form waits for it before it
 // opens: a fleet of ten nodes must not become ten sequential round trips. Only
@@ -1234,16 +1293,31 @@ func (s *NodeService) NodeInboundOptions() []NodeOption {
 	var wg sync.WaitGroup
 	for i := range nodes {
 		n := nodes[i]
-		if !n.Enable || !n.PairingApproved || n.Token == "" {
+		// Every node gets an entry, even the ones that cannot be used right now.
+		opt := &NodeOption{Node: n, Inbounds: []model.Inbound{}}
+		options[i] = opt
+
+		switch {
+		case !n.Enable:
+			opt.State = NodeOptionDisabled
+			continue
+		case !n.PairingApproved || n.Token == "":
+			// No token means this panel has nothing to authenticate WITH, which
+			// the operator fixes the same way as an unapproved pairing: on the
+			// node's own page (approve the request) or on ours (request pairing).
+			opt.State = NodeOptionApproval
 			continue
 		}
+
 		wg.Add(1)
-		go func(index int, node model.Node) {
+		go func(opt *NodeOption, node model.Node) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			inbounds, ierr := s.RemoteInbounds(&node)
 			if ierr != nil {
+				opt.State = NodeOptionOffline
+				opt.Error = ierr.Error()
 				return
 			}
 			kept := make([]model.Inbound, 0, len(inbounds))
@@ -1252,11 +1326,16 @@ func (s *NodeService) NodeInboundOptions() []NodeOption {
 					kept = append(kept, inbounds[j])
 				}
 			}
+			opt.Inbounds = kept
 			if len(kept) == 0 {
+				// Reachable, but nothing on it can hold an account yet. The form
+				// offers "prepare this node", which creates the two federation
+				// inbounds (EnsureFedInbounds) and reloads this list.
+				opt.State = NodeOptionEmpty
 				return
 			}
-			options[index] = &NodeOption{Node: node, Inbounds: kept}
-		}(i, n)
+			opt.State = NodeOptionReady
+		}(opt, n)
 	}
 	wg.Wait()
 	out := make([]NodeOption, 0, len(options))

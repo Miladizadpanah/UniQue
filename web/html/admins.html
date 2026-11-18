@@ -49,9 +49,16 @@
                        (no fingerprint) is caught by the blanket revoke, which
                        is the only path that catches it. -->
                   <template slot="sessions" slot-scope="text, admin">
+                    <!-- :count, not :number-of-items. This is ant-design-vue 1.x,
+                         where the prop is `count`; `number-of-items` (the React
+                         antd v5 name) was silently ignored, so the tile rendered
+                         a grey status dot and no number however many browsers
+                         were signed in. `status` was the other half of that: in
+                         this version it turns the badge into a status dot and
+                         suppresses the count entirely. -->
                     <a-tooltip :title="sessionTooltip(admin)">
-                      <a-badge :number-of-items="sessionCount(admin)" :overflow-count="99"
-                        :status="sessionCount(admin) ? 'success' : 'default'">
+                      <a-badge :count="sessionCount(admin)" :overflow-count="99"
+                        :number-style="{ backgroundColor: '#52c41a' }">
                         <a-icon type="mobile"></a-icon>
                       </a-badge>
                     </a-tooltip>
@@ -262,7 +269,10 @@
       async loadSessions() {
         for (const a of this.admins) {
           const msg = await HttpUtil.get('/panel/admins/' + a.id + '/sessions');
-          if (msg && msg.success) this.sessions[a.id] = msg.obj || [];
+          // $set, not `sessions[id] = …`: Vue 2 cannot detect a property added
+          // to an object after it was made reactive, so the plain assignment
+          // never re-rendered the tile and every admin read 0 sessions.
+          if (msg && msg.success) this.$set(this.sessions, a.id, msg.obj || []);
         }
       },
       // Revoke every active session for one admin: the operator's "force
@@ -274,7 +284,7 @@
       async revokeAllSessions(admin) {
         const msg = await HttpUtil.post('/panel/admins/' + admin.id + '/sessions/revokeAll');
         if (msg && msg.success) {
-          this.sessions[admin.id] = [];
+          this.$set(this.sessions, admin.id, []);
           this.$message.success('{{ i18n "pages.admins.sessionRevokeAll" }}');
         }
       },

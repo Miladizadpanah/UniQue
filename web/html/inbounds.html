@@ -1398,7 +1398,10 @@
             if (dbInbound.isSS && (!to_inbound.isSSMultiUser)) {
               continue;
             }
-            this.clientCount[inbound.id] = this.getClientCounts(inbound, to_inbound);
+            // $set: clientCount is cleared with splice() above, so these are new
+            // keys. A plain assignment is invisible to Vue 2 and left a refreshed
+            // inbound showing its previous account count.
+            this.$set(this.clientCount, inbound.id, this.getClientCounts(inbound, to_inbound));
           }
         }
         if (!this.loadingStates.fetched) {

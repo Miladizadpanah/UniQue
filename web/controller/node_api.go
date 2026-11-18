@@ -77,6 +77,13 @@ func (a *NodeAPIController) initRouter(g *gin.RouterGroup) {
 	writes.POST("/inbounds/clone", a.createInboundFromClone)
 	writes.POST("/clients", a.createClient)
 	writes.POST("/delClient", a.deleteClient)
+	// Reset one account's traffic on this node. The hub's "reset traffic" button
+	// has to reach the node that actually meters the account: zeroing only the
+	// hub's own row leaves the node's counters exhausted, and the node's next
+	// sweep switches the customer off again — the "I reset it and it still does
+	// not work" report. Keyed by email because the hub does not address an
+	// inbound: the account may be on any of this node's inbounds.
+	writes.POST("/resetClient", a.resetClient)
 	// When the hub drops this node from its registry, it must also tear down
 	// every account it provisioned here, or they would stay live on the
 	// destination serving nobody's bill. The purge names the hub, and the
@@ -395,6 +402,35 @@ func (a *NodeAPIController) deleteClient(c *gin.Context) {
 	if err := a.inboundService.NodeDelClientByEmail(body.InboundId, body.Email); err != nil {
 		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
 		return
+	}
+	jsonMsg(c, "", nil)
+}
+
+// resetClient zeroes one account's traffic counters on this node and puts it
+// back in service on every inbound that carries it. It is the hub's reset
+// button, forwarded: the hub's own row says nothing about the quota this node
+// enforces, so a reset that stopped at the hub would look like success and then
+// have the account cut off again by this node's own depletion sweep.
+func (a *NodeAPIController) resetClient(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" form:"email"`
+	}
+	if err := c.ShouldBind(&body); err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	email := strings.TrimSpace(body.Email)
+	if email == "" {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), common.NewError("email is required"))
+		return
+	}
+	needRestart, err := a.inboundService.ResetClientTrafficForEmail(email)
+	if err != nil {
+		jsonMsg(c, I18nWeb(c, "somethingWentWrong"), err)
+		return
+	}
+	if needRestart {
+		(&service.XrayService{}).SetToNeedRestart()
 	}
 	jsonMsg(c, "", nil)
 }

@@ -64,6 +64,26 @@ func (s *InboundService) Presets() []InboundPreset {
 			Security:    "tls",
 		},
 		{
+			// VMess is the only protocol every v2ray-family client still speaks,
+			// and WS+TLS is the shape that survives a CDN in front of the panel
+			// (the path is random per inbound, see presetVmessStream).
+			Name:        "VMess + WebSocket + TLS",
+			Description: "The most widely supported protocol, over WebSocket and TLS so it can sit behind a CDN.",
+			Protocol:    model.VMESS,
+			Recommended: false,
+			Security:    "tls",
+		},
+		{
+			// Trojan has no cleartext mode in practice: the client dials TLS and
+			// the password lives inside it. A tcp+TLS stream with a bound
+			// certificate is what every Trojan client expects.
+			Name:        "Trojan + TLS",
+			Description: "Password auth inside a real TLS session. Works with any Trojan-compatible client.",
+			Protocol:    model.Trojan,
+			Recommended: false,
+			Security:    "tls",
+		},
+		{
 			Name:        "TUIC v5",
 			Description: "Next-gen UDP protocol with BBR congestion control. Excellent throughput.",
 			Protocol:    model.TUIC,
@@ -197,6 +217,15 @@ func (s *InboundService) fillPresetDefaults(in *model.Inbound, preset InboundPre
 			in.Settings = s.presetVlessSettings(true)
 			in.StreamSettings = s.presetRealityStream()
 		}
+	case model.VMESS:
+		// VMess over a WebSocket stream behind TLS: the client's `security` is
+		// "auto" (the only value modern clients accept) and the inbound carries
+		// one account, exactly like the form's own VMess constructor does.
+		in.Settings = s.presetVmessSettings()
+		in.StreamSettings = s.presetVmessStream()
+	case model.Trojan:
+		in.Settings = s.presetTrojanSettings()
+		in.StreamSettings = s.presetTlsStream()
 	case model.Hysteria2:
 		// Hysteria2 runs its own QUIC transport: the stream network is "hysteria"
 		// (what genHysteriaLink and the stream model both key on) with the
@@ -274,6 +303,49 @@ func (s *InboundService) presetVlessSettings(vision bool) string {
 		"fallbacks":  []any{},
 		"flow":       flow,
 	})
+}
+
+// presetVmessSettings builds the account blob for the VMess preset. `security`
+// is "auto" because that is what the panel's own VMessSettings class writes and
+// the only value current clients accept: AEAD is always on and the legacy
+// alterId/auto/zero choice no longer applies.
+func (s *InboundService) presetVmessSettings() string {
+	clients := []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = s.generateRandomCredential(model.VMESS)
+			c["security"] = "auto"
+		}),
+	}
+	return presetJSON(map[string]any{"clients": clients})
+}
+
+// presetVmessStream is the CDN-friendly VMess transport: WebSocket over TLS.
+// The WebSocket path is random per inbound so one canned path cannot be probed
+// across panels, and the Host header follows the name the bound certificate
+// covers — that is the name a CDN routes on.
+func (s *InboundService) presetVmessStream() string {
+	tls := s.presetTLSSettings("", "1.2", "1.3", []string{"h2", "http/1.1"})
+	headers := map[string]any{}
+	if name, ok := tls["serverName"].(string); ok && name != "" && name != "localhost" {
+		headers["Host"] = name
+	}
+	return presetJSON(map[string]any{
+		"network":     "ws",
+		"security":    "tls",
+		"wsSettings":  map[string]any{"path": "/" + presetRandomID(10), "headers": headers},
+		"tlsSettings": tls,
+	})
+}
+
+// presetTrojanSettings builds the account blob for the Trojan preset: the
+// password IS the credential, exactly as Inbound.TrojanSettings writes it.
+func (s *InboundService) presetTrojanSettings() string {
+	clients := []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["password"] = s.generateRandomCredential(model.Trojan)
+		}),
+	}
+	return presetJSON(map[string]any{"clients": clients, "fallbacks": []any{}})
 }
 
 func (s *InboundService) presetHysteriaSettings() string {

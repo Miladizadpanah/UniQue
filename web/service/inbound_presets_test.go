@@ -1,4 +1,4 @@
-﻿// Package service: preset blob tests.
+// Package service: preset blob tests.
 //
 // The blob shapes are pinned against the panel's own JS model (inbound.js)
 // and the sub link generators (genHysteriaLink, genTuicLink, genNaiveLink):
@@ -210,6 +210,125 @@ func TestPresetHysteria2Settings(t *testing.T) {
 	}
 }
 
+// VMess is only usable if the seeded account carries `security`; a client
+// entry without it is projected with the empty string, which current clients
+// refuse. The panel's own VMessSettings class writes "auto" for exactly that
+// reason.
+func TestPresetVmessSettings(t *testing.T) {
+	s := newPresetService()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(s.presetVmessSettings()), &root); err != nil {
+		t.Fatalf("presetVmessSettings did not parse: %v", err)
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("vmess preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if id, _ := client["id"].(string); id == "" {
+		t.Error("vmess preset client has no id")
+	}
+	if client["security"] != "auto" {
+		t.Errorf("vmess preset client security = %v, want auto", client["security"])
+	}
+}
+
+// The VMess transport is WebSocket over TLS: a plain tcp/none stream would make
+// the CDN case (the whole point of a VMess preset) impossible, and a fixed path
+// would be one canned string shared by every panel.
+func TestPresetVmessStreamIsWsOverTls(t *testing.T) {
+	s := newPresetService()
+	first := vmessStreamParts(t, s.presetVmessStream())
+	second := vmessStreamParts(t, s.presetVmessStream())
+	if first.network != "ws" {
+		t.Errorf("vmess preset network = %q, want ws", first.network)
+	}
+	if first.security != "tls" {
+		t.Errorf("vmess preset security = %q, want tls", first.security)
+	}
+	if first.path == "" || !strings.HasPrefix(first.path, "/") {
+		t.Errorf("vmess preset ws path = %q, want an absolute path", first.path)
+	}
+	if first.path == second.path {
+		t.Errorf("two VMess presets share the WebSocket path %q", first.path)
+	}
+	if first.serverName == "" {
+		t.Error("vmess preset tlsSettings.serverName is empty")
+	}
+}
+
+type vmessStreamView struct {
+	network, security, path, serverName string
+}
+
+func vmessStreamParts(t *testing.T, blob string) vmessStreamView {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(blob), &m); err != nil {
+		t.Fatalf("vmess stream did not parse: %v", err)
+	}
+	view := vmessStreamView{}
+	view.network, _ = m["network"].(string)
+	view.security, _ = m["security"].(string)
+	ws, _ := m["wsSettings"].(map[string]any)
+	view.path, _ = ws["path"].(string)
+	tls, _ := m["tlsSettings"].(map[string]any)
+	view.serverName, _ = tls["serverName"].(string)
+	return view
+}
+
+// Trojan authenticates the account with its password and nothing else; the
+// fallbacks list has to be present (even empty) for the form's own round-trip.
+func TestPresetTrojanSettings(t *testing.T) {
+	s := newPresetService()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(s.presetTrojanSettings()), &root); err != nil {
+		t.Fatalf("presetTrojanSettings did not parse: %v", err)
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("trojan preset seeds %d clients, want 1", len(clients))
+	}
+	if pw, _ := clients[0].(map[string]any)["password"].(string); pw == "" {
+		t.Error("trojan preset client has no password")
+	}
+	if _, ok := root["fallbacks"]; !ok {
+		t.Error("trojan preset has no fallbacks key; the form's model expects it")
+	}
+}
+
+// Every catalog entry has to be buildable: a preset whose protocol has no
+// settings builder creates a row AddInbound rejects, and the operator gets an
+// error from the one button that is supposed to always work.
+func TestPresetCatalogEntriesAreSupported(t *testing.T) {
+	s := newPresetService()
+	seen := map[string]bool{}
+	for _, p := range s.Presets() {
+		if p.Name == "" || p.Description == "" {
+			t.Errorf("preset %+v is missing a name or description", p)
+		}
+		if seen[p.Name] {
+			t.Errorf("duplicate preset name %q", p.Name)
+		}
+		seen[p.Name] = true
+		if !nodeMintable(p.Protocol) {
+			t.Errorf("preset %q uses protocol %q, which PresetInbound refuses", p.Name, p.Protocol)
+		}
+		in := &model.Inbound{Protocol: p.Protocol}
+		s.fillPresetDefaults(in, p)
+		if strings.TrimSpace(in.Settings) == "" {
+			t.Errorf("preset %q built no settings", p.Name)
+		}
+		if strings.TrimSpace(in.StreamSettings) == "" {
+			t.Errorf("preset %q built no stream settings", p.Name)
+		}
+		var root map[string]any
+		if err := json.Unmarshal([]byte(in.Settings), &root); err != nil {
+			t.Errorf("preset %q settings are not JSON: %v", p.Name, err)
+		}
+	}
+}
+
 // The two VLESS presets must produce DIFFERENT stream layers; before the
 // Security field existed, fillPresetDefaults keyed only on protocol and both
 // presets built a reality inbound.
@@ -305,10 +424,11 @@ func TestPickPresetPortExhausted(t *testing.T) {
 func TestPresetTlsFamilyBindsCertificate(t *testing.T) {
 	s := newPresetService()
 	cases := map[string]string{
-		"VLESS+TLS": s.presetTlsStream(),
-		"Naive":     s.presetNaiveStream(),
-		"Hysteria2": s.presetHysteriaStream(),
-		"TUIC":      s.presetTuicStream(),
+		"VLESS+TLS":    s.presetTlsStream(),
+		"Naive":        s.presetNaiveStream(),
+		"Hysteria2":    s.presetHysteriaStream(),
+		"TUIC":         s.presetTuicStream(),
+		"VMess+WS+TLS": s.presetVmessStream(),
 	}
 	for name, blob := range cases {
 		var m map[string]any

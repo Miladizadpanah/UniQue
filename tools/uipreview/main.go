@@ -243,10 +243,16 @@ type inboundGroup struct {
 	InboundIds []int  `json:"inboundIds"`
 }
 
+// preset mirrors service.InboundPreset: the static catalog the panel serves,
+// not the saved-blob CRUD the preview used to fake. The inbounds page renders
+// name/description/recommended and branches its SNI/CDN fields on security, so
+// the fixture has to carry exactly those keys.
 type preset struct {
-	Id      int    `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Protocol    string `json:"protocol"`
+	Recommended bool   `json:"recommended"`
+	Security    string `json:"security"`
 }
 
 // store is the fixture backend. Group writes are implemented for real (in
@@ -268,8 +274,14 @@ func newStore() *store {
 			{Id: 3, Name: "Netherlands", SortOrder: 3, InboundIds: []int{3}},
 		},
 		presets: []preset{
-			{Id: 1, Name: "Reality 443", Content: `{"protocol":"vless","port":443,"streamSettings":{"network":"tcp","security":"reality"}}`},
-			{Id: 2, Name: "VMess WS", Content: `{"protocol":"vmess","port":8080,"streamSettings":{"network":"ws","security":"none"}}`},
+			{Name: "VLESS + REALITY", Description: "Best censorship resistance. No domain needed. XTLS Vision + real-TLS camouflage.", Protocol: "vless", Recommended: true, Security: "reality"},
+			{Name: "Hysteria2", Description: "High-speed UDP protocol with QUIC. Best for mobile and lossy networks.", Protocol: "hysteria2", Recommended: true},
+			{Name: "VLESS + TLS", Description: "Standard TLS. Binds the panel's certificate, or a self-signed one, so it works at once.", Protocol: "vless", Security: "tls"},
+			{Name: "VMess + WebSocket + TLS", Description: "The most widely supported protocol, over WebSocket and TLS so it can sit behind a CDN.", Protocol: "vmess", Security: "tls"},
+			{Name: "Trojan + TLS", Description: "Password auth inside a real TLS session. Works with any Trojan-compatible client.", Protocol: "trojan", Security: "tls"},
+			{Name: "TUIC v5", Description: "Next-gen UDP protocol with BBR congestion control. Excellent throughput.", Protocol: "tuic"},
+			{Name: "NaiveProxy", Description: "Plain-HTTPS obfuscation. Good where TLS fingerprints are inspected.", Protocol: "naive", Security: "tls"},
+			{Name: "Shadowsocks 2022", Description: "Shadowsocks with the 2022-blake3 ciphers, no legacy guesswork.", Protocol: "shadowsocks"},
 		},
 	}
 }
@@ -410,7 +422,6 @@ func (s *store) tunnelList() []map[string]any {
 	}
 }
 
-
 // ------------------------------------------------------------------- nodes
 // The fixtures below mirror the JSON shapes web/controller/node.go answers with:
 // /list returns []model.Node (with the last poll's snapshot fields), /summary
@@ -448,7 +459,7 @@ func (s *store) nodes() []map[string]any {
 			"lastSeen": int64(time.Now().Add(-48 * time.Hour).UnixNano()), "latencyMs": 0,
 			"version": "2.6.0", "inboundCount": 1, "accountCount": 0, "onlineCount": 0,
 			"online": false, "pairingApproved": false,
-			"lastError": "status endpoint returned 401",
+			"lastError":   "status endpoint returned 401",
 			"xrayApiHost": "", "xrayApiPort": 0, "apiTlsMode": "insecure", "apiCaPem": "",
 			"lastHeartbeat": 0, "cpuPct": 0, "memPct": 0, "uptimeSecs": 0,
 			"netUp": 0, "netDown": 0, "xrayState": "stopped", "xrayError": "",
@@ -474,7 +485,7 @@ func (s *store) nodeMetrics(nodeID int) []map[string]any {
 			"id": nodeID*100 + i, "nodeId": nodeID, "source": "heartbeat",
 			"cpuPct": 10.0 + float64(i%5), "memPct": 55.0 + float64(i%7),
 			"netUp": uint64(1073741824 * i), "netDown": uint64(5368709120 * i),
-			"ts":  base + int64(i*3600000),
+			"ts": base + int64(i*3600000),
 		})
 	}
 	return out
@@ -821,25 +832,10 @@ func (p *preview) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.reorderGroups(ids), true, "")
 
 	case path == "/panel/api/inbounds/presets":
-		if r.Method == http.MethodPost {
-			b := readBody(r)
-			s.nextID++
-			s.presets = append(s.presets, preset{Id: s.nextID, Name: b.Name, Content: b.Data})
-			writeJSON(w, nil, true, "")
-			return
-		}
+		// The catalog is static (service.InboundPreset): there is no saved-blob
+		// CRUD behind this path any more, and creating an inbound from a preset
+		// goes through /panel/api/inbounds/addPreset.
 		writeJSON(w, s.presets, true, "")
-
-	case strings.HasPrefix(path, "/panel/api/inbounds/presets/del/"):
-		id := atoi(strings.TrimPrefix(path, "/panel/api/inbounds/presets/del/"))
-		kept := make([]preset, 0, len(s.presets))
-		for _, pr := range s.presets {
-			if pr.Id != id {
-				kept = append(kept, pr)
-			}
-		}
-		s.presets = kept
-		writeJSON(w, nil, true, "")
 
 	case strings.HasPrefix(path, "/panel/api/inbounds/del/"):
 		id := atoi(strings.TrimPrefix(path, "/panel/api/inbounds/del/"))

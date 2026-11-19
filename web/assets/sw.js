@@ -1,24 +1,32 @@
-// vpn-ui service worker: caches the panel's static assets so the login page
-// and the CSS/JS bootstrap survive a slow or flaky connection. The panel
-// itself stays online (the API is not cached: a stale response is worse
-// than a failed one, and the operator's "active sessions" / "traffic" views
-// must read live data).
+// vpn-ui service worker: caches the panel's STATIC ASSETS so a repeat visit
+// boots without re-downloading 9MB of CSS/JS on a slow link.
 //
-// The cache is versioned by the asset fingerprint the panel stamps on every
-// asset URL (?v=...). A deploy that changes the fingerprint busts the cache
-// without a hard refresh: the worker sees a new URL and fetches it, and the
-// old version is evicted on the next cache update.
+// What it must never do (and used to, until 2.8.1):
 //
-// Strategy:
-//   - Network-first for the page (the index): a cached copy of a stale panel
-//     is a lie the operator does not want; a fresh fetch is what they asked
-//     for when they opened the app.
-//   - Cache-first for static assets (CSS/JS/fonts/images under /assets/):
-//     they are content-hashed by the asset fingerprint, so a "cached" asset
-//     is the same asset the panel just served, and the cache is what keeps
-//     the page fast on the second visit.
+//   - Serve a cached copy of a data endpoint. The API answers with live
+//     sessions, traffic and inbounds; a cached answer is a lie. The previous
+//     handler cached EVERY successful same-origin GET, so /panel/api/... and
+//     every /panel/setting/... response landed in the cache too.
+//   - Answer a request with `undefined`. The fallback was
+//     `respondWith(caches.match(req))`, and with no cache entry that resolves
+//     to undefined, which fails the fetch mid-flight. On a page whose whole
+//     body is behind "data arrived", one failed request is a blank panel.
+//   - Cache a page document. A stale copy of the panel HTML can reference an
+//     asset fingerprint the running binary no longer serves.
+//
+// So the rules are narrow now:
+//
+//   - /assets/... (content-addressed by ?v=<asset fingerprint>): cache-first.
+//     A new build changes the URL, so a hit is always the same bytes.
+//   - A navigation (opening the panel itself): network-only, with an explicit
+//     offline reply when the network is gone. Never a cached document.
+//   - Everything else, including every /panel/api, /panel/setting, /panel/xray,
+//     /ws and /sub request: left to the browser, untouched.
+//
+// CACHE_NAME is bumped on a behaviour change so a worker that cached API
+// responses self-evicts on its next activation.
 
-const CACHE_NAME = 'vpn-ui-v1';
+const CACHE_NAME = 'vpn-ui-v2';
 
 // The asset prefixes that are safe to cache-first: every URL the panel
 // stamps with ?v=<fingerprint> is under one of these.
@@ -38,20 +46,19 @@ const CACHABLE_PREFIXES = [
 ];
 
 function isCachable(url) {
-  return CACHABLE_PREFIXES.some(p => url.startsWith(p));
+  return CACHABLE_PREFIXES.some(p => url.includes(p));
 }
 
 self.addEventListener('install', (event) => {
   // Pre-cache nothing on install: the panel's first visit fetches every
   // asset it needs anyway, and the cache fills in as the operator browses.
-  // A pre-cache of a stale fingerprint would evict the live one on a
-  // version bump.
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   // Evict every cache that is not the current version, so an old worker's
-  // cache (a previous asset fingerprint) does not linger.
+  // cache (a previous asset fingerprint, or the API responses v1 stored)
+  // does not linger.
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
@@ -61,49 +68,60 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  // Only same-origin GETs are in scope: a cross-origin asset (a CDN, a
-  // font from a third party) is the browser's to manage, and POST/PUT
-  // requests (the panel's API calls) must never be served from cache.
-  if (url.origin !== location.origin || event.request.method !== 'GET') {
+  const request = event.request;
+
+  // Only plain same-origin GETs are in scope. POST/PUT (every write, and the
+  // login form) never touches the cache.
+  if (request.method !== 'GET') {
     return;
   }
-  if (isCachable(url.pathname)) {
-    // Cache-first: the asset is content-hashed by the fingerprint, so a
-    // cache hit is the same bytes the panel would serve. A miss fetches
-    // and fills the cache for the next visit.
+  const url = new URL(request.url);
+  if (url.origin !== location.origin) {
+    return;
+  }
+
+  // The panel document: always the network. An offline operator gets an
+  // honest "offline" answer instead of a stale panel that pretends to work.
+  if (request.mode === 'navigate') {
     event.respondWith(
-      caches.match(event.request).then(cached => {
-        if (cached) {
-          return cached;
-        }
-        return fetch(event.request).then(resp => {
-          // Only cache a successful response: a 404 or 500 is not an asset,
-          // and serving it from cache would paper over the real problem.
-          if (resp.ok) {
-            const clone = resp.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          }
-          return resp;
-        });
-      })
+      fetch(request).catch(() =>
+        new Response(
+          'The panel is unreachable right now. Check the server, then reload.',
+          { status: 503, statusText: 'Offline', headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        )
+      )
     );
     return;
   }
-  // The page itself (the index, the login, /panel/): network-first. A
-  // cached page is a stale panel, and the operator wants the fresh one.
-  // Fall back to the cache only when the network is unreachable (airplane
-  // mode, a dead connection), so the panel still opens, just with the
-  // last-known HTML.
+
+  // Everything that is not a static asset (the API, settings, xray, the
+  // subscription server, websockets) is the network's: no cache read, no
+  // cache write. Returning without respondWith lets the browser handle it.
+  if (!isCachable(url.pathname)) {
+    return;
+  }
+
+  // Cache-first for assets: the fingerprint in the URL is what makes this
+  // safe, and a hit is always the same bytes the panel would serve.
   event.respondWith(
-    fetch(event.request).then(resp => {
-      if (resp.ok) {
-        const clone = resp.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+    caches.match(request).then(cached => {
+      if (cached) {
+        return cached;
       }
-      return resp;
-    }).catch(() => {
-      return caches.match(event.request);
+      return fetch(request).then(resp => {
+        // Only cache a genuine same-origin success. A 404 HTML error page or
+        // an opaque redirect is not an asset, and caching it would paper over
+        // the real problem on every later visit.
+        if (resp && resp.ok && resp.type === 'basic') {
+          const clone = resp.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(request, clone))
+            .catch(() => { /* a full or disabled cache must not break the load */ });
+        }
+        return resp;
+      });
+      // No `.catch(() => caches.match(...))` here: a miss is a miss. Letting
+      // the network error propagate is what lets the page report it.
     })
   );
 });

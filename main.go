@@ -911,6 +911,15 @@ type panelInfo struct {
 	// job keeps (3xipl-ap.log); it only has content when the access log was enabled.
 	XrayAccessLog        string `json:"xrayAccessLog"`
 	XrayAccessLogArchive string `json:"xrayAccessLogArchive"`
+
+	// The database this process actually opened, and what it holds. An upgraded
+	// panel that came up on a brand-new (empty) database file next to its new
+	// binary looks exactly like a panel with broken pages, and this is the one
+	// place an operator can see which file is in use.
+	DBPath     string `json:"dbPath"`
+	DBUsers    int64  `json:"dbUsers"`
+	DBInbounds int64  `json:"dbInbounds"`
+	DBAccounts int64  `json:"dbAccounts"`
 }
 
 // collectPanelInfo reads the panel's current settings and service state. The DB
@@ -981,6 +990,11 @@ func collectPanelInfo(resolvePublicIP bool) panelInfo {
 		}
 	}
 	info.XrayAccessLogArchive = xray.GetAccessPersistentLogPath()
+
+	// The DB is open by now (see runInfo), so this is a live count, not the
+	// read-only probe.
+	dbs := database.GetDatabaseStats(config.GetDBPath())
+	info.DBPath, info.DBUsers, info.DBInbounds, info.DBAccounts = dbs.Path, dbs.Users, dbs.Inbounds, dbs.Accounts
 
 	return info
 }
@@ -1101,6 +1115,15 @@ func printPanelInfo(info panelInfo) {
 	}
 	if info.HasDefaultCredential {
 		fmt.Println("  WARNING:  the default admin/admin credential is still in use. Change it.")
+	}
+	fmt.Println("Database:")
+	fmt.Printf("  Path:     %s\n", info.DBPath)
+	fmt.Printf("  Rows:     users=%d inbounds=%d accounts=%d\n", info.DBUsers, info.DBInbounds, info.DBAccounts)
+	if info.DBInbounds == 0 {
+		fmt.Println("  WARNING:  this database has no inbounds. If the panel used to have")
+		fmt.Println("            inbounds and clients, the running binary is on a different")
+		fmt.Println("            database file: set VPNUI_DB_FOLDER to the directory that holds")
+		fmt.Println("            the old vpn-ui.db (or x-ui.db) and restart.")
 	}
 
 	fmt.Println("Service:")

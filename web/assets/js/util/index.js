@@ -7,6 +7,75 @@ class Msg {
 }
 
 class HttpUtil {
+    // URLs that already failed on this page load. A failed data request is what
+    // turns "the panel is half-upgraded / the database is wrong" into "the page
+    // is blank with no explanation", so it is reported once per URL: console,
+    // toast where there is no other message, and a banner that survives the
+    // toast's three seconds. Repeating it on every poll would be noise.
+    static _failedEndpoints = new Set();
+
+    static _reportApiFailure(url, detail, alsoToast) {
+        if (this._failedEndpoints.has(url)) {
+            return;
+        }
+        this._failedEndpoints.add(url);
+        console.error('vpn-ui: ' + url + ': ' + detail);
+        if (alsoToast && typeof Vue !== 'undefined' && Vue.prototype.$message) {
+            Vue.prototype.$message.error('Endpoint not found: ' + url);
+        }
+        if (typeof window !== 'undefined' && window.vpnUiReportApiFailure) {
+            window.vpnUiReportApiFailure(detail);
+        }
+    }
+
+    static _reportMissingEndpoint(url) {
+        this._reportApiFailure(
+            url,
+            'The panel UI asked for ' + url + ', but this panel does not serve it ' +
+            '(HTTP 404). The running binary and the loaded UI are probably from ' +
+            'different versions: restart the panel, then reload this page. If it ' +
+            'persists, reinstall the release binary.',
+            true,
+        );
+    }
+
+    // A 200 whose body is HTML is not data: it is the login page (session gone)
+    // or a proxy/reverse-proxy error page. `_respToMsg` would hand the caller a
+    // `success:false` object and the page would render empty, so name it.
+    static _reportNonJsonBody(url, resp) {
+        const data = resp && resp.data;
+        if (typeof data !== 'string') {
+            return;
+        }
+        this._reportApiFailure(
+            url,
+            'The panel answered ' + url + ' with a web page instead of data. ' +
+            'That usually means the session expired (open the panel again and log ' +
+            'in) or a proxy in front of the panel returned an error page.',
+            false,
+        );
+    }
+
+    static _reportRequestFailed(url, error) {
+        const status = error && error.response ? error.response.status : 0;
+        // A 4xx other than 401/403 is the caller's own bad input (validation,
+        // duplicate name) and already toasts its message; only report the states
+        // that mean "the panel cannot serve this page at all".
+        if (status && status < 500 && status !== 401 && status !== 403) {
+            return;
+        }
+        const why = status
+            ? 'answered HTTP ' + status
+            : 'could not be reached (' + ((error && error.message) || 'network error') + ')';
+        this._reportApiFailure(
+            url,
+            'The panel ' + why + ' for ' + url + '. The page cannot load its data ' +
+            'until this request succeeds. Check that the panel service is running ' +
+            'and that any reverse proxy in front of it is passing API requests.',
+            false,
+        );
+    }
+
     static _handleMsg(msg) {
         if (!(msg instanceof Msg) || msg.msg === "") {
             return;
@@ -32,19 +101,22 @@ class HttpUtil {
     static async get(url, params, options = {}) {
         try {
             const resp = await axios.get(url, { params, ...options });
+            this._reportNonJsonBody(url, resp);
             const msg = this._respToMsg(resp);
             this._handleMsg(msg);
             return msg;
         } catch (error) {
             console.error('GET request failed:', error);
-            // 404 = route not found: expected when the running binary is older
-            // than the HTML calling a newly-added endpoint. A 404 toast on
-            // every page load is noise, so swallow it and return a silent
-            // failure. Callers that need to distinguish 404 from other errors
-            // can check `msg.success === false && msg.msg === ''`.
+            // 404 = route not found. That is never normal for a page's own data
+            // request, so it is reported (once per URL) and still returned as a
+            // silent failure so callers keep their existing `!success` handling.
+            // Callers that need to distinguish 404 from other errors can check
+            // `msg.success === false && msg.msg === ''`.
             if (error.response && error.response.status === 404) {
+                this._reportMissingEndpoint(url);
                 return new Msg(false, '');
             }
+            this._reportRequestFailed(url, error);
             const errorMsg = new Msg(false, error.response?.data?.msg || error.response?.data?.message || error.message || 'Request failed');
             this._handleMsg(errorMsg);
             return errorMsg;
@@ -54,14 +126,17 @@ class HttpUtil {
     static async post(url, data, options = {}) {
         try {
             const resp = await axios.post(url, data, options);
+            this._reportNonJsonBody(url, resp);
             const msg = this._respToMsg(resp);
             this._handleMsg(msg);
             return msg;
         } catch (error) {
             console.error('POST request failed:', error);
             if (error.response && error.response.status === 404) {
+                this._reportMissingEndpoint(url);
                 return new Msg(false, '');
             }
+            this._reportRequestFailed(url, error);
             const errorMsg = new Msg(false, error.response?.data?.msg || error.response?.data?.message || error.message || 'Request failed');
             this._handleMsg(errorMsg);
             return errorMsg;

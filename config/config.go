@@ -154,22 +154,50 @@ func GetDBPath() string {
 	return fmt.Sprintf("%s/%s.db", GetDBFolderPath(), dbBaseName)
 }
 
-// LegacyDBPaths lists previous database names next to the binary to migrate from
-// on first init when the current DB doesn't exist yet:
-//   - <bindir>/x-ui.db — the prior next-to-binary name (before the vpn-ui rename)
+// LegacyDBPaths lists the database files an upgrade may have left behind, in the
+// order they are preferred when more than one exists.
 //
-// It deliberately does NOT reach into /etc/vpn-ui — a DB left there is not adopted.
-// The current GetDBPath is never included. Empty on a custom VPNUI_DB_FOLDER.
+// It covers more than "next to the binary" on purpose. The panel's DB lives next
+// to the executable, so ANY change to where the executable is installed — a
+// deploy.sh update from an older layout, a move to /opt/vpn-ui, an operator
+// dropping the binary somewhere new — silently starts the new binary on a fresh,
+// empty database next to itself. The operator then sees an empty panel, zero
+// inbounds and none of their clients, with no error anywhere. Discovered-but-
+// non-empty databases from the well-known locations below are therefore adopted
+// (see database.migrateLegacyDB), and the empty file the panel had just created
+// is kept aside rather than deleted.
+//
+// Order matters: the binary's own directory and its parent first, then the
+// historical install prefixes, then /root where a hand-run binary often lives.
+// The current GetDBPath is never included, and an explicit VPNUI_DB_FOLDER means
+// "this directory, do not look elsewhere": nil.
 func LegacyDBPaths() []string {
 	if os.Getenv("VPNUI_DB_FOLDER") != "" {
 		return nil
 	}
+	bin := GetDBFolderPath()
 	current := GetDBPath()
+	dirs := []string{
+		bin,
+		filepath.Dir(bin),
+		"/opt/vpn-ui",
+		"/usr/local/vpn-ui",
+		"/etc/vpn-ui",
+		"/var/lib/vpn-ui",
+		"/usr/local/x-ui",
+		"/etc/x-ui",
+		"/var/lib/x-ui",
+		"/root",
+	}
+	seen := map[string]bool{current: true}
 	var out []string
-	for _, p := range []string{
-		fmt.Sprintf("%s/x-ui.db", GetDBFolderPath()),
-	} {
-		if p != current {
+	for _, dir := range dirs {
+		for _, name := range []string{"vpn-ui.db", "x-ui.db"} {
+			p := filepath.Join(dir, name)
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
 			out = append(out, p)
 		}
 	}

@@ -364,6 +364,62 @@ func TestTemplateKeysAreTranslated(t *testing.T) {
 	}
 }
 
+// goI18nKeyRe matches the translation keys the Go layer passes around: the page
+// titles handed to html(...) and the messages handed to jsonMsg(...). They are
+// invisible to testTemplateKeys because the template only sees `.title`.
+var goI18nKeyRe = regexp.MustCompile(`"(pages\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)"`)
+
+// testGoI18nKeys returns every pages.* key named as a string literal in the
+// controllers.
+func testGoI18nKeys(t *testing.T) map[string]bool {
+	t.Helper()
+	keys := map[string]bool{}
+	files, err := fs.Glob(os.DirFS("controller"), "*.go")
+	if err != nil {
+		t.Fatalf("glob controller: %v", err)
+	}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		raw, err := fs.ReadFile(os.DirFS("controller"), name)
+		if err != nil {
+			t.Fatalf("read controller/%s: %v", name, err)
+		}
+		for _, m := range goI18nKeyRe.FindAllStringSubmatch(string(raw), -1) {
+			keys[m[1]] = true
+		}
+	}
+	if len(keys) < 20 {
+		t.Fatalf("only %d Go-side keys found; the walk is not seeing the controllers", len(keys))
+	}
+	return keys
+}
+
+// TestGoI18nKeysAreTranslated is the guard for the keys the templates never
+// name. The 2.8.0 translation rewrite dropped "title" from six [pages.*] tables
+// in en_US; every one of those pages then rendered its raw key as the browser
+// title, and template parity could not see it because the template only says
+// `i18n .title`.
+func TestGoI18nKeysAreTranslated(t *testing.T) {
+	keys := testGoI18nKeys(t)
+	releaseLocales := []string{"translate.en_US.toml", "translate.fa_IR.toml"}
+	for _, name := range releaseLocales {
+		loc := loadTranslationKeys(t, name)
+		var missing []string
+		for k := range keys {
+			if !loc[k] {
+				missing = append(missing, k)
+			}
+		}
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			t.Errorf("%s: %d key(s) named by the Go layer are missing, so the UI "+
+				"renders the raw key: %v", name, len(missing), missing)
+		}
+	}
+}
+
 // TestTranslationsHaveNoMojibake fails if a locale file has been re-encoded
 // through the wrong codepage. The fa_IR file did exactly that once: every Persian
 // character became a Latin-1 lookalike ("ÙˆØ±ÙˆØ¯" for "ورود"), which parses as

@@ -40,6 +40,7 @@ func main() {
 		return nil
 	})
 	// Dedupe.
+	failed := false
 	seen := map[string]bool{}
 	var unique []string
 	for _, k := range keys {
@@ -48,10 +49,34 @@ func main() {
 			unique = append(unique, k)
 		}
 	}
-	fmt.Printf("i18n keys used in templates: %d\n", len(unique))
+
+	// Keys the GO layer passes around are invisible to the template scan: the
+	// page title arrives as `i18n .title` with `pages.index.title` supplied by the
+	// controller, so a locale that loses the key renders the raw key as the
+	// browser title while this check still says "0 missing". That is exactly what
+	// the 2.8.0 translation rewrite did to six pages. Scan the controllers too.
+	goKeyRe := regexp.MustCompile(`"(pages\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)"`)
+	goFiles, _ := filepath.Glob("web/controller/*.go")
+	for _, path := range goFiles {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Printf("%s: %v\n", path, err)
+			failed = true
+			continue
+		}
+		for _, m := range goKeyRe.FindAllStringSubmatch(string(raw), -1) {
+			if !seen[m[1]] {
+				seen[m[1]] = true
+				unique = append(unique, m[1])
+			}
+		}
+	}
+	fmt.Printf("i18n keys used in templates + controllers: %d\n", len(unique))
 
 	// Load translation files.
-	failed := false
 	for _, file := range []string{"web/translation/translate.en_US.toml", "web/translation/translate.fa_IR.toml"} {
 		raw, err := os.ReadFile(file)
 		if err != nil {

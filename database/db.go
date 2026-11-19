@@ -5,12 +5,15 @@ package database
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/mhsanaei/3x-ui/v2/config"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
@@ -370,37 +373,175 @@ func isTableEmpty(tableName string) (bool, error) {
 // filesystems, which matters only if VPNUI_DB_FOLDER points at an NFS/CIFS mount.
 const sqliteDSNParams = "?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=10000"
 
-// InitDB sets up the database connection, migrates models, and runs seeders.
-// migrateLegacyDB moves a database (plus its sqlite sidecar files) from a prior
-// location/name to the current path when the current one doesn't exist yet, so
-// upgrades keep their users and inbounds. It tries each legacy candidate in order
-// and migrates the first that exists. Best-effort: any failure just leaves a
-// fresh DB to be created at the new path.
-func migrateLegacyDB(dbPath string) {
-	if _, err := os.Stat(dbPath); err == nil {
-		return // current DB already present — nothing to migrate
+// dbStats is the cheap row probe used to decide whether a database file is worth
+// adopting and to report what the panel actually opened at startup.
+type dbStats struct {
+	Users    int64
+	Inbounds int64
+	Accounts int64 // client_traffics rows: one per account
+}
+
+// carriesData reports whether the database is somebody's panel rather than a
+// freshly created, seeded file.
+func (s dbStats) carriesData() bool {
+	return s.Inbounds > 0 || s.Accounts > 0
+}
+
+// inspectDB reads a database file WITHOUT migrating, seeding or writing to it.
+// ok is false when the file is missing, is not SQLite, is locked in a way a
+// read-only connection cannot handle, or predates the users/inbounds tables.
+func inspectDB(dbPath string) (stats dbStats, ok bool) {
+	if _, err := os.Stat(dbPath); err != nil {
+		return stats, false
 	}
-	for _, legacy := range config.LegacyDBPaths() {
+	rdb, err := gorm.Open(sqlite.Open(dbPath+"?mode=ro&_busy_timeout=2000"), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		return stats, false
+	}
+	sqlDB, err := rdb.DB()
+	if err != nil {
+		return stats, false
+	}
+	defer sqlDB.Close()
+	for _, name := range []string{"users", "inbounds"} {
+		var found int
+		if err := sqlDB.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&found); err != nil || found == 0 {
+			return stats, false
+		}
+	}
+	_ = sqlDB.QueryRow("SELECT count(*) FROM users").Scan(&stats.Users)
+	_ = sqlDB.QueryRow("SELECT count(*) FROM inbounds").Scan(&stats.Inbounds)
+	_ = sqlDB.QueryRow("SELECT count(*) FROM client_traffics").Scan(&stats.Accounts)
+	return stats, true
+}
+
+// InitDB sets up the database connection, migrates models, and runs seeders.
+//
+// migrateLegacyDB adopts a database left behind by a previous location/name
+// (plus its sqlite sidecar files) when the current path has no database at all,
+// or only an EMPTY one. That second case is the upgrade trap: the panel keeps its
+// DB next to its executable, so reinstalling the binary into a different
+// directory (or a deploy that moved it) makes the new binary create a fresh,
+// empty vpn-ui.db beside itself — and the operator's inbounds, clients and
+// settings appear to have vanished, with nothing in the log to say why. A
+// database that carries data is never touched; one that is present but cannot be
+// inspected is never second-guessed.
+//
+// Best-effort: any failure just leaves a fresh DB to be created at the new path.
+func migrateLegacyDB(dbPath string) {
+	migrateLegacyDBFrom(dbPath, config.LegacyDBPaths())
+}
+
+// migrateLegacyDBFrom is migrateLegacyDB with the candidate list injected, so the
+// adoption rules can be exercised without writing to the fixed install prefixes.
+func migrateLegacyDBFrom(dbPath string, candidates []string) {
+	currentStats, currentOK := inspectDB(dbPath)
+	if _, err := os.Stat(dbPath); err == nil {
+		if !currentOK {
+			// Present but unreadable by the probe. InitDB is the thing that
+			// knows how to open it, and replacing a file we could not read
+			// would destroy the operator's real data. Leave it alone.
+			return
+		}
+		if currentStats.carriesData() || currentStats.Users > 1 {
+			return // the current DB is the panel's own: nothing to migrate
+		}
+	}
+
+	// Pick the candidate with the most data, so an old empty file shadowing a
+	// populated one cannot win.
+	best := ""
+	var bestStats dbStats
+	for _, legacy := range candidates {
 		if legacy == dbPath {
 			continue
 		}
-		if _, err := os.Stat(legacy); err != nil {
-			continue // this legacy DB doesn't exist — try the next
+		stats, ok := inspectDB(legacy)
+		if !ok || !stats.carriesData() {
+			continue // missing, unreadable, or empty — try the next
 		}
+		if best == "" || stats.Inbounds+stats.Accounts > bestStats.Inbounds+bestStats.Accounts {
+			best, bestStats = legacy, stats
+		}
+	}
+	if best == "" {
+		return
+	}
+
+	// The destination directory may not exist yet when the current path is a
+	// brand-new install location (InitDB creates it, but this runs before the file
+	// exists and a rename into a missing directory fails).
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		log.Printf("could not create %s for the adopted database: %v", filepath.Dir(dbPath), err)
+		return
+	}
+
+	// Keep whatever sits at the current path (typically the freshly seeded empty
+	// DB from the half-finished upgrade) instead of deleting it, so a wrong
+	// adoption is recoverable.
+	if _, err := os.Stat(dbPath); err == nil {
+		aside := dbPath + fmt.Sprintf(".empty-%d", time.Now().Unix())
 		for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-			src, dst := legacy+suffix, dbPath+suffix
-			if _, err := os.Stat(src); err != nil {
+			if _, err := os.Stat(dbPath + suffix); err != nil {
 				continue
 			}
-			if err := os.Rename(src, dst); err != nil {
-				// Different filesystem (e.g. /etc vs /root on separate mounts): copy.
-				if copyFile(src, dst) == nil {
-					_ = os.Remove(src)
-				}
+			if err := os.Rename(dbPath+suffix, aside+suffix); err != nil {
+				_ = copyFile(dbPath+suffix, aside+suffix)
 			}
 		}
-		log.Printf("migrated database from %s to %s", legacy, dbPath)
-		return
+		log.Printf("database at %s held no inbounds or accounts; kept it as %s", dbPath, aside)
+	}
+
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+		src, dst := best+suffix, dbPath+suffix
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := os.Rename(src, dst); err != nil {
+			// Different filesystem (e.g. /etc vs /root on separate mounts): copy.
+			if copyFile(src, dst) == nil {
+				_ = os.Remove(src)
+			}
+		}
+	}
+	log.Printf("adopted database %s (users=%d inbounds=%d accounts=%d) as %s",
+		best, bestStats.Users, bestStats.Inbounds, bestStats.Accounts, dbPath)
+}
+
+// DatabaseStats is the database path plus the row counts the panel's pages are
+// built from.
+type DatabaseStats struct {
+	Path     string
+	Users    int64
+	Inbounds int64
+	Accounts int64
+}
+
+// GetDatabaseStats reports what the OPEN database holds. It is exported for
+// `vpn-ui info`: a panel running on the wrong (or a brand-new) database file is
+// otherwise indistinguishable from a panel whose pages are broken, and the
+// operator has no way to tell the two apart from the UI.
+func GetDatabaseStats(dbPath string) DatabaseStats {
+	st := DatabaseStats{Path: dbPath}
+	if db != nil {
+		_ = db.Model(&model.User{}).Count(&st.Users).Error
+		_ = db.Model(&model.Inbound{}).Count(&st.Inbounds).Error
+		_ = db.Model(&xray.ClientTraffic{}).Count(&st.Accounts).Error
+	}
+	return st
+}
+
+// ReportDatabase logs one line describing the database the panel actually
+// opened, plus the one warning that explains an "everything is empty" panel.
+//
+// This exists because the alternative is silence: a panel running on the wrong
+// (or a brand-new) database looks exactly like a panel whose pages are broken,
+// and the operator has no way to tell the two apart from the UI.
+func ReportDatabase(dbPath string) {
+	st := GetDatabaseStats(dbPath)
+	log.Printf("database: %s (users=%d inbounds=%d accounts=%d)", st.Path, st.Users, st.Inbounds, st.Accounts)
+	if st.Inbounds == 0 {
+		log.Printf("WARNING: this database has no inbounds. If the panel was upgraded in place and its inbounds/clients used to be here, the running binary is NOT using the old database file. Stop the panel, set VPNUI_DB_FOLDER to the directory that holds the old vpn-ui.db (or x-ui.db), and start it again before adding any new data.")
 	}
 }
 
@@ -466,7 +607,14 @@ func InitDB(dbPath string) error {
 	migrateGlobalTwoFactor()
 	migrateInboundOwners()
 	migrateInboundAccess()
-	return runSeeders(isUsersEmpty)
+	if err := runSeeders(isUsersEmpty); err != nil {
+		return err
+	}
+	// Say out loud which database this process is on and how much it holds. A
+	// panel that started on the wrong (or a brand-new) DB is otherwise
+	// indistinguishable from a panel whose pages are broken.
+	ReportDatabase(dbPath)
+	return nil
 }
 
 // GetSettingValue opens the DB and returns a single `settings` value via a plain

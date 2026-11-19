@@ -265,6 +265,7 @@
 "successLogin" = " You have successfully logged into your account."
 
 [pages.index]
+"title" = "Overview"
 "donate" = "Donate"
 "donateTitle" = "Support VPN-UI"
 "donateIntro" = "If VPN-UI is useful to you, a donation to any of these addresses helps keep it maintained."
@@ -439,6 +440,7 @@
 "getConfigError" = "An error occurred while retrieving the config file."
 
 [pages.inbounds]
+"title" = "Inbounds"
 "addGroups" = "Add Groups"
 "allInbounds" = "All inbounds"
 "clientGroups" = "Client Groups"
@@ -859,6 +861,7 @@
 "serverMaxHeaderBytesNegative" = "This cannot be negative. Use 0 to let the core decide."
 
 [pages.settings]
+"title" = "Panel Settings"
 "infoDesc" = "Every change made here needs to be saved. Please restart the panel to apply changes."
 "save" = "Save"
 "subPageTemplate" = "Custom subscription page"
@@ -983,6 +986,8 @@
 "telegramBotLanguage" = "Telegram Bot Language"
 
 [pages.xray]
+"title" = "Xray Configs"
+"restartSuccess" = "Xray has been successfully relaunched."
 "save" = "Save"
 "restart" = "Restart Xray"
 "stopSuccess" = "Xray has been successfully stopped."
@@ -1456,6 +1461,9 @@
 "nicknameAdd" = "Add a nickname"
 "nicknameEdit" = "Change the nickname"
 [pages.settings.ssl.toasts]
+"status" = "The certificate status could not be read."
+"start" = "The operation could not be started."
+"nickname" = "The nickname was saved."
 "consumers" = "The services using this certificate could not be listed."
 "adopt" = "That certificate could not be added."
 "rollback" = "Rolled back to the selected version."
@@ -1652,6 +1660,10 @@
 "chooseInbound" = "Choose an Inbound"
 
 [pages.admins]
+"title" = "Admins"
+"forbidden" = "You do not have permission to do that. Ask a super admin if you need access."
+"sessionsRevoke" = "Session revoked"
+"sessionsRevokeAll" = "Signed out of every session"
 "reassign" = "Reassign Inbounds"
 "superAdmin" = "Super Admin"
 "superAdminDesc" = "Bypasses every permission and is the only role that can manage admins."
@@ -1739,6 +1751,7 @@
 "bulkPartial" = "Accounts that will be processed"
 
 [pages.nodes]
+"title" = "Nodes"
 "test" = "Test connection"
 "testOk" = "Connection verified"
 "remoteInbounds" = "Remote inbounds"
@@ -1874,6 +1887,8 @@
 
 [pages.tunnels]
 "title" = "Tunnels"
+"deleted" = "Tunnel deleted"
+"enabled" = "Tunnel enabled"
 "subtitle" = "Lightweight encrypted tunnel pairs between this panel and its peers"
 "add" = "Add Tunnel"
 "edit" = "Edit Tunnel"

@@ -216,6 +216,27 @@
 <script src="{{ .base_path }}assets/js/axios-init.js?{{ .asset_ver }}"></script>
 <script src="{{ .base_path }}assets/js/util/index.js?{{ .asset_ver }}"></script>
 <script>
+  // A persistent, screenshot-able explanation of an API failure. A toast is gone
+  // after three seconds; on a page whose whole body sits behind "the data
+  // arrived", the result is a page that looks simply blank and a report that
+  // says "nothing shows". This keeps the reason on screen until it is clicked
+  // away. Click to dismiss.
+  window.vpnUiReportApiFailure = function (detail) {
+    var el = document.getElementById('vpn-ui-api-failure');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'vpn-ui-api-failure';
+      el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;' +
+        'background:#7f1d1d;color:#fff;padding:10px 16px;font:13px/1.5 system-ui,sans-serif;' +
+        'direction:ltr;text-align:left;box-shadow:0 -2px 8px rgba(0,0,0,.35);cursor:pointer';
+      el.title = 'Click to dismiss';
+      el.onclick = function () { el.remove(); };
+      document.body.appendChild(el);
+    }
+    el.textContent = detail;
+  };
+</script>
+<script>
   const basePath = '{{ .base_path }}';
   // All API/asset call sites use root-absolute URLs ("/panel/api/...",
   // "/assets/...", "/subscription/..."). The panel is mounted under a base path

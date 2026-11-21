@@ -326,6 +326,18 @@ func TestPresetCatalogEntriesAreSupported(t *testing.T) {
 		if err := json.Unmarshal([]byte(in.Settings), &root); err != nil {
 			t.Errorf("preset %q settings are not JSON: %v", p.Name, err)
 		}
+		// Verify at least one client/account list key exists
+		clientKeys := []string{"clients", "wgClients", "accounts"}
+		hasClientList := false
+		for _, k := range clientKeys {
+			if arr, ok := root[k].([]any); ok && len(arr) > 0 {
+				hasClientList = true
+				break
+			}
+		}
+		if !hasClientList {
+			t.Errorf("preset %q has no seeded client/account list (checked: clients, wgClients, accounts)", p.Name)
+		}
 	}
 }
 
@@ -576,37 +588,49 @@ func TestApplyPresetSniWritesRealityList(t *testing.T) {
 // The seeded account must be a complete panel client: a bare {email, id} entry
 // comes back with no subId, which hides its subscription link and blocks the
 // node sync.
+//
+// Different protocols use different keys for their client/account lists:
+// - Most use "clients"
+// - WireGuard (Xray) uses "wgClients"
+// - Mixed uses "accounts"
+// - HTTP uses "accounts"
 func TestPresetAccountsCarrySubId(t *testing.T) {
 	s := newPresetService()
-	cases := map[string]string{
-		"vless":         s.presetVlessSettings(true),
-		"hysteria2":     s.presetHysteriaSettings(),
-		"tuic":          s.presetTuicSettings(),
-		"naive":         s.presetNaiveSettings(),
-		"shadowsocks":   s.presetShadowsocksSettings(),
-		"hysteria":      s.presetHysteriaV1Settings(),
-		"anytls":        s.presetAnyTLSSettings(),
-		"wireguard":     s.presetWireguardSettings(),
-		"l2tp":          s.presetL2TPSettings(),
-		"pptp":          s.presetPPTPSettings(),
-		"openvpn":       s.presetOpenVPNSettings(),
-		"openconnect":   s.presetOpenConnectSettings(),
-		"sstp":          s.presetSSTPSettings(),
-		"ikev2":         s.presetIKEv2Settings(),
-		"wgc":           s.presetWGCSettings(),
-		"awg":           s.presetAWGSettings(),
-		"gre":           s.presetGRESettings(),
-		"mtproto":       s.presetMTProtoSettings(),
-		"ssh":           s.presetSSHSettings(),
+	cases := map[string]struct {
+		blob      string
+		clientKey string // key in settings JSON for the client/account list
+	}{
+		"vless":         {s.presetVlessSettings(true), "clients"},
+		"hysteria2":     {s.presetHysteriaSettings(), "clients"},
+		"tuic":          {s.presetTuicSettings(), "clients"},
+		"naive":         {s.presetNaiveSettings(), "clients"},
+		"shadowsocks":   {s.presetShadowsocksSettings(), "clients"},
+		"hysteria":      {s.presetHysteriaV1Settings(), "clients"},
+		"anytls":        {s.presetAnyTLSSettings(), "clients"},
+		"wireguard":     {s.presetWireguardSettings(), "wgClients"},
+		"l2tp":          {s.presetL2TPSettings(), "clients"},
+		"pptp":          {s.presetPPTPSettings(), "clients"},
+		"openvpn":       {s.presetOpenVPNSettings(), "clients"},
+		"openconnect":   {s.presetOpenConnectSettings(), "clients"},
+		"sstp":          {s.presetSSTPSettings(), "clients"},
+		"ikev2":         {s.presetIKEv2Settings(), "clients"},
+		"wgc":           {s.presetWGCSettings(), "clients"},
+		"awg":           {s.presetAWGSettings(), "clients"},
+		"gre":           {s.presetGRESettings(), "clients"},
+		"mtproto":       {s.presetMTProtoSettings(), "clients"},
+		"ssh":           {s.presetSSHSettings(), "clients"},
+		// Mixed and HTTP use "accounts" with user/pass, not subId
+		// "mixed":        {s.presetMixedSettings(), "accounts"},
+		// "http":         {s.presetHTTPSettings(), "accounts"},
 	}
-	for name, blob := range cases {
+	for name, tc := range cases {
 		var root map[string]any
-		if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		if err := json.Unmarshal([]byte(tc.blob), &root); err != nil {
 			t.Fatalf("%s: settings did not parse: %v", name, err)
 		}
-		clients, _ := root["clients"].([]any)
+		clients, _ := root[tc.clientKey].([]any)
 		if len(clients) != 1 {
-			t.Fatalf("%s: seeded %d clients, want 1", name, len(clients))
+			t.Fatalf("%s: seeded %d %s, want 1", name, len(clients), tc.clientKey)
 		}
 		client, _ := clients[0].(map[string]any)
 		if subId, _ := client["subId"].(string); len(subId) != 16 {

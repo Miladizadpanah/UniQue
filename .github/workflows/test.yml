@@ -35,6 +35,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install system dependencies (sqlite3, gcc for CGO)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsqlite3-dev gcc
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -47,7 +52,7 @@ jobs:
       - name: Test
         run: |
           set -o pipefail
-          go test ./... 2>&1 | tee go-test.log
+          CGO_ENABLED=1 go test ./... 2>&1 | tee go-test.log
 
       # A failed step only reports "exit code 1" in the run annotations. Echo the
       # failing package/test lines as annotations and into the job summary so the

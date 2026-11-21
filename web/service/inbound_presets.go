@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	crand "crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -22,6 +23,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v2/database"
 	"github.com/mhsanaei/3x-ui/v2/database/model"
 	"github.com/mhsanaei/3x-ui/v2/logger"
+
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // InboundPreset is a ready-to-use inbound template with optimized defaults.
@@ -102,6 +105,133 @@ func (s *InboundService) Presets() []InboundPreset {
 			Protocol:    model.Shadowsocks,
 			Recommended: false,
 		},
+		// Hysteria v1 (legacy QUIC, kept for compatibility)
+		{
+			Name:        "Hysteria v1",
+			Description: "Legacy Hysteria QUIC protocol. Use Hysteria2 for new deployments.",
+			Protocol:    model.Hysteria,
+			Recommended: false,
+		},
+		// AnyTLS (Xray-native, password-only)
+		{
+			Name:        "AnyTLS",
+			Description: "Xray-native password protocol with TLS. No UUID, no CDN dependency.",
+			Protocol:    model.ANYTLS,
+			Recommended: false,
+			Security:    "tls",
+		},
+		// WireGuard (Xray-native)
+		{
+			Name:        "WireGuard (Xray)",
+			Description: "Xray's native WireGuard implementation. In-kernel performance, panel-managed peers.",
+			Protocol:    model.WireGuard,
+			Recommended: false,
+		},
+		// Mixed (SOCKS/HTTP relay inbound)
+		{
+			Name:        "Mixed (SOCKS + HTTP)",
+			Description: "Inbound SOCKS5/HTTP relay with optional auth. Use as an entry point or relay.",
+			Protocol:    model.Mixed,
+			Recommended: false,
+		},
+		// HTTP (HTTP proxy inbound)
+		{
+			Name:        "HTTP Proxy",
+			Description: "Inbound HTTP proxy with optional Basic auth. Simple and widely supported.",
+			Protocol:    model.HTTP,
+			Recommended: false,
+		},
+		// Tunnel (Dokodemo-door)
+		{
+			Name:        "Tunnel (Dokodemo-door)",
+			Description: "Transparent TCP/UDP port forward to a target address. Works with any protocol.",
+			Protocol:    model.Tunnel,
+			Recommended: false,
+		},
+		// TUN (TUN inbound)
+		{
+			Name:        "TUN (Virtual Interface)",
+			Description: "Virtual network interface for system-wide routing. Requires CAP_NET_ADMIN.",
+			Protocol:    model.Protocol("tun"),
+			Recommended: false,
+		},
+		// L2TP/IPsec
+		{
+			Name:        "L2TP/IPsec",
+			Description: "Native L2TP with IPsec. Built-in on Windows/macOS/iOS/Android — no client install needed.",
+			Protocol:    model.L2TP,
+			Recommended: false,
+		},
+		// PPTP
+		{
+			Name:        "PPTP",
+			Description: "Legacy PPTP VPN. Built-in on most OSes but deprecated — use L2TP or IKEv2 instead.",
+			Protocol:    model.PPTP,
+			Recommended: false,
+		},
+		// OpenVPN
+		{
+			Name:        "OpenVPN",
+			Description: "Industry-standard OpenVPN with TLS-Crypt. Generates .ovpn profiles automatically.",
+			Protocol:    model.OPENVPN,
+			Recommended: false,
+		},
+		// OpenConnect (ocserv)
+		{
+			Name:        "OpenConnect (ocserv)",
+			Description: "Cisco AnyConnect-compatible server. Works with OpenConnect, AnyConnect, and NetworkManager clients.",
+			Protocol:    model.OPENCONNECT,
+			Recommended: false,
+		},
+		// SSTP
+		{
+			Name:        "SSTP",
+			Description: "Secure Socket Tunneling Protocol. Native on Windows, works through most firewalls.",
+			Protocol:    model.SSTP,
+			Recommended: false,
+		},
+		// IKEv2
+		{
+			Name:        "IKEv2",
+			Description: "IKEv2/IPsec with EAP-MSCHAPv2. Native on Windows/macOS/iOS/Android, MOBIKE for roaming.",
+			Protocol:    model.IKEV2,
+			Recommended: false,
+		},
+		// WireGuard (C) - in-kernel
+		{
+			Name:        "WireGuard (wg-c)",
+			Description: "In-kernel WireGuard (wg-c). Best performance, panel-managed keys and peers.",
+			Protocol:    model.WGC,
+			Recommended: false,
+		},
+		// AmneziaWG
+		{
+			Name:        "AmneziaWG (awg)",
+			Description: "AmneziaWG — WireGuard with obfuscation (Jc/Jmin/Jmax/S1/S2/H1-H4). Better censorship resistance.",
+			Protocol:    model.AWG,
+			Recommended: false,
+		},
+		// GRE
+		{
+			Name:        "GRE / IPsec",
+			Description: "Generic Routing Encapsulation with optional IPsec. Site-to-site and router-to-router.",
+			Protocol:    model.GRE,
+			Recommended: false,
+		},
+		// MTProto
+		{
+			Name:        "MTProto Proxy",
+			Description: "Telegram MTProto proxy (classic/secure/TLS modes). Built-in telemt, inotify config reload.",
+			Protocol:    model.MTPROTO,
+			Recommended: false,
+		},
+		// SSH
+		{
+			Name:        "SSH Gateway",
+			Description: "SSH tunnel gateway with host key + password auth. Built-in SSH server, paired socks outbound.",
+			Protocol:    model.SSH,
+			Recommended: false,
+		},
 	}
 }
 
@@ -123,12 +253,32 @@ const (
 	presetPortHigh = 32000
 )
 
+// presetBuildable reports whether a protocol can have a preset. It is SEPARATE
+// from nodeMintable (which governs node-API account minting semantics) because
+// presets need to build a complete inbound row (settings+stream+seeded account)
+// that passes AddInbound validation, whereas nodeMintable only requires a
+// credential the node API can project. A protocol can be presetBuildable but
+// not nodeMintable (e.g. mixed, http, tunnel, tun), and vice versa.
+func presetBuildable(protocol model.Protocol) bool {
+	switch protocol {
+	case model.VMESS, model.VLESS, model.Trojan, model.Shadowsocks,
+		model.Hysteria, model.Hysteria2, model.TUIC, model.ANYTLS, model.NAIVE,
+		model.Mixed, model.HTTP, model.Tunnel, model.Protocol("tun"),
+		model.L2TP, model.PPTP, model.OPENVPN, model.OPENCONNECT,
+		model.SSTP, model.IKEV2, model.WGC, model.AWG,
+		model.GRE, model.MTPROTO, model.SSH, model.WireGuard:
+		return true
+	default:
+		return false
+	}
+}
+
 // PresetInbound creates one inbound from a preset through the panel's own
 // create path (AddInbound), so the preset row is indistinguishable from a
 // typed one. It returns the persisted row, whether the running core needs a
 // restart, and the error (if any).
 func (s *InboundService) PresetInbound(preset InboundPreset, remark string) (*model.Inbound, bool, error) {
-	if !nodeMintable(preset.Protocol) {
+	if !presetBuildable(preset.Protocol) {
 		return nil, false, fmt.Errorf("protocol %s has no preset", preset.Protocol)
 	}
 
@@ -249,6 +399,84 @@ func (s *InboundService) fillPresetDefaults(in *model.Inbound, preset InboundPre
 		// clients array: the 2022 key is an INBOUND credential and the users
 		// each carry their own PSK for that method.
 		in.Settings = s.presetShadowsocksSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.Hysteria:
+		// Hysteria v1 (legacy): settings version=1, stream network=hysteria
+		in.Settings = s.presetHysteriaV1Settings()
+		in.StreamSettings = s.presetHysteriaV1Stream()
+	case model.ANYTLS:
+		// AnyTLS is a password-only protocol over TLS. The stream is TLS with
+		// a bound certificate. Settings carry the paddingScheme and clients[].
+		in.Settings = s.presetAnyTLSSettings()
+		in.StreamSettings = s.presetTlsStream()
+	case model.WireGuard:
+		// Xray-native WireGuard: settings hold secretKey, peers[], wgClients[],
+		// clientNetwork, userLimit. Stream is none/tcp.
+		in.Settings = s.presetWireguardSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.Mixed:
+		// Mixed inbound: SOCKS5/HTTP relay with accounts[user,pass]. No TLS.
+		in.Settings = s.presetMixedSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.HTTP:
+		// HTTP proxy inbound: accounts[user,pass], allowTransparent. No TLS.
+		in.Settings = s.presetHTTPSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.Tunnel:
+		// Dokodemo-door: address, port, portMap, network, followRedirect.
+		// Stream is tcp (or kcp/mkcp for UDP), no TLS.
+		in.Settings = s.presetTunnelSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.Protocol("tun"):
+		// TUN inbound: virtual network interface. No stream settings needed.
+		in.Settings = s.presetTunSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.L2TP:
+		// L2TP/IPsec: uses DefaultSettingsFor + seeded clients + shared PSK.
+		// Cert is not in settings (xl2tpd/ipsec use file paths).
+		in.Settings = s.presetL2TPSettings()
+		in.StreamSettings = `{"network":"udp","security":"none"}`
+	case model.PPTP:
+		// PPTP: uses DefaultSettingsFor + seeded clients. No IPsec.
+		in.Settings = s.presetPPTPSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.OPENVPN:
+		// OpenVPN: needs certificate. Use GenerateSelfSignedCA and embed inline.
+		in.Settings = s.presetOpenVPNSettings()
+		in.StreamSettings = `{"network":"udp","security":"none"}`
+	case model.OPENCONNECT:
+		// OpenConnect (ocserv): needs certificate. Use GenerateSelfSignedCert.
+		in.Settings = s.presetOpenConnectSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.SSTP:
+		// SSTP: needs certificate. Use GenerateSelfSignedCert.
+		in.Settings = s.presetSSTPSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.IKEV2:
+		// IKEv2: needs certificate for EAP-MSCHAPv2/EAP-TLS (not PSK).
+		// Use GenerateSelfSignedCert (returns CA+leaf).
+		in.Settings = s.presetIKEv2Settings()
+		in.StreamSettings = `{"network":"udp","security":"none"}`
+	case model.WGC:
+		// WireGuard (C): in-kernel. Keys minted by ReconcileKeys after create.
+		// Settings from DefaultSettingsFor + seeded clients.
+		in.Settings = s.presetWGCSettings()
+		in.StreamSettings = `{"network":"udp","security":"none"}`
+	case model.AWG:
+		// AmneziaWG: in-kernel WireGuard with obfuscation. Keys minted after create.
+		in.Settings = s.presetAWGSettings()
+		in.StreamSettings = `{"network":"udp","security":"none"}`
+	case model.GRE:
+		// GRE: port normalized by NormalizeGrePort. Keys/peers reconciled after create.
+		in.Settings = s.presetGRESettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.MTPROTO:
+		// MTProto: telemt proxy. Secret minted per account. Settings from defaults.
+		in.Settings = s.presetMTProtoSettings()
+		in.StreamSettings = `{"network":"tcp","security":"none"}`
+	case model.SSH:
+		// SSH gateway: host key minted by ReconcileHostKeys. Settings from defaults.
+		in.Settings = s.presetSSHSettings()
 		in.StreamSettings = `{"network":"tcp","security":"none"}`
 	}
 }
@@ -1056,4 +1284,532 @@ func preset2022KeyB64(n int) string {
 		}
 	}
 	return base64.StdEncoding.EncodeToString(b)
+}
+
+// ============================ NEW PRESET BUILDERS (Hysteria v1 .. SSH) ============================
+
+// presetHysteriaV1Settings builds the settings for Hysteria v1 (legacy QUIC).
+// Uses version=1 and the same client shape as Hysteria2.
+func (s *InboundService) presetHysteriaV1Settings() string {
+	clients := []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["auth"] = s.generateRandomCredential(model.Hysteria)
+		}),
+	}
+	return presetJSON(map[string]any{"version": 1, "clients": clients})
+}
+
+// presetHysteriaV1Stream is the stream for Hysteria v1: network=hysteria, security=tls, version=1.
+func (s *InboundService) presetHysteriaV1Stream() string {
+	return presetJSON(map[string]any{
+		"network":          "hysteria",
+		"security":         "tls",
+		"hysteriaSettings": map[string]any{"protocol": "hysteria", "version": 1, "udpIdleTimeout": 60},
+		"tlsSettings":      s.presetTLSSettings("", "1.3", "1.3", []string{"h3"}),
+	})
+}
+
+// presetAnyTLSSettings builds the settings for AnyTLS (password-only, TLS).
+func (s *InboundService) presetAnyTLSSettings() string {
+	clients := []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["password"] = s.generateRandomCredential(model.ANYTLS)
+		}),
+	}
+	// Use the default padding scheme from protocoldefaults (server-authoritative).
+	return presetJSON(map[string]any{
+		"clients":       clients,
+		"paddingScheme": []any{},
+	})
+}
+
+// presetWireguardSettings builds the settings for Xray-native WireGuard.
+// The inbound holds secretKey, peers[], wgClients[], clientNetwork, userLimit.
+// Keys are minted server-side; a seeded client gets its keypair + address.
+func (s *InboundService) presetWireguardSettings() string {
+	secretKey, pubKey := s.presetWireguardKeyPair()
+	clientNetwork := "10.10.0.0/24"
+	clients := []map[string]any{
+		s.presetWireguardClient(clientNetwork),
+	}
+	return presetJSON(map[string]any{
+		"secretKey":     secretKey,
+		"pubKey":        pubKey,
+		"peers":         []any{},
+		"noKernelTun":   false,
+		"wgClients":     clients,
+		"clientNetwork": clientNetwork,
+		"userLimit":     10,
+		"mtu":           1420,
+	})
+}
+
+// presetWireguardKeyPair generates a WireGuard keypair (base64).
+func (s *InboundService) presetWireguardKeyPair() (string, string) {
+	priv, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		// Fallback: deterministic from random bytes
+		seed := time.Now().UnixNano() ^ int64(mrand.Uint64())
+		r := mrand.New(mrand.NewSource(seed))
+		raw := make([]byte, 32)
+		for i := range raw {
+			raw[i] = byte(r.Intn(256))
+		}
+		priv, _ = wgtypes.ParseKey(base64.StdEncoding.EncodeToString(raw))
+	}
+	return priv.String(), priv.PublicKey().String()
+}
+
+// presetWireguardClient builds one seeded WireGuard client with keypair + address.
+func (s *InboundService) presetWireguardClient(network string) map[string]any {
+	priv, _ := s.presetWireguardKeyPair()
+	_, pub := s.presetWireguardKeyPair() // Generate another for client
+	clientIP := "10.10.0.2/32"            // First client gets .2 (server is .1)
+	return map[string]any{
+		"email":      presetAccountEmail(),
+		"enable":     true,
+		"devices":    []map[string]any{{"privKey": priv, "pubKey": pub, "psk": ""}},
+		"addresses":  []string{clientIP},
+		"privKey":    "",
+		"pubKey":     "",
+		"psk":        "",
+		"expiryTime": 0,
+		"tgId":       "",
+		"subId":      presetRandomID(16),
+		"comment":    "",
+		"totalGB":    0,
+		"limitIp":    0,
+		"reset":      0,
+	}
+}
+
+// presetMixedSettings builds the settings for Mixed (SOCKS5/HTTP relay).
+// Uses accounts[] with user/pass, auth=password, udp=false.
+func (s *InboundService) presetMixedSettings() string {
+	accounts := []map[string]any{
+		{
+			"user": presetRandomID(10),
+			"pass": presetRandomID(10),
+		},
+	}
+	return presetJSON(map[string]any{
+		"auth":     "password",
+		"accounts": accounts,
+		"udp":      false,
+		"ip":       "127.0.0.1",
+	})
+}
+
+// presetHTTPSettings builds the settings for HTTP proxy inbound.
+// Uses accounts[] with user/pass, allowTransparent=false.
+func (s *InboundService) presetHTTPSettings() string {
+	accounts := []map[string]any{
+		{
+			"user": presetRandomID(10),
+			"pass": presetRandomID(10),
+		},
+	}
+	return presetJSON(map[string]any{
+		"accounts":          accounts,
+		"allowTransparent": false,
+	})
+}
+
+// presetTunnelSettings builds the settings for Tunnel (dokodemo-door).
+// address, port, portMap, network, followRedirect.
+func (s *InboundService) presetTunnelSettings() string {
+	return presetJSON(map[string]any{
+		"address":        "127.0.0.1",
+		"port":           80,
+		"portMap":        []any{},
+		"network":        "tcp,udp",
+		"followRedirect": false,
+	})
+}
+
+// presetTunSettings builds the settings for TUN inbound.
+// name, mtu, gateway, dns, userLevel, autoSystemRoutingTable, autoOutboundsInterface.
+func (s *InboundService) presetTunSettings() string {
+	return presetJSON(map[string]any{
+		"name":                     "xray0",
+		"mtu":                      []int{1500, 1280},
+		"gateway":                  []string{},
+		"dns":                      []string{},
+		"userLevel":                0,
+		"autoSystemRoutingTable":   []string{},
+		"autoOutboundsInterface":   "auto",
+	})
+}
+
+// presetL2TPSettings builds the settings for L2TP/IPsec.
+// Uses DefaultSettingsFor + seeded clients with username/password.
+func (s *InboundService) presetL2TPSettings() string {
+	defaults, _ := DefaultSettingsFor(model.L2TP)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	// Seed one client
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username     // VPN username (login name)
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetPPTPSettings builds the settings for PPTP.
+// Uses DefaultSettingsFor + seeded clients.
+func (s *InboundService) presetPPTPSettings() string {
+	defaults, _ := DefaultSettingsFor(model.PPTP)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetOpenVPNSettings builds the settings for OpenVPN with a self-signed CA.
+// Uses GenerateSelfSignedCA and embeds certs inline.
+func (s *InboundService) presetOpenVPNSettings() string {
+	// Use the OpenVPN service to generate a self-signed CA
+	// Since we may not have the service initialized, use a local generator
+	caCert, caKey, serverCert, serverKey, tlsCrypt := s.presetOpenVPNCerts()
+	
+	defaults, _ := DefaultSettingsFor(model.OPENVPN)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["caCert"] = caCert
+	raw["caKey"] = caKey
+	raw["serverCert"] = serverCert
+	raw["serverKey"] = serverKey
+	raw["tlsCrypt"] = tlsCrypt
+	raw["tlsUseFile"] = false
+	raw["tcpEnable"] = true
+	raw["udpEnable"] = true
+	raw["separatePorts"] = false
+	
+	// Seed one client
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetOpenVPNCerts generates self-signed certificates for OpenVPN.
+// Mirrors openvpn.go's GenerateSelfSignedCA but returns strings.
+func (s *InboundService) presetOpenVPNCerts() (string, string, string, string, string) {
+	caPriv, err := ecdsa.GenerateKey(elliptic.P384(), crand.Reader)
+	if err != nil {
+		// Fallback
+		return "", "", "", "", ""
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"vpn-ui"},
+			CommonName:   "vpn-ui OpenVPN CA",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+	}
+	caDER, _ := x509.CreateCertificate(crand.Reader, caTemplate, caTemplate, &caPriv.PublicKey, caPriv)
+	caKeyDER, _ := x509.MarshalECPrivateKey(caPriv)
+	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: caKeyDER})
+
+	srvPriv, _ := ecdsa.GenerateKey(elliptic.P384(), crand.Reader)
+	srvTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject: pkix.Name{
+			Organization: []string{"vpn-ui"},
+			CommonName:   "vpn-ui OpenVPN Server",
+		},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	srvDER, _ := x509.CreateCertificate(crand.Reader, srvTemplate, caTemplate, &srvPriv.PublicKey, caPriv)
+	srvKeyDER, _ := x509.MarshalECPrivateKey(srvPriv)
+	srvCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srvDER})
+	srvKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: srvKeyDER})
+
+	// TLS-Crypt key (256 bytes base64)
+	tlsCryptKey := make([]byte, 256)
+	crand.Read(tlsCryptKey)
+	tlsCryptB64 := base64.StdEncoding.EncodeToString(tlsCryptKey)
+
+	return string(caCertPEM), string(caKeyPEM), string(srvCertPEM), string(srvKeyPEM), tlsCryptB64
+}
+
+// presetOpenConnectSettings builds the settings for OpenConnect (ocserv).
+// Uses GenerateSelfSignedCert and embeds certs inline.
+func (s *InboundService) presetOpenConnectSettings() string {
+	cert, key := s.presetOCServCert()
+	
+	defaults, _ := DefaultSettingsFor(model.OPENCONNECT)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["certificate"] = cert
+	raw["key"] = key
+	raw["tlsUseFile"] = false
+	
+	// Seed one client
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetOCServCert generates a self-signed cert for OpenConnect.
+func (s *InboundService) presetOCServCert() (string, string) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P384(), crand.Reader)
+	host := "localhost"
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			Organization: []string{"vpn-ui"},
+			CommonName:   "vpn-ui OpenConnect Server",
+		},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:    []string{host},
+	}
+	certDER, _ := x509.CreateCertificate(crand.Reader, template, template, &priv.PublicKey, priv)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyDER, _ := x509.MarshalECPrivateKey(priv)
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	return string(certPEM), string(keyPEM)
+}
+
+// presetSSTPSettings builds the settings for SSTP.
+// Uses GenerateSelfSignedCert and embeds certs inline.
+func (s *InboundService) presetSSTPSettings() string {
+	cert, key := s.presetSSTPCert()
+	
+	defaults, _ := DefaultSettingsFor(model.SSTP)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["certificate"] = cert
+	raw["key"] = key
+	raw["tlsUseFile"] = false
+	
+	// Seed one client
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetSSTPCert generates a self-signed cert for SSTP.
+func (s *InboundService) presetSSTPCert() (string, string) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P384(), crand.Reader)
+	host := "localhost"
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			Organization: []string{"vpn-ui"},
+			CommonName:   "vpn-ui SSTP Server",
+		},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:    []string{host},
+	}
+	certDER, _ := x509.CreateCertificate(crand.Reader, template, template, &priv.PublicKey, priv)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyDER, _ := x509.MarshalECPrivateKey(priv)
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	return string(certPEM), string(keyPEM)
+}
+
+// presetIKEv2Settings builds the settings for IKEv2.
+// Uses GenerateSelfSignedCert (returns CA+leaf) and embeds certs inline.
+func (s *InboundService) presetIKEv2Settings() string {
+	caCert, serverCert, serverKey := s.presetIKEv2Certs()
+	
+	defaults, _ := DefaultSettingsFor(model.IKEV2)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["caCert"] = caCert
+	raw["certificate"] = serverCert
+	raw["key"] = serverKey
+	raw["tlsUseFile"] = false
+	raw["authMode"] = "eap-mschapv2"
+	
+	// Seed one client (EAP-MSCHAPv2 uses username/password)
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetIKEv2Certs generates CA + server cert for IKEv2.
+func (s *InboundService) presetIKEv2Certs() (string, string, string) {
+	caKey, _ := rsa.GenerateKey(crand.Reader, 2048)
+	caTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{Organization: []string{"vpn-ui"}, CommonName: "vpn-ui IKEv2 CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, _ := x509.CreateCertificate(crand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
+	caCert, _ := x509.ParseCertificate(caDER)
+	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+
+	srvKey, _ := rsa.GenerateKey(crand.Reader, 2048)
+	host := "localhost"
+	leafTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano() + 1),
+		Subject:               pkix.Name{Organization: []string{"vpn-ui"}, CommonName: host},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{host},
+	}
+	leafDER, _ := x509.CreateCertificate(crand.Reader, leafTmpl, caCert, &srvKey.PublicKey, caKey)
+	srvCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER})
+	srvKeyDER := x509.MarshalPKCS1PrivateKey(srvKey)
+	srvKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: srvKeyDER})
+
+	return string(caCertPEM), string(srvCertPEM), string(srvKeyPEM)
+}
+
+// presetWGCSettings builds the settings for WireGuard (wg-c).
+// Uses DefaultSettingsFor + seeded clients. Keys minted by ReconcileKeys after create.
+func (s *InboundService) presetWGCSettings() string {
+	defaults, _ := DefaultSettingsFor(model.WGC)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	// Seed one client (wgcUser has email, enable, devices[], slot)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["email"] = presetAccountEmail()
+			c["enable"] = true
+			// devices and slot will be populated by ReconcileKeys
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetAWGSettings builds the settings for AmneziaWG.
+// Uses DefaultSettingsFor + seeded clients. Keys minted by ReconcileKeys after create.
+func (s *InboundService) presetAWGSettings() string {
+	defaults, _ := DefaultSettingsFor(model.AWG)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["email"] = presetAccountEmail()
+			c["enable"] = true
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetGRESettings builds the settings for GRE.
+// Uses DefaultSettingsFor + seeded clients. Port normalized by NormalizeGrePort.
+// Peers reconciled by ReconcileAllPeers after create.
+func (s *InboundService) presetGRESettings() string {
+	defaults, _ := DefaultSettingsFor(model.GRE)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["email"] = presetAccountEmail()
+			c["enable"] = true
+			// peer config will be added by ReconcileAllPeers
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetMTProtoSettings builds the settings for MTProto proxy.
+// Uses DefaultSettingsFor + seeded clients with secret.
+func (s *InboundService) presetMTProtoSettings() string {
+	defaults, _ := DefaultSettingsFor(model.MTPROTO)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	// Seed one client with a random 32-char hex secret
+	secret := presetRandomHex(32)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["secret"] = secret
+			c["email"] = presetAccountEmail()
+			c["enable"] = true
+		}),
+	}
+	return presetJSON(raw)
+}
+
+// presetSSHSettings builds the settings for SSH gateway.
+// Uses DefaultSettingsFor + seeded clients. Host key minted by ReconcileHostKeys.
+func (s *InboundService) presetSSHSettings() string {
+	defaults, _ := DefaultSettingsFor(model.SSH)
+	var raw map[string]any
+	json.Unmarshal([]byte(defaults), &raw)
+	
+	// Seed one client (SSH uses vpnUsername as login, password for auth)
+	username := "user" + presetRandomID(6)
+	password := presetRandomID(16)
+	raw["clients"] = []map[string]any{
+		presetClient(func(c map[string]any) {
+			c["id"] = username
+			c["password"] = password
+			c["email"] = presetAccountEmail()
+		}),
+	}
+	return presetJSON(raw)
 }

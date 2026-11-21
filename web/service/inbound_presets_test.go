@@ -311,7 +311,7 @@ func TestPresetCatalogEntriesAreSupported(t *testing.T) {
 			t.Errorf("duplicate preset name %q", p.Name)
 		}
 		seen[p.Name] = true
-		if !nodeMintable(p.Protocol) {
+		if !presetBuildable(p.Protocol) {
 			t.Errorf("preset %q uses protocol %q, which PresetInbound refuses", p.Name, p.Protocol)
 		}
 		in := &model.Inbound{Protocol: p.Protocol}
@@ -429,6 +429,8 @@ func TestPresetTlsFamilyBindsCertificate(t *testing.T) {
 		"Hysteria2":    s.presetHysteriaStream(),
 		"TUIC":         s.presetTuicStream(),
 		"VMess+WS+TLS": s.presetVmessStream(),
+		"AnyTLS":       s.presetTlsStream(), // AnyTLS uses presetTlsStream
+		"Hysteria v1":  s.presetHysteriaV1Stream(),
 	}
 	for name, blob := range cases {
 		var m map[string]any
@@ -577,11 +579,25 @@ func TestApplyPresetSniWritesRealityList(t *testing.T) {
 func TestPresetAccountsCarrySubId(t *testing.T) {
 	s := newPresetService()
 	cases := map[string]string{
-		"vless":       s.presetVlessSettings(true),
-		"hysteria2":   s.presetHysteriaSettings(),
-		"tuic":        s.presetTuicSettings(),
-		"naive":       s.presetNaiveSettings(),
-		"shadowsocks": s.presetShadowsocksSettings(),
+		"vless":         s.presetVlessSettings(true),
+		"hysteria2":     s.presetHysteriaSettings(),
+		"tuic":          s.presetTuicSettings(),
+		"naive":         s.presetNaiveSettings(),
+		"shadowsocks":   s.presetShadowsocksSettings(),
+		"hysteria":      s.presetHysteriaV1Settings(),
+		"anytls":        s.presetAnyTLSSettings(),
+		"wireguard":     s.presetWireguardSettings(),
+		"l2tp":          s.presetL2TPSettings(),
+		"pptp":          s.presetPPTPSettings(),
+		"openvpn":       s.presetOpenVPNSettings(),
+		"openconnect":   s.presetOpenConnectSettings(),
+		"sstp":          s.presetSSTPSettings(),
+		"ikev2":         s.presetIKEv2Settings(),
+		"wgc":           s.presetWGCSettings(),
+		"awg":           s.presetAWGSettings(),
+		"gre":           s.presetGRESettings(),
+		"mtproto":       s.presetMTProtoSettings(),
+		"ssh":           s.presetSSHSettings(),
 	}
 	for name, blob := range cases {
 		var root map[string]any
@@ -623,5 +639,395 @@ func TestPresetSniffingEnabled(t *testing.T) {
 		if raw == "fakedns" {
 			t.Error("fakedns needs a fakedns DNS server; a preset must not point clients at one that is absent")
 		}
+	}
+}
+
+// --- Tests for new presets (Hysteria v1 .. SSH) ---
+
+func TestPresetHysteriaV1Settings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetHysteriaV1Settings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetHysteriaV1Settings did not parse: %v", err)
+	}
+	if root["version"] != float64(1) {
+		t.Errorf("hysteria v1 preset version = %v, want 1", root["version"])
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("hysteria v1 preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["auth"] == "" {
+		t.Errorf("hysteria v1 preset client has no auth: %v", client)
+	}
+}
+
+func TestPresetHysteriaV1Stream(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetHysteriaV1Stream()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(blob), &m); err != nil {
+		t.Fatalf("presetHysteriaV1Stream did not parse: %v", err)
+	}
+	if m["network"] != "hysteria" {
+		t.Errorf("hysteria v1 preset stream network = %v, want hysteria", m["network"])
+	}
+	if m["security"] != "tls" {
+		t.Errorf("hysteria v1 preset stream security = %v, want tls", m["security"])
+	}
+	hysteria, _ := m["hysteriaSettings"].(map[string]any)
+	if hysteria == nil {
+		t.Errorf("hysteria v1 preset has no hysteriaSettings: %s", blob)
+	}
+	if hysteria["version"] != float64(1) {
+		t.Errorf("hysteria v1 preset version = %v, want 1", hysteria["version"])
+	}
+}
+
+func TestPresetAnyTLSSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetAnyTLSSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetAnyTLSSettings did not parse: %v", err)
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("anytls preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["password"] == "" {
+		t.Error("anytls preset client has no password")
+	}
+	if _, ok := root["paddingScheme"]; !ok {
+		t.Error("anytls preset lacks paddingScheme key")
+	}
+}
+
+func TestPresetWireguardSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetWireguardSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetWireguardSettings did not parse: %v", err)
+	}
+	// Required keys
+	for _, key := range []string{"secretKey", "pubKey", "peers", "noKernelTun", "wgClients", "clientNetwork", "userLimit", "mtu"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("wireguard preset missing %q: %s", key, blob)
+		}
+	}
+	if root["secretKey"] == "" || root["pubKey"] == "" {
+		t.Error("wireguard preset has empty keypair")
+	}
+	clients, _ := root["wgClients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("wireguard preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["email"] == "" {
+		t.Error("wireguard preset client has no email")
+	}
+	if client["devices"] == nil {
+		t.Error("wireguard preset client has no devices")
+	}
+}
+
+func TestPresetMixedSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetMixedSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetMixedSettings did not parse: %v", err)
+	}
+	if root["auth"] != "password" {
+		t.Errorf("mixed preset auth = %v, want password", root["auth"])
+	}
+	accounts, _ := root["accounts"].([]any)
+	if len(accounts) != 1 {
+		t.Fatalf("mixed preset seeds %d accounts, want 1", len(accounts))
+	}
+	account := accounts[0].(map[string]any)
+	if account["user"] == "" || account["pass"] == "" {
+		t.Error("mixed preset account missing user/pass")
+	}
+}
+
+func TestPresetHTTPSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetHTTPSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetHTTPSettings did not parse: %v", err)
+	}
+	accounts, _ := root["accounts"].([]any)
+	if len(accounts) != 1 {
+		t.Fatalf("http preset seeds %d accounts, want 1", len(accounts))
+	}
+	account := accounts[0].(map[string]any)
+	if account["user"] == "" || account["pass"] == "" {
+		t.Error("http preset account missing user/pass")
+	}
+	if root["allowTransparent"] != false {
+		t.Errorf("http preset allowTransparent = %v, want false", root["allowTransparent"])
+	}
+}
+
+func TestPresetTunnelSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetTunnelSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetTunnelSettings did not parse: %v", err)
+	}
+	if root["address"] != "127.0.0.1" {
+		t.Errorf("tunnel preset address = %v, want 127.0.0.1", root["address"])
+	}
+	if root["port"] != float64(80) {
+		t.Errorf("tunnel preset port = %v, want 80", root["port"])
+	}
+	if root["network"] != "tcp,udp" {
+		t.Errorf("tunnel preset network = %v, want tcp,udp", root["network"])
+	}
+}
+
+func TestPresetTunSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetTunSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetTunSettings did not parse: %v", err)
+	}
+	if root["name"] != "xray0" {
+		t.Errorf("tun preset name = %v, want xray0", root["name"])
+	}
+	mtu, _ := root["mtu"].([]any)
+	if len(mtu) != 2 || mtu[0] != float64(1500) || mtu[1] != float64(1280) {
+		t.Errorf("tun preset mtu = %v, want [1500, 1280]", mtu)
+	}
+}
+
+func TestPresetL2TPSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetL2TPSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetL2TPSettings did not parse: %v", err)
+	}
+	// Check VPN defaults present
+	for _, key := range []string{"ipsecEnable", "ipsecPsk", "ipRanges", "dns1", "dns2", "mtu", "userLimit"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("l2tp preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("l2tp preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["id"] == "" || client["password"] == "" {
+		t.Error("l2tp preset client missing id/password")
+	}
+}
+
+func TestPresetPPTPSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetPPTPSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetPPTPSettings did not parse: %v", err)
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("pptp preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["id"] == "" || client["password"] == "" {
+		t.Error("pptp preset client missing id/password")
+	}
+}
+
+func TestPresetOpenVPNSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetOpenVPNSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetOpenVPNSettings did not parse: %v", err)
+	}
+	// Check certs embedded
+	for _, key := range []string{"caCert", "caKey", "serverCert", "serverKey", "tlsCrypt"} {
+		if root[key] == "" {
+			t.Errorf("openvpn preset missing inline %q", key)
+		}
+	}
+	if root["tlsUseFile"] != false {
+		t.Error("openvpn preset tlsUseFile should be false (inline certs)")
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("openvpn preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetOpenConnectSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetOpenConnectSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetOpenConnectSettings did not parse: %v", err)
+	}
+	if root["certificate"] == "" || root["key"] == "" {
+		t.Error("openconnect preset missing inline cert/key")
+	}
+	if root["tlsUseFile"] != false {
+		t.Error("openconnect preset tlsUseFile should be false")
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("openconnect preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetSSTPSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetSSTPSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetSSTPSettings did not parse: %v", err)
+	}
+	if root["certificate"] == "" || root["key"] == "" {
+		t.Error("sstp preset missing inline cert/key")
+	}
+	if root["tlsUseFile"] != false {
+		t.Error("sstp preset tlsUseFile should be false")
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("sstp preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetIKEv2Settings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetIKEv2Settings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetIKEv2Settings did not parse: %v", err)
+	}
+	if root["caCert"] == "" || root["certificate"] == "" || root["key"] == "" {
+		t.Error("ikev2 preset missing inline caCert/certificate/key")
+	}
+	if root["tlsUseFile"] != false {
+		t.Error("ikev2 preset tlsUseFile should be false")
+	}
+	if root["authMode"] != "eap-mschapv2" {
+		t.Errorf("ikev2 preset authMode = %v, want eap-mschapv2", root["authMode"])
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("ikev2 preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetWGCSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetWGCSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetWGCSettings did not parse: %v", err)
+	}
+	for _, key := range []string{"dns1", "dns2", "mtu", "serverPrivKey", "serverPubKey", "ipRanges", "userLimit"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("wgc preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("wgc preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetAWGSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetAWGSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetAWGSettings did not parse: %v", err)
+	}
+	for _, key := range []string{"jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4", "mtu"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("awg preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("awg preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetGRESettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetGRESettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetGRESettings did not parse: %v", err)
+	}
+	for _, key := range []string{"mtu", "ttl", "ipsecEnable", "ipsecPsk", "allowRaw", "fouEnable", "fouPort", "ipRanges", "userLimit"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("gre preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("gre preset seeds %d clients, want 1", len(clients))
+	}
+}
+
+func TestPresetMTProtoSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetMTProtoSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetMTProtoSettings did not parse: %v", err)
+	}
+	for _, key := range []string{"modeClassic", "modeSecure", "modeTls", "tlsDomain", "userLimit", "externalProxy"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("mtproto preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("mtproto preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["secret"] == "" {
+		t.Error("mtproto preset client missing secret")
+	}
+	if len(client["secret"].(string)) != 32 {
+		t.Errorf("mtproto preset secret length = %d, want 32", len(client["secret"].(string)))
+	}
+}
+
+func TestPresetSSHSettings(t *testing.T) {
+	s := newPresetService()
+	blob := s.presetSSHSettings()
+	var root map[string]any
+	if err := json.Unmarshal([]byte(blob), &root); err != nil {
+		t.Fatalf("presetSSHSettings did not parse: %v", err)
+	}
+	for _, key := range []string{"userLimit", "userLimitStrategy", "externalProxy", "hostKey"} {
+		if _, ok := root[key]; !ok {
+			t.Errorf("ssh preset missing %q", key)
+		}
+	}
+	clients, _ := root["clients"].([]any)
+	if len(clients) != 1 {
+		t.Fatalf("ssh preset seeds %d clients, want 1", len(clients))
+	}
+	client := clients[0].(map[string]any)
+	if client["id"] == "" || client["password"] == "" {
+		t.Error("ssh preset client missing id/password")
 	}
 }

@@ -872,32 +872,11 @@ func (a *InboundController) addInbound(c *gin.Context) {
 		}
 	}
 	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
-	if inbound.Protocol == model.L2TP {
-		a.onL2tpChanged()
-	} else if inbound.Protocol == model.PPTP {
-		a.onPptpChanged()
-	} else if inbound.Protocol == model.OPENVPN {
-		a.onOpenVpnChanged()
-	} else if inbound.Protocol == model.OPENCONNECT {
-		a.onOcservChanged()
-	} else if inbound.Protocol == model.SSTP {
-		a.onSstpChanged()
-	} else if inbound.Protocol == model.IKEV2 {
-		a.onIkev2Changed()
-	} else if inbound.Protocol == model.WGC {
-		a.onWgcChanged()
-	} else if inbound.Protocol == model.AWG {
-		a.onAwgChanged()
-	} else if inbound.Protocol == model.GRE {
-		a.onGreChanged()
-	} else if inbound.Protocol == model.MTPROTO {
-		a.onMtprotoChanged()
-	} else if inbound.Protocol == model.SSH {
-		a.onSshChanged()
-	} else if inbound.Protocol == model.WireGuard {
-		// Xray-native, so it still wants the restart below, but its peers are built
-		// from key material that has to exist first.
-		a.onWireguardXrayClientChanged()
+	// Run per-protocol post-create handlers (daemon config generation, key
+	// reconciliation, service restart). For WireGuard (Xray) we also need to
+	// set the Xray restart flag since the peers are built from key material.
+	a.dispatchPostCreate(inbound)
+	if inbound.Protocol == model.WireGuard {
 		a.xrayService.SetToNeedRestart()
 	} else if needRestart {
 		a.xrayService.SetToNeedRestart()
@@ -964,6 +943,11 @@ func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 	// Project the new inbound onto any groups the caller scoped it to.
 	a.syncInboundAccounts(inbound.Id)
 
+	// Run per-protocol post-create handlers (daemon config generation, key
+	// reconciliation, service restart) so a preset-created inbound is
+	// immediately live — matching the typed create path.
+	a.dispatchPostCreate(inbound)
+
 	if needRestart {
 		a.xrayService.SetToNeedRestart()
 	}
@@ -972,6 +956,39 @@ func (a *InboundController) addInboundFromPreset(c *gin.Context) {
 	websocket.BroadcastInboundsToUser(user.Id, inbounds)
 
 	jsonMsgObj(c, I18nWeb(c, "pages.inbounds.toasts.inboundCreateSuccess"), inbound, nil)
+}
+
+// dispatchPostCreate runs the protocol-specific handlers that the typed
+// addInbound path runs (onL2tpChanged, onOpenVpnChanged, etc.). This ensures
+// a preset-created inbound gets its daemon configs generated, keys minted,
+// and services restarted — so it's immediately usable.
+func (a *InboundController) dispatchPostCreate(inbound *model.Inbound) {
+	switch inbound.Protocol {
+	case model.L2TP:
+		a.onL2tpChanged()
+	case model.PPTP:
+		a.onPptpChanged()
+	case model.OPENVPN:
+		a.onOpenVpnChanged()
+	case model.OPENCONNECT:
+		a.onOcservChanged()
+	case model.SSTP:
+		a.onSstpChanged()
+	case model.IKEV2:
+		a.onIkev2Changed()
+	case model.WGC:
+		a.onWgcChanged()
+	case model.AWG:
+		a.onAwgChanged()
+	case model.GRE:
+		a.onGreChanged()
+	case model.MTPROTO:
+		a.onMtprotoChanged()
+	case model.SSH:
+		a.onSshChanged()
+	case model.WireGuard:
+		a.onWireguardXrayClientChanged()
+	}
 }
 
 // listPresets returns all available inbound presets.

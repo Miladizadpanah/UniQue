@@ -303,6 +303,11 @@ func TestPresetTrojanSettings(t *testing.T) {
 func TestPresetCatalogEntriesAreSupported(t *testing.T) {
 	s := newPresetService()
 	seen := map[string]bool{}
+	// Protocols that don't use client accounts (port-forwarding, virtual interface)
+	noClientAccountProtocols := map[model.Protocol]bool{
+		model.Tunnel: true,
+		model.Protocol("tun"): true,
+	}
 	for _, p := range s.Presets() {
 		if p.Name == "" || p.Description == "" {
 			t.Errorf("preset %+v is missing a name or description", p)
@@ -326,17 +331,20 @@ func TestPresetCatalogEntriesAreSupported(t *testing.T) {
 		if err := json.Unmarshal([]byte(in.Settings), &root); err != nil {
 			t.Errorf("preset %q settings are not JSON: %v", p.Name, err)
 		}
-		// Verify at least one client/account list key exists
-		clientKeys := []string{"clients", "wgClients", "accounts"}
-		hasClientList := false
-		for _, k := range clientKeys {
-			if arr, ok := root[k].([]any); ok && len(arr) > 0 {
-				hasClientList = true
-				break
+		// Verify at least one client/account list key exists (except for protocols
+		// that don't use client accounts like Tunnel and TUN)
+		if !noClientAccountProtocols[p.Protocol] {
+			clientKeys := []string{"clients", "wgClients", "accounts"}
+			hasClientList := false
+			for _, k := range clientKeys {
+				if arr, ok := root[k].([]any); ok && len(arr) > 0 {
+					hasClientList = true
+					break
+				}
 			}
-		}
-		if !hasClientList {
-			t.Errorf("preset %q has no seeded client/account list (checked: clients, wgClients, accounts)", p.Name)
+			if !hasClientList {
+				t.Errorf("preset %q has no seeded client/account list (checked: clients, wgClients, accounts)", p.Name)
+			}
 		}
 	}
 }
